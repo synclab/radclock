@@ -1,0 +1,133 @@
+From 9e1b0626e8221614116ca0d2458e839aea1ebcc2 Mon Sep 17 00:00:00 2001
+From: Julien Ridoux <julien@synclab.org>
+Date: Tue, 26 May 2009 18:33:11 +1000
+Subject: [PATCH RADclock 9/9] VDSO get_vcounter
+
+Support for VDSO get_vcounter() for accessing the raw cumulative
+counter from user space.
+Changes to libc will be required to take advantage of it.
+---
+ arch/x86/kernel/vsyscall_64.c  |    4 ++
+ arch/x86/vdso/vclock_gettime.c |   78 ++++++++++++++++++++++++++++++++++++++++
+ include/asm-x86/vgtod.h        |    4 ++
+ 3 files changed, 86 insertions(+), 0 deletions(-)
+
+diff --git a/arch/x86/kernel/vsyscall_64.c b/arch/x86/kernel/vsyscall_64.c
+index 0b8b669..a657645 100644
+--- a/arch/x86/kernel/vsyscall_64.c
++++ b/arch/x86/kernel/vsyscall_64.c
+@@ -84,6 +84,10 @@ void update_vsyscall(struct timespec *wall_time, struct clocksource *clock)
+ 	vsyscall_gtod_data.wall_time_sec = wall_time->tv_sec;
+ 	vsyscall_gtod_data.wall_time_nsec = wall_time->tv_nsec;
+ 	vsyscall_gtod_data.wall_to_monotonic = wall_to_monotonic;
++#ifdef CONFIG_RADCLOCK
++	vsyscall_gtod_data.clock.vcounter_record = clock->vcounter_record;
++	vsyscall_gtod_data.clock.vcounter_source_record = clock->vcounter_source_record;
++#endif
+ 	write_sequnlock_irqrestore(&vsyscall_gtod_data.lock, flags);
+ }
+ 
+diff --git a/arch/x86/vdso/vclock_gettime.c b/arch/x86/vdso/vclock_gettime.c
+index 1ef0f90..e68c315 100644
+--- a/arch/x86/vdso/vclock_gettime.c
++++ b/arch/x86/vdso/vclock_gettime.c
+@@ -119,3 +119,81 @@ notrace int __vdso_gettimeofday(struct timeval *tv, struct timezone *tz)
+ }
+ int gettimeofday(struct timeval *, struct timezone *)
+ 	__attribute__((weak, alias("__vdso_gettimeofday")));
++
++
++#ifdef CONFIG_RADCLOCK
++/* Copy of the version in kernel/time/timekeeping.c which we cannot directly access */
++/* Only called while gtod->lock is held */
++notrace static inline vcounter_t vread_vcounter_delta(void)
++{
++	return((clocksource_read(clock) - clock->vcounter_source_record) & clock->mask);
++}
++
++/* Copy of the version in kernel/time/timekeeping.c which we cannot directly access */
++notrace static inline vcounter_t vread_vcounter(void)
++{
++	unsigned long seq;
++	vcounter_t vcount;
++
++	do {
++		seq = read_seqbegin(&xtime_lock);
++		vcount = clock->vcounter_record + vread_vcounter_delta();
++	} while (read_seqretry(&xtime_lock, seq));
++
++	return vcount;
++}
++
++notrace int __vdso_get_vcounter(vcounter_t *vcounter)
++{
++	vcounter_t vcount;
++
++	long ret;
++	/* the reference to the gtod sysctl could be changed/removed */
++	if (likely(gtod->sysctl_enabled && gtod->clock.vread)) {
++		vcount = vread_vcounter();
++		*vcounter = vcount;
++		return 0;
++	}
++	asm("syscall" : "=a" (ret) :
++	    "0" (__NR_get_vcounter), "D" (vcounter) : "memory");
++	return ret;
++}
++long get_vcounter(vcounter_t *)
++	__attribute__((weak, alias("__vdso_get_vcounter")));
++
++
++notrace int __vdso_get_vcounter_latency(vcounter_t *vcounter, cycle_t *vcount_lat, cycle_t *tsc_lat)
++{
++	vcounter_t vcount;
++	cycle_t tsc1, tsc2, tsc3;
++
++	long ret;
++	/* the reference to the gtod sysctl could be changed/removed */
++	if (likely(gtod->sysctl_enabled && gtod->clock.vread)) {
++
++		/* One for fun and warmup */
++		rdtscll(tsc1);
++		__asm __volatile("lfence" ::: "memory");
++		rdtscll(tsc1);
++		__asm __volatile("lfence" ::: "memory");
++		rdtscll(tsc2);
++		__asm __volatile("lfence" ::: "memory");
++		vcount = read_vcounter();
++		__asm __volatile("lfence" ::: "memory");
++		rdtscll(tsc3);
++		__asm __volatile("lfence" ::: "memory");
++
++		*vcounter = vcount;
++		*vcount_lat = tsc3 - tsc2;
++		*tsc_lat = tsc2 - tsc1;
++
++		return 0;
++	}
++	asm("syscall" : "=a" (ret) :
++	    "0" (__NR_get_vcounter_latency), "D" (vcounter), "S" (vcount_lat), "q" (tsc_lat)  : "memory");
++	return ret;
++}
++long get_vcounter_latency(vcounter_t *, cycle_t *, cycle_t *)
++	__attribute__((weak, alias("__vdso_get_vcounter_latency")));
++
++#endif  /* CONFIG_RADCLOCK */
+diff --git a/include/asm-x86/vgtod.h b/include/asm-x86/vgtod.h
+index 3301f09..8fce630 100644
+--- a/include/asm-x86/vgtod.h
++++ b/include/asm-x86/vgtod.h
+@@ -19,6 +19,10 @@ struct vsyscall_gtod_data {
+ 		cycle_t	mask;
+ 		u32	mult;
+ 		u32	shift;
++#ifdef CONFIG_RADCLOCK
++		vcounter_t vcounter_record;
++		vcounter_t vcounter_source_record;
++#endif
+ 	} clock;
+ 	struct timespec wall_to_monotonic;
+ };
+-- 
+1.5.6.3
+

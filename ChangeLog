@@ -1,0 +1,140 @@
+## 
+## RADClock versions Changelog 
+## 
+
+
+- Version 0.2.1
+	* September 2009
+	* Fix compatibility of the RADclock server with ntpd clients
+	* Add option to adjust the system clock
+	* Fix clock status word exported
+	* Fix and add FreeBSD kernel patches 
+	* Stopped being a CPU hog on some particular piggy backing configs
+
+
+- Version 0.2.0
+	* July 2009
+	* Renaming as RADclock
+	* API changed and reorganised. Libtoolized library.
+	* Support for timecounter and clocksource kernel interface
+	* The RADclock is SMP-, APM- and ACPI- friendly
+	* 64bit support
+	* Adaptative fixed point arithmetic for kernel timestamping
+	* Configuration file cleaned and more user friendly
+	* Removed userland clock (R.I.P.)
+	* New kernel patches
+
+
+- Version 0.1.0
+	* May 2009
+	* Add a NTP server thread
+	* Last version of the legacy TSCclock using the rdtsc() 
+
+
+- Version 0.0.9
+	* February 2009
+	* Removed prehistoric support for reloading previous phat estimate
+	* Reorganisation of bidirectional sync algorithm
+
+
+- Version 0.0.8
+	* January 2009
+	* Multi-Threaded TSCclock for improved performance and less impact on the captured NTP packets
+	* Integrated NTP client
+	* Network capture and algorithm are running independently
+	* New kernel patches for the Linux kernel
+	* Kernel patches for FreeBSD 7.0
+	* Change verbose output definition
+	* Fix, clean, rewrite
+
+
+- Version 0.0.7
+	* November 2008
+	* This is a transitional release before major changes
+	* New patches for the Linux kernel
+
+
+- Version 0.0.6
+	* October 2008
+	* Checked and corrected Linux Version (Tom)
+	* New FreeBSD kernel implementation, same timestamping location in sending direction
+	* Killed the immediate mode on the BPF device (was a really bad idea)
+	* Fixed detection of kernel extensions for the TSCclock
+	* Partial Python module to provide a tscclock API
+	* Python GUI
+	* Fixed problem with reconnection to the IPC socket
+
+
+- Version 0.0.5
+	* September 2007
+	* IPC communication based on UNIX socket and POSIX multi-threading
+	* API includes local rate correction on reading the clock
+	* Bug fixes and corrections
+		* Live interface detection
+		* Signal catching
+		* A bit cleaner log output
+		* Command line switch for plocal
+
+
+- Version 0.0.4-beta1
+	* June 2007
+	* Add support for userland TSCclock
+		* Integration of old code except clock control
+		* Modification of the API due to the need of globaldata at network layer
+		* Adaptation of capture mechanisms
+		* Selection / Auto-detection of mode to run
+	* Repository source code shake up
+
+
+- Version 0.0.3
+	* Kernel changes
+		* Add plocal in kernel global structure (Linux and FreeBSD)
+		* Corresponding ioctl/netlink changes
+		* New FAIR_COMPARE mode for Linux
+		* Kernel patch for Linux 2.6.20 
+	* Correct the exported API for the difference clock, but to be improved.
+
+
+- Version 0.0.2-beta4
+	* Turn the UDP experiments into a client/server model
+	* Re-engineering of the FAIR_COMPARE mode on FreeBSD
+	* Bugs corrections in post-processing scripts
+	* Add the offset_ratio parameter to the config file
+
+
+- Version 0.0.2-beta3
+	* Physical parameters from configuration file 
+
+
+- Version 0.0.2-beta2
+	* Correct bugs in saved phat
+	* Change back the saved phat semantic
+	* Removed dependency on libtrace
+	* New raw file format, but added backward compatibility
+
+
+- Version 0.0.2-beta1
+	* 23/10/2006
+	* Major rewrite (too many changes)
+	* Linux port (Thanks Tom !)
+		* 2.6.17
+		* 2.6.18
+	* FreeBSD update
+		* Kernel 5.3
+		* Kernel 6.1
+	* New kernel clock modes: 
+		* NORMAL, TSC_CLOCK, FAIR_COMPARE
+	* Use of Libtrace
+	* API definition (libtscclock, libtscpcap)
+	* Autoconf tools
+
+
+- Version 0.0.1 
+	* 29/09/2006
+	* Tagged as REL_0_0_1
+	* Final version of the "good old TSC Clock"
+	* Gathers all past developments achieved
+	* Original kernel modes support
+	* Partial Linux porting
+	* Not made to be released 
+

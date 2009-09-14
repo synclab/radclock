@@ -1,0 +1,206 @@
+/*
+ * Copyright (C) 2006-2009 Julien Ridoux <julien@synclab.org>
+ *
+ * This file is part of the radclock program.
+ * 
+ * This program is free software: you can redistribute it and/or modify it under
+ * the terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the GNU General Public License for more
+ * details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * this program. If not, see <http://www.gnu.org/licenses/>.
+ */
+
+
+#ifndef _CONFIG_MGR_H
+#define _CONFIG_MGR_H
+
+
+#include "radclock-private.h"
+
+
+
+#define DAEMON_CONFIG_FILE		"/etc/radclock.conf"
+#define BIN_CONFIG_FILE			"radclock.conf"
+
+
+/* 
+ * Define max size for command line and configuration file parameters 
+ */
+#define MAXLINE			250	
+
+
+/*
+ * Trigger / Protocol configuration
+ */
+#define TRIGGER_PIGGY 	0
+#define TRIGGER_NTP		1
+#define TRIGGER_1588	2
+#define TRIGGER_PPS		3
+
+/*
+ * Server Protocol configuration
+ */
+#define BOOL_OFF 	0
+#define BOOL_ON 	1
+
+
+/* 
+ * Default configuration values 
+ */
+#define DEFAULT_RADCLOCK_VERSION	"0"
+#define DEFAULT_VERBOSE				1
+#define DEFAULT_SYNCHRO_TYPE		TRIGGER_NTP		// Protocol used 
+#define DEFAULT_SERVER_IPC			BOOL_ON		// Update the clock 
+#define DEFAULT_SERVER_NTP			BOOL_ON		// Default we start a NTP server 
+#define DEFAULT_ADJUST_SYSCLOCK		BOOL_ON		// Default we adjust the system clock 
+#define DEFAULT_NTP_POLL_PERIOD 	16			// 16 NTP pkts every [sec]
+#define DEFAULT_START_PLOCAL		1			// 1 Using plocal algo
+#define DEFAULT_PHAT_INIT			1.e-9
+#define DEFAULT_ASYM_HOST			0.0			// 0 micro-sconds
+#define DEFAULT_ASYM_NET			0.0			// 0 micro-seconds 
+#define DEFAULT_HOSTNAME			"numbat.cubinlab.ee.unimelb.edu.au"
+#define DEFAULT_TIME_SERVER			"ntp.cubinlab.ee.unimelb.edu.au"
+#define DEFAULT_NETWORKDEV			"xl0"
+#define DEFAULT_SYNC_IN_PCAP		"sync_input.pcap"
+#define DEFAULT_SYNC_IN_ASCII		"sync_input.ascii"
+#define DEFAULT_SYNC_OUT_PCAP		"sync_output.pcap"
+#define DEFAULT_SYNC_OUT_ASCII		"sync_output.ascii"
+#define DEFAULT_CLOCK_OUT_ASCII		"clock_output.ascii"
+
+
+
+/*
+ *  Definition of keys for configuration file keywords
+ */
+#define CONFIG_UNKNOWN			0
+#define CONFIG_RADCLOCK_VERSION 1
+/* Generic stuff */
+#define CONFIG_VERBOSE			10
+#define CONFIG_SERVER_IPC		11
+//#define CONFIG_				13
+#define CONFIG_SYNCHRO_TYPE		13
+#define CONFIG_SERVER_NTP		14
+#define CONFIG_ADJUST_SYSCLOCK	15
+/* Clock parameters */
+#define CONFIG_POLLPERIOD		20
+#define CONFIG_PLOCAL			21
+#define CONFIG_PHAT_INIT		22
+#define CONFIG_ASYM_HOST		23
+#define CONFIG_ASYM_NET			24
+/* Environment */
+#define CONFIG_TEMPQUALITY		30
+#define CONFIG_TSLIMIT			31
+#define CONFIG_SKM_SCALE		32
+#define CONFIG_RATE_ERR_BOUND	33
+#define CONFIG_BEST_SKM_RATE	34
+#define CONFIG_OFFSET_RATIO		35
+#define CONFIG_PLOCAL_QUALITY	36
+/* Network Level */
+#define CONFIG_HOSTNAME			40
+#define CONFIG_TIME_SERVER		41
+/* I/O defintions */
+#define CONFIG_NETWORKDEV		50
+#define CONFIG_SYNC_IN_PCAP		51
+#define CONFIG_SYNC_IN_ASCII	52
+#define CONFIG_SYNC_OUT_PCAP	53
+#define CONFIG_SYNC_OUT_ASCII	54
+#define CONFIG_CLOCK_OUT_ASCII	55
+
+
+/*
+ * Pre-defined description of temperature environment quality
+ * CONFIG_QUALITY_UNKWN has to be defined with the highest values to parse
+ * the config file correctly
+ */
+#define CONFIG_QUALITY_POOR		0
+#define CONFIG_QUALITY_GOOD		1
+#define CONFIG_QUALITY_EXCEL	2
+#define CONFIG_QUALITY_UNKWN	3
+
+
+/* 
+ * Masks to reload the configuration parameters
+ */
+#define UPDMASK_NOUPD			0x000000
+#define UPDMASK_POLLPERIOD		0x000001
+#define UPDMASK_PLOCAL			0x000002
+#define UPDMASK_TEMPQUALITY		0x000004
+#define UPDMASK_ASYM_HOST		0x000008
+#define UPDMASK_ASYM_NET		0x000010
+#define UPDMASK_SERVER_IPC		0x000020
+//#define UPDMASK_				0x000040
+#define UPDMASK_SYNCHRO_TYPE	0x000080
+#define UPDMASK_SERVER_NTP		0x000100
+#define UPDMASK_ADJUST_SYSCLOCK	0x000200
+#define UPDMASK_HOSTNAME		0x000400
+#define UPDMASK_TIME_SERVER		0x000800
+#define UPDMASK_VERBOSE			0x001000
+#define UPDMASK_NETWORKDEV		0x002080
+#define UPDMASK_SYNC_IN_PCAP	0x004000
+#define UPDMASK_SYNC_IN_ASCII	0x008000
+#define UPDMASK_SYNC_OUT_PCAP	0x010000
+#define UPDMASK_SYNC_OUT_ASCII	0x020800
+#define UPDMASK_CLOCK_OUT_ASCII	0x040000
+
+#define HAS_UPDATE(val,mask)	((val & mask) == mask)	
+#define SET_UPDATE(val,mask)	(val |= mask) 
+#define CLEAR_UPDATE(val,mask)	(val &= ~mask)
+
+
+
+/* This is a global structure used to keep track of the config parameters Mostly
+ * used by signal handlers The fields present here correspond to the parameters
+ * of the get_config function.
+ */ 
+struct radclock_config {
+	u_int32_t mask;						/* Update param mask */
+	char 	radclock_version[MAXLINE]; 	/* Package version id */
+	int 	verbose_level; 				/* debug output level */
+	int 	poll_period; 				/* period of NTP pkt sending [sec] */
+	struct 	radclock_phyparam phyparam; /* Physical and temperature characteristics */ 
+	int 	start_plocal; 				/* logical: 1 = use local rate refinement */
+	int 	synchro_type; 				/* multi-choice depending on client-side protocol */
+	int 	server_ipc; 				/* Boolean */
+	int 	server_ntp;					/* Boolean */
+	int 	adjust_sysclock;			/* Boolean */
+	double 	phat_init;					/* Initial value for phat */
+	double 	asym_host;					/* Host asymmetry estimate [sec] */
+	double	asym_net;					/* Network asymmetry estimate [sec] */ 
+	char 	hostname[MAXLINE]; 			/* Client hostname */
+	char 	time_server[MAXLINE]; 		/* Server name */
+	char 	network_device[MAXLINE];	/* physical device string, eg xl0, eth0 */ 
+	char 	sync_in_pcap[MAXLINE];	 	/* read from stored instead of live input */
+	char 	sync_in_ascii[MAXLINE]; 		/* input is a preprocessed stamp file */
+	char 	sync_out_pcap[MAXLINE]; 		/* raw packet Output file name */
+	char 	sync_out_ascii[MAXLINE]; 	/* output processed stamp file */
+	char 	clock_out_ascii[MAXLINE];  		/* output matlab requirements */
+};
+
+
+
+
+
+/**
+ * Initialise the configuration of the radclock daemon
+ */
+void config_init(struct radclock_config *conf);
+
+/**
+ * Parse a configuration file
+ */
+int config_parse(struct radclock_config *conf, u_int32_t *mask, int is_daemon);
+
+/**
+ * Output the config in config to verbose using level
+ */
+void config_print(int level, struct radclock_config *conf);
+
+
+#endif

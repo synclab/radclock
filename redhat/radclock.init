@@ -1,0 +1,61 @@
+# chkconfig: 345 95 60
+# description: The radclock daemon.
+# processname: radclock
+
+### BEGIN INIT INFO
+# Provides:          radclock
+# Required-Start:    mountvirtfs ifupdown $local_fs $network $syslog
+# Default-Start:     3 4 5
+# Default-Stop:      0 1 2 6
+# Short-Decription: The radclock daemon.
+# Decription: The radclock daemon.
+### END INIT INFO
+
+set -e;
+PATH=/bin:/usr/bin:/sbin:/usr/sbin:/usr/local/bin:/usr/local/sbin;
+
+RADCLOCK=`which radclock`
+FLAGS="-d"
+PID_FILE="/var/run/radclock/radclock.pid"
+NICE=`which nice`
+
+case "$1" in
+    start)
+        echo "Starting the radclock
+         ${NICE} -5 ${RADCLOCK} ${FLAGS}
+        ;;
+    stop)
+        echo "Stopping the radclock"
+        kill -15 `cat ${PID_FILE}` 2> /dev/null || echo "radclock was not running?"
+        ;;
+    reload)
+        echo "radclock reloading the configuration file"
+        kill -1 `cat ${PID_FILE}`
+        ;;
+    restart)
+        echo "Stopping the radclock"
+        kill -15 `cat ${PID_FILE}` 2> /dev/null || echo "radclock was not running?"
+		sleep 2
+        echo "Starting the radclock"
+        ${NICE} -5 ${RADCLOCK} ${FLAGS}
+        ;;
+    status)
+        echo -n "radclock "
+        if [ ! -r "$PID_FILE" ]; then
+                echo "is not running."
+                exit 3
+        fi
+        if read pid < "$PID_FILE" && ps -p "$pid" > /dev/null 2>&1; then
+                echo "is running with pid $pid."
+                exit 0
+        else
+                echo "is not running but $PID_FILE exists."
+                exit 1
+        fi
+        ;;
+    *)
+    echo "Usage: $0 {start|stop|reload|restart|status}" >&2
+    exit 1
+    ;;
+esac
+exit 0

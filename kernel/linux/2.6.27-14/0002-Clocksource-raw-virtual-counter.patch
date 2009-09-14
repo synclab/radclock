@@ -1,0 +1,140 @@
+From eda56b94706d13e90445370a8f87eb1d16ebca22 Mon Sep 17 00:00:00 2001
+From: Julien Ridoux <julien@synclab.org>
+Date: Thu, 28 May 2009 11:54:36 +1000
+Subject: [PATCH RADclock 2/9] Clocksource raw virtual counter
+
+Implement a vcounter_t cumulative counter to track consistent increment
+of the selected clocksource.
+Provides data structure supprot and access via the read_vcounter()
+function. So far, counter implemented on 64 bits.
+---
+ include/linux/clocksource.h |   11 ++++++++
+ kernel/time/timekeeping.c   |   57 +++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 68 insertions(+), 0 deletions(-)
+
+diff --git a/include/linux/clocksource.h b/include/linux/clocksource.h
+index 2cf8b16..3869554 100644
+--- a/include/linux/clocksource.h
++++ b/include/linux/clocksource.h
+@@ -87,6 +87,13 @@ struct clocksource {
+ 	 * more than one cache line.
+ 	 */
+ 	cycle_t cycle_last ____cacheline_aligned_in_smp;
++#ifdef CONFIG_RADCLOCK
++	/* Store a record of the virtual counter updated on each harware clock
++	 * tick, and the current value of the virtual counter.
++	 */
++	vcounter_t vcounter_record;
++	vcounter_t vcounter_source_record;
++#endif
+ 	u64 xtime_nsec;
+ 	s64 error;
+ 
+@@ -240,4 +247,8 @@ static inline void update_vsyscall_tz(void)
+ }
+ #endif
+ 
++#ifdef CONFIG_RADCLOCK
++extern vcounter_t read_vcounter(void);
++#endif
++
+ #endif /* _LINUX_CLOCKSOURCE_H */
+diff --git a/kernel/time/timekeeping.c b/kernel/time/timekeeping.c
+index 521960b..343e500 100644
+--- a/kernel/time/timekeeping.c
++++ b/kernel/time/timekeeping.c
+@@ -58,6 +58,43 @@ void update_xtime_cache(u64 nsec)
+ 
+ struct clocksource *clock;
+ 
++#ifdef CONFIG_RADCLOCK
++/**
++ * read_vcounter_delta - retrieve the clocksource cycles since last tick
++ *
++ * private function, must hold xtime_lock lock when being
++ * called. Returns the number of cycles on the current
++ * clocksource since the last tick (since the last call to
++ * update_wall_time).
++ *
++ */
++static inline vcounter_t read_vcounter_delta(void)
++{
++	return((clocksource_read(clock) - clock->vcounter_source_record) & clock->mask);
++}
++
++/**
++ * read_vcounter - retrieve the current value of the vcounter
++ *
++ * Return the value of the cumulative count of cycles to functions
++ * within the kernel.
++ *
++ */
++vcounter_t read_vcounter(void)
++{
++	unsigned long seq;
++	vcounter_t vcount;
++
++	do {
++		seq = read_seqbegin(&xtime_lock);
++		vcount = clock->vcounter_record + read_vcounter_delta();
++	} while (read_seqretry(&xtime_lock, seq));
++
++	return vcount;
++}
++EXPORT_SYMBOL(read_vcounter);
++#endif
++
+ 
+ #ifdef CONFIG_GENERIC_TIME
+ /**
+@@ -191,6 +228,10 @@ static void change_clocksource(void)
+ 	clock = new;
+ 	clock->cycle_last = 0;
+ 	clock->cycle_last = clocksource_read(new);
++#ifdef CONFIG_RADCLOCK
++	new->vcounter_record = 0;
++	new->vcounter_source_record = (vcounter_t) clock->cycle_last;
++#endif
+ 	clock->error = 0;
+ 	clock->xtime_nsec = 0;
+ 	clocksource_calculate_interval(clock, NTP_INTERVAL_LENGTH);
+@@ -257,6 +298,11 @@ void __init timekeeping_init(void)
+ 	clocksource_calculate_interval(clock, NTP_INTERVAL_LENGTH);
+ 	clock->cycle_last = clocksource_read(clock);
+ 
++#ifdef CONFIG_RADCLOCK
++	clock->vcounter_record = 0;
++	clock->vcounter_source_record = clocksource_read(clock);
++#endif
++
+ 	xtime.tv_sec = sec;
+ 	xtime.tv_nsec = 0;
+ 	set_normalized_timespec(&wall_to_monotonic,
+@@ -443,6 +489,10 @@ void update_wall_time(void)
+ {
+ 	cycle_t offset;
+ 
++#ifdef CONFIG_RADCLOCK
++	vcounter_t  vcounter_delta;
++#endif
++
+ 	/* Make sure we're fully resumed: */
+ 	if (unlikely(timekeeping_suspended))
+ 		return;
+@@ -452,6 +502,13 @@ void update_wall_time(void)
+ #else
+ 	offset = clock->cycle_interval;
+ #endif
++
++#ifdef CONFIG_RADCLOCK
++	vcounter_delta = read_vcounter_delta();
++	clock->vcounter_record += vcounter_delta;
++	clock->vcounter_source_record += vcounter_delta;
++#endif
++
+ 	clock->xtime_nsec += (s64)xtime.tv_nsec << clock->shift;
+ 
+ 	/* normally this loop will run just once, however in the
+-- 
+1.5.6.3
+

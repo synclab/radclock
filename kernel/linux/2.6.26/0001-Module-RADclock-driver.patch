@@ -1,0 +1,418 @@
+From ef6b12b019e88dda339c1514e0879339ba80c011 Mon Sep 17 00:00:00 2001
+From: Julien Ridoux <julien@synclab.org>
+Date: Tue, 30 Jun 2009 20:22:47 +1000
+Subject: [PATCH RADclock 1/9] Module RADclock driver
+
+Add a module to store synronization information for the RADclock.
+Stores RADclock data in both fixed point and floating point
+representation to create in kernel timestamps.
+Data is set and accessed by using the netlink interface.
+---
+ drivers/Kconfig             |    2 +
+ drivers/Makefile            |    1 +
+ drivers/radclock/Kconfig    |   19 ++++
+ drivers/radclock/Makefile   |    4 +
+ drivers/radclock/radclock.c |  253 +++++++++++++++++++++++++++++++++++++++++++
+ include/linux/clocksource.h |    4 +
+ include/linux/radclock.h    |   57 ++++++++++
+ 7 files changed, 340 insertions(+), 0 deletions(-)
+ create mode 100644 drivers/radclock/Kconfig
+ create mode 100644 drivers/radclock/Makefile
+ create mode 100644 drivers/radclock/radclock.c
+ create mode 100644 include/linux/radclock.h
+
+diff --git a/drivers/Kconfig b/drivers/Kconfig
+index 59f33fa..c57a35a 100644
+--- a/drivers/Kconfig
++++ b/drivers/Kconfig
+@@ -101,4 +101,6 @@ source "drivers/auxdisplay/Kconfig"
+ source "drivers/uio/Kconfig"
+ 
+ source "drivers/xen/Kconfig"
++
++source "drivers/radclock/Kconfig"
+ endmenu
+diff --git a/drivers/Makefile b/drivers/Makefile
+index f65deda..2ab946e 100644
+--- a/drivers/Makefile
++++ b/drivers/Makefile
+@@ -94,3 +94,4 @@ obj-$(CONFIG_PPC_PS3)		+= ps3/
+ obj-$(CONFIG_OF)		+= of/
+ obj-$(CONFIG_SSB)		+= ssb/
+ obj-$(CONFIG_VIRTIO)		+= virtio/
++obj-$(CONFIG_RADCLOCK)		+= radclock/
+diff --git a/drivers/radclock/Kconfig b/drivers/radclock/Kconfig
+new file mode 100644
+index 0000000..99ef950
+--- /dev/null
++++ b/drivers/radclock/Kconfig
+@@ -0,0 +1,19 @@
++#
++# RADclock device driver configuration
++#
++
++menu "RADclock Driver"
++
++#
++# Would be nice to go back to having this as a module
++#
++config RADCLOCK
++	boolean "Kernel support for the RADclock"
++	depends on EXPERIMENTAL && GENERIC_TIME
++	default y
++	help
++	  Defines support and access to a consistent virtual counter, the basis
++	  of the RADclock (a feed-forward synchronization algorithm) and corresponding
++	  applications.
++
++endmenu
+diff --git a/drivers/radclock/Makefile b/drivers/radclock/Makefile
+new file mode 100644
+index 0000000..792a31c
+--- /dev/null
++++ b/drivers/radclock/Makefile
+@@ -0,0 +1,4 @@
++#
++# Makefile for the support of the RADclock in linux kernel.
++#
++obj-$(CONFIG_RADCLOCK) += radclock.o
+diff --git a/drivers/radclock/radclock.c b/drivers/radclock/radclock.c
+new file mode 100644
+index 0000000..30ccaf8
+--- /dev/null
++++ b/drivers/radclock/radclock.c
+@@ -0,0 +1,253 @@
++/*
++ * RADclock data
++ *
++ * Written by Thomas Young <tfyoung@orcon.net.nz>
++ * Modified by Julien Ridoux <julien@synclab.org>
++ *
++ * Store RADclock data in the kernel for the purpose of absolute time
++ * timestamping in timeval format. Requires updated synchronization data
++ * and "fixed point" data to compute  (vcount * phat + Ca).
++ *
++ * Use a generic netlink socket to allow user space and kernel to access it.
++ * In future other access methods could also be made available such as procfs
++ *
++ * RADclock data is protected by the radclock_data_mtx rw mutex. If global
++ * data ever needs to be read from the interupt context, then this will have
++ * to change.
++ *
++ * RADclock fixedpoint data is protected by the radclock_fixedpoint_mtx rw
++ * mutex.
++ *
++ * Since using an old version isn't a complete disaster, it wouldn't be a bad
++ * idea to use a wheel and to use lighter locking.
++ *
++ * Things needed:
++ *	Bounds checking on input
++ */
++
++#include <linux/module.h>
++#include <linux/kernel.h>
++#include <linux/types.h>
++#include <linux/fcntl.h>
++#include <linux/poll.h>
++#include <linux/init.h>
++#include <linux/smp_lock.h>
++#include <linux/fs.h>
++#include <linux/random.h>
++#include <linux/bootmem.h>
++
++#include <net/genetlink.h>
++#include <net/sock.h>
++
++#include <linux/radclock.h>
++
++static struct radclock_data radclock_data;
++static struct radclock_fixedpoint radclock_fp;
++
++static DECLARE_RWSEM(radclock_data_mtx);
++static DECLARE_RWSEM(radclock_fixedpoint_mtx);
++
++
++static struct genl_family radclock_genl = {
++	.id = GENL_ID_GENERATE,
++	.name = RADCLOCK_NAME,
++	.version = 0x1,
++	.hdrsize = 0,
++	.maxattr = RADCLOCK_ATTR_MAX,
++};
++
++/**
++ * Fill an skb with the global data
++ */
++static int radclock_fill_skb(u32 pid, u32 seq, u32 flags, struct sk_buff *skb, u8 cmd)
++{
++	void * hdr;
++	hdr = genlmsg_put(skb, pid, seq, &radclock_genl, flags, cmd);
++	if (hdr == NULL)
++		return -1;
++	down_read(&radclock_data_mtx);
++	NLA_PUT(skb, RADCLOCK_ATTR_DATA, sizeof(radclock_data),&radclock_data);
++	up_read(&radclock_data_mtx);
++	return genlmsg_end(skb, hdr);
++
++nla_put_failure:
++	up_read(&radclock_data_mtx);
++	genlmsg_cancel(skb, hdr);
++	return -1;
++}
++
++/**
++ * Build a reply for a global data request
++ */
++static struct sk_buff * radclock_build_msg(u32 pid, int seq, int cmd)
++{
++	struct sk_buff *skb;
++	int err;
++	skb= nlmsg_new(NLMSG_DEFAULT_SIZE, GFP_KERNEL);
++	if (skb == NULL)
++		return ERR_PTR(-ENOBUFS);
++
++	err = radclock_fill_skb(pid, seq, 0, skb, cmd);
++	if (err < 0)
++	{
++		nlmsg_free(skb);
++		return ERR_PTR(err);
++	}
++	return skb;
++}
++
++
++/**
++ * Set the global data
++ *
++ * TODO: only let privilidged processes set global data?
++ */
++static int radclock_setattr(struct sk_buff *skb, struct genl_info *info)
++{
++	//TODO check perms
++	if (!info)
++		BUG();
++	if (!info->attrs)
++		BUG();
++	if (info->attrs[RADCLOCK_ATTR_DATA] != NULL)
++	{
++		struct radclock_data *value;
++		if (nla_len(info->attrs[RADCLOCK_ATTR_DATA]) != sizeof(radclock_data))
++			return -EINVAL;
++
++		value = nla_data(info->attrs[RADCLOCK_ATTR_DATA]);
++		//TODO sanity check
++		//
++		down_write(&radclock_data_mtx);
++		memcpy(&radclock_data, value, sizeof(radclock_data));
++		up_write(&radclock_data_mtx);
++	}
++	if (info->attrs[RADCLOCK_ATTR_FIXEDPOINT] != NULL)
++	{
++		struct radclock_fixedpoint *value;
++		if (nla_len(info->attrs[RADCLOCK_ATTR_FIXEDPOINT]) != sizeof(radclock_fp))
++			return -EINVAL;
++
++		value = nla_data(info->attrs[RADCLOCK_ATTR_FIXEDPOINT]);
++		//TODO sanity check
++		//
++		down_write(&radclock_fixedpoint_mtx);
++		memcpy(&radclock_fp, value, sizeof(radclock_fp));
++		up_write(&radclock_fixedpoint_mtx);
++	}
++
++	return 0;
++}
++
++/**
++ * Respond to a request
++ *
++ * TODO: handle requests for radclock_fp. We currently don't need it though, since
++ * no one else has a use for the data.
++ */
++static int radclock_getattr(struct sk_buff *skb, struct genl_info *info)
++{
++	//TODO check perms
++	struct sk_buff *msg;
++	msg = radclock_build_msg(info->snd_pid, info->snd_seq, RADCLOCK_CMD_GETATTR);
++	if (IS_ERR(msg))
++		return PTR_ERR(msg);
++	return genlmsg_unicast(msg, info->snd_pid);
++}
++
++static struct nla_policy radclock_policy[RADCLOCK_ATTR_MAX +1] __read_mostly = {
++	[RADCLOCK_ATTR_DATA] = {  .len = sizeof(struct radclock_data) },
++	[RADCLOCK_ATTR_FIXEDPOINT] = {  .len = sizeof(struct radclock_fixedpoint) },
++};
++
++static struct  genl_ops radclock_ops[] = {
++	{
++		.cmd = RADCLOCK_CMD_GETATTR,
++		.doit = radclock_getattr,
++		.policy = radclock_policy,
++	},
++	{
++		.cmd = RADCLOCK_CMD_SETATTR,
++		.doit = radclock_setattr,
++		.policy = radclock_policy,
++	},
++};
++
++
++static int __init radclock_register(void)
++{
++	int i;
++	if (genl_register_family(&radclock_genl))
++	{
++		printk(KERN_WARNING "RADclock netlink socket could not be created, exiting\n");
++		goto errout;
++	}
++	for (i =0; i < ARRAY_SIZE(radclock_ops); i++)
++		if (genl_register_ops(&radclock_genl, &radclock_ops[i]) < 0)
++			goto errout_unregister;
++
++	/* TODO: more sensible start than 0? */
++	memset(&radclock_data, 0, sizeof(radclock_data));
++	printk(KERN_INFO "RADclock netlink socket registered with id %d\n", radclock_genl.id);
++	return 0;
++
++errout_unregister:
++	genl_unregister_family(&radclock_genl);
++errout:
++	return -EFAULT;
++}
++
++static void __exit radclock_unregister(void)
++{
++	printk(KERN_INFO "RADclock netlink socket unregistered\n");
++	genl_unregister_family(&radclock_genl);
++}
++
++
++void radclock_fill_ktime(vcounter_t vcounter, ktime_t *ktime)
++{
++	vcounter_t countdiff;
++	struct timespec tspec;
++	u64 time_f;
++	u64 frac;
++
++	/* Synchronization algorithm (userland) should update the fixed point data
++	 * often enough to make sure the timeval does not overflow. If no sync algo
++	 * updates the data, we loose precision, but in that case, nobody is tracking
++	 * the clock drift anyway ... so send warning and stop worrying.
++	 */
++	down_read(&radclock_fixedpoint_mtx);
++
++	countdiff = vcounter - radclock_fp.vcount;
++	if (countdiff & ~((1ll << (radclock_fp.countdiff_maxbits +1)) -1))
++		printk(KERN_WARNING "RADclock: warning stamp may overflow timeval at %llu!\n",
++				(long long unsigned) vcounter);
++
++	/* Add the counter delta in second to the recorded fixed point time */
++	time_f 	= radclock_fp.time_int
++		  + ((radclock_fp.phat_int * countdiff) >> (radclock_fp.phat_shift - radclock_fp.time_shift)) ;
++
++	tspec.tv_sec = time_f >> radclock_fp.time_shift;
++
++	frac = (time_f - ((u64)tspec.tv_sec << radclock_fp.time_shift));
++	tspec.tv_nsec = (frac * 1000000000LL)  >> radclock_fp.time_shift;
++	/* tv.nsec truncates at the nano-second digit, so check for next digit rounding */
++	if ( ((frac * 10000000000LL) >> radclock_fp.time_shift) >= (tspec.tv_nsec * 10LL + 5) )
++	{
++		tspec.tv_nsec++;
++	}
++
++	/* Push the timespec into the ktime, Ok for 32 and 64 bit arch (see ktime.h) */
++	*ktime = timespec_to_ktime(tspec);
++
++	up_read(&radclock_fixedpoint_mtx);
++}
++
++EXPORT_SYMBOL_GPL(radclock_fill_ktime);
++
++module_init(radclock_register);
++module_exit(radclock_unregister);
++
++MODULE_AUTHOR("Thomas Young, Julien Ridoux");
++MODULE_LICENSE("GPL");
++MODULE_DESCRIPTION("RADclock driver support");
+diff --git a/include/linux/clocksource.h b/include/linux/clocksource.h
+index 55e434f..2cf8b16 100644
+--- a/include/linux/clocksource.h
++++ b/include/linux/clocksource.h
+@@ -17,6 +17,10 @@
+ #include <asm/div64.h>
+ #include <asm/io.h>
+ 
++#ifdef CONFIG_RADCLOCK
++typedef u64 vcounter_t;
++#endif
++
+ /* clocksource cycle base type */
+ typedef u64 cycle_t;
+ struct clocksource;
+diff --git a/include/linux/radclock.h b/include/linux/radclock.h
+new file mode 100644
+index 0000000..09299ab
+--- /dev/null
++++ b/include/linux/radclock.h
+@@ -0,0 +1,57 @@
++#ifndef __LINUX_RADCLOCK_H
++#define __LINUX_RADCLOCK_H
++
++#include <linux/types.h>
++#include <linux/clocksource.h>
++
++struct radclock_data
++{
++	double phat;
++	double phat_err;
++	double phat_local;
++	double phat_local_err;
++	long double ca;
++	double ca_err;
++	__u32 status;
++	vcounter_t last_changed;
++	vcounter_t valid_till;
++};
++
++struct radclock_fixedpoint
++{
++	/* phat as an int shifted phat_shift to the left */
++	__u64 phat_int;
++	/* Record of last time update from synchronization algorithm as an int */
++	__u64 time_int;
++	/* The counter value to convert in seconds */
++	vcounter_t vcount;
++	/* the shift amount for phat_int */
++	__u8 phat_shift;
++	/* the shift amount for time_int */
++	__u8 time_shift;
++	/* Warn if stamp is over this many bits */
++	__u8 countdiff_maxbits;
++};
++
++enum {
++	RADCLOCK_ATTR_DUMMY,
++	RADCLOCK_ATTR_DATA,
++	RADCLOCK_ATTR_FIXEDPOINT,
++	__RADCLOCK_ATTR_MAX,
++};
++
++#define RADCLOCK_ATTR_MAX (__RADCLOCK_ATTR_MAX - 1)
++
++enum {
++	RADCLOCK_CMD_UNSPEC,
++	RADCLOCK_CMD_GETATTR,
++	RADCLOCK_CMD_SETATTR,
++	__RADCLOCK_CMD_MAX,
++};
++#define RADCLOCK_CMD_MAX (__RADCLOCK_CMD_MAX - 1)
++
++#define RADCLOCK_NAME "radclock"
++
++void radclock_fill_ktime(vcounter_t vcounter, ktime_t *ktime);
++
++#endif
+-- 
+1.6.0.4
+

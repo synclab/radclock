@@ -1,0 +1,22 @@
+
+  * Copyright (C) 1982, 1990, 1993
+  * Copyright (C) 1988 University of Utah.
+  * Copyright (C) 1990 The Regents of the University of California.
+  * Copyright (C) 1990, 1991, 1993
+  * Copyright (C) 1998-2003 Poul-Henning Kamp
+  * Copyright / Licence issues !!! This is BSD code, we will have to change this
+ * Copyright (C) 2006 Darryl Veitch <dveitch@unimelb.edu.au>
+ * Copyright (C) 2006-2007, Thomas Young <tfyoung@gmail.com>
+ * Copyright (C) 2006-2011 Julien Ridoux <julien@synclab.org>
+ * Copyright (C) 2006-2012, Julien Ridoux <julien@synclab.org>
+ * Copyright (C) 2009-2012, Timothy Broomhead <t.broomhead@ugrad.unimelb.edu.au>
+# Copyright (C) 2006-2011 Julien Ridoux <julien@synclab.org>
+# Copyright (C) 2006-2012 Julien Ridoux <julien@synclab.org>
+# Copyright (C) 2006-2012, Julien Ridoux <julien@synclab.org>
++ * Copyright (C) 2011 The FreeBSD Foundation
++ * Copyright (C) 2011 The FreeBSD Foundation.
++ * Copyright (C) 2011 The University of Melbourne
++ * Copyright (C) 2011 The University of Melbourne.
++ * Copyright / Licence issues !!! This is BSD code, we will have to change this
++.\" Copyright (C) 2011 The University of Melbourne
+dnl Copyright (C) 2006-2012, Julien Ridoux <julien@synclab.org>

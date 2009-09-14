@@ -1,0 +1,148 @@
+From 630c5dd21f5919f5c001264082d39889de33c54c Mon Sep 17 00:00:00 2001
+From: Julien Ridoux <julien@synclab.org>
+Date: Tue, 26 May 2009 18:28:04 +1000
+Subject: [PATCH RADclock 6/9] RADclock ioctl
+
+IOCTL for passing timestamps to user space via packet socket (libpcap).
+Modification of get stamp IOCTL to copy the correct timestamps depending
+on the RADclock timestamping mode.
+Implementation of IOCTL to get raw vcounter stamps created by the
+RADclock.
+Implementation of IOCTL get/set timestamping modes for the RADclock.
+---
+ net/packet/af_packet.c |   69 ++++++++++++++++++++++++++++++++++++++++++++++++
+ net/socket.c           |   13 +++++++++
+ 2 files changed, 82 insertions(+), 0 deletions(-)
+
+diff --git a/net/packet/af_packet.c b/net/packet/af_packet.c
+index c718e7e..fbb91f9 100644
+--- a/net/packet/af_packet.c
++++ b/net/packet/af_packet.c
+@@ -78,6 +78,10 @@
+ #include <linux/module.h>
+ #include <linux/init.h>
+ 
++#ifdef CONFIG_RADCLOCK
++#include <linux/radclock.h>
++#endif
++
+ #ifdef CONFIG_INET
+ #include <net/inet_common.h>
+ #endif
+@@ -1160,6 +1164,14 @@ static int packet_recvmsg(struct kiocb *iocb, struct socket *sock,
+ 	if (err)
+ 		goto out_free;
+ 
++	#ifdef CONFIG_RADCLOCK
++	/* Pass the two extra raw timestamps specific to the RADCLOCK to the socket:
++	 * the raw vcounter and the timeval stamps used in the
++	 * RADCLOCK_TSMODE_FAIRCOMPARE mode.
++	 */
++	sk->sk_vcount_stamp = skb->vcount_stamp;
++	sk->sk_stamp_fair 	= skb->tstamp_fair;
++	#endif
+ 	sock_recv_timestamp(msg, sk, skb);
+ 
+ 	if (msg->msg_name)
+@@ -1658,10 +1670,67 @@ static int packet_ioctl(struct socket *sock, unsigned int cmd,
+ 			return put_user(amount, (int __user *)arg);
+ 		}
+ 		case SIOCGSTAMP:
++#ifdef CONFIG_RADCLOCK
++			if (sk->sk_radclock_tsmode == RADCLOCK_TSMODE_RADCLOCK)
++			{
++				/* Provide a timeval stamp build based on the  RADclock */
++				radclock_fill_ktime(sk->sk_vcount_stamp, (ktime_t __user *)arg);
++				return 0;
++			}
++			else if (sk->sk_radclock_tsmode == RADCLOCK_TSMODE_FAIRCOMPARE)
++			{
++				/* We are in FAIRCOMPARE mode so happily overwrite the timestamp
++				 * that is returned right below
++				 */
++				sk->sk_stamp = sk->sk_stamp_fair;
++			}
++#endif
+ 			return sock_get_timestamp(sk, (struct timeval __user *)arg);
+ 		case SIOCGSTAMPNS:
++#ifdef CONFIG_RADCLOCK
++			if (sk->sk_radclock_tsmode == RADCLOCK_TSMODE_RADCLOCK)
++			{
++				/* Provide a timeval stamp build based on the  RADclock */
++				radclock_fill_ktime(sk->sk_vcount_stamp, (ktime_t __user *)arg);
++				return 0;
++			}
++			else if (sk->sk_radclock_tsmode == RADCLOCK_TSMODE_FAIRCOMPARE)
++			{
++				/* We are in FAIRCOMPARE mode so happily overwrite the timestamp
++				 * that is returned right below
++				 */
++				sk->sk_stamp = sk->sk_stamp_fair;
++			}
++#endif
+ 			return sock_get_timestampns(sk, (struct timespec __user *)arg);
+ 
++#ifdef CONFIG_RADCLOCK
++		case SIOCSRADCLOCKTSMODE:
++		{
++			long mode;
++			mode = *((long *)arg);
++			switch (mode)
++			{
++				case RADCLOCK_TSMODE_FAIRCOMPARE:
++				case RADCLOCK_TSMODE_SYSCLOCK:
++				case RADCLOCK_TSMODE_RADCLOCK:
++					sk->sk_radclock_tsmode = mode;
++					break;
++				default:
++					return -EINVAL;
++			}
++			printk(KERN_DEBUG "RADclock: Swapping PACKET socket to mode %d\n", sk->sk_radclock_tsmode );
++			*(long *)arg = mode;
++
++			return 0;
++		}
++		case SIOCGRADCLOCKTSMODE:
++		{
++			*((long *)arg) = sk->sk_radclock_tsmode ;
++			return 0;
++		}
++#endif
++
+ #ifdef CONFIG_INET
+ 		case SIOCADDRT:
+ 		case SIOCDELRT:
+diff --git a/net/socket.c b/net/socket.c
+index 3e8d4e3..d32c718 100644
+--- a/net/socket.c
++++ b/net/socket.c
+@@ -97,6 +97,10 @@
+ #include <net/sock.h>
+ #include <linux/netfilter.h>
+ 
++#ifdef CONFIG_RADCLOCK
++#include <linux/clocksource.h>
++#endif
++
+ static int sock_no_open(struct inode *irrelevant, struct file *dontcare);
+ static ssize_t sock_aio_read(struct kiocb *iocb, const struct iovec *iov,
+ 			 unsigned long nr_segs, loff_t pos);
+@@ -917,6 +921,15 @@ static long sock_ioctl(struct file *file, unsigned cmd, unsigned long arg)
+ 				err = dlci_ioctl_hook(cmd, argp);
+ 			mutex_unlock(&dlci_ioctl_mutex);
+ 			break;
++		#ifdef CONFIG_RADCLOCK
++		case SIOCGRADCLOCKSTAMP:
++		{
++			vcounter_t *stamp = (vcounter_t *) arg;
++			*stamp = sock->sk->sk_vcount_stamp;
++			err =0;
++			break;
++		}
++		#endif
+ 		default:
+ 			err = sock->ops->ioctl(sock, cmd, arg);
+ 
+-- 
+1.5.6.3
+

@@ -1,0 +1,359 @@
+
+# Copyright (C) 2006-2009 Julien Ridoux <julien@synclab.org>
+#
+# This file is part of the radclock program.
+# 
+# This program is free software: you can redistribute it and/or modify it under
+# the terms of the GNU General Public License as published by the Free Software
+# Foundation, either version 3 of the License, or (at your option) any later
+# version.
+#
+# This program is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+# FOR A PARTICULAR PURPOSE. See the GNU General Public License for more
+# details.
+#
+# You should have received a copy of the GNU General Public License along with
+# this program. If not, see <http://www.gnu.org/licenses/>.
+
+# Process this file with autoconf to produce a configure script.
+# Requires autoconf >=2.57
+# Requires automake >=1.8
+
+dnl Check for autoconf version
+AC_PREREQ(2.57)
+
+AC_INIT(radclock, 0.2.1, [julien@synclab.org], radclock)
+
+
+dnl This should set the target_cpu, target_os and target_vendor variables
+AC_CANONICAL_TARGET
+AC_CONFIG_SRCDIR(radclock/radclock_main.c)
+
+dnl Init and check for automake version
+AM_INIT_AUTOMAKE(1.8)
+
+
+
+dnl Define directories with friends to compile 
+AC_CONFIG_FILES([Makefile libradclock/Makefile radclock/Makefile examples/Makefile man/Makefile])
+
+dnl Conditional for the tools that are not shipped away 
+if test -d tools; then
+	AM_CONDITIONAL([HAVE_TOOLS_DIR], [test 1 = 1])
+	AC_CONFIG_FILES([tools/Makefile])
+else
+	AM_CONDITIONAL([HAVE_TOOLS_DIR], [test 0 = 1])
+fi
+dnl Conditional for the testbed apps that are not shipped away 
+if test -d testbed; then
+	AM_CONDITIONAL([HAVE_TESTBED_DIR], [test 1 = 1])
+	AC_CONFIG_FILES([testbed/Makefile])
+else
+	AM_CONDITIONAL([HAVE_TESTBED_DIR], [test 0 = 1])
+fi
+dnl Conditional for the testbed apps that may require these guys
+AC_CHECK_HEADER(dagapi.h, [AM_CONDITIONAL([HAVE_DAG_API], [test 1 = 1])], [AM_CONDITIONAL([HAVE_DAG_API], [test 0 = 1])])
+AC_CHECK_HEADER(sys/timepps.h, [AM_CONDITIONAL([HAVE_PPS_API], [test 1 = 1])], [AM_CONDITIONAL([HAVE_PPS_API], [test 0 = 1])])
+
+
+AM_CONFIG_HEADER(config.h)
+
+AC_PROG_CC
+AC_PROG_INSTALL
+
+dnl Init libtool magic
+AC_PROG_LIBTOOL
+dnl Obsolete with use of libtool
+dnl AC_PROG_RANLIB
+
+#AC_CONFIG_LIBOBJ_DIR(lib)
+
+AC_C_CONST
+AC_C_INLINE
+AC_C_BIGENDIAN
+AC_TYPE_SIZE_T
+AC_HEADER_TIME
+AC_SYS_LARGEFILE
+
+AC_PROG_GCC_TRADITIONAL
+AC_CHECK_FUNCS(socket strdup strlcpy mkstemps mkstemp rdtsc rdtscll)
+
+dnl Check requires types. Error output if not correct.
+AC_CHECK_SIZEOF([int])
+AC_CHECK_SIZEOF([long long int])
+
+
+dnl XXX TODO XXX: a few of them are not needed anymore 
+AC_CHECK_HEADERS(pcap.h pcap-bpf.h net/bpf.h zlib.h sys/limits.h stddef.h inttypes.h limits.h net/ethernet.h ifaddrs.h machine/cpufunc.h asm/msr.h asm-x86_64/msr.h asm-x86/msr.h)
+
+
+
+
+dnl Variables that will be exported in all makefiles
+dnl
+AC_SUBST([ADD_INCLS])
+AC_SUBST([ADD_LIBS])
+dnl AC_SUBST([ADD_LDFLAGS])
+dnl AC_SUBST([LTLIBOBJS])
+dnl AC_SUBST([MANPAGES])
+AC_SUBST([PACKAGE_NAME])
+AC_SUBST([PACKAGE_VERSION])
+
+
+if test "$os" = unknown
+then
+dnl Mac OSX has pthread on by default. gcc don't know -pthread
+	AC_SUBST([CFLAGS], "${CFLAGS} -Wall -g")
+else
+	AC_SUBST([CFLAGS], "${CFLAGS} -Wall -g -pthread")
+fi
+
+LIBRADCLOCK_LIBS="\$(top_builddir)/libradclock/libradclock.la"
+
+
+dnl Extra debug output a la Julien 
+AC_ARG_WITH([jdebug],
+		[AS_HELP_STRING([--with-jdebug], [Extra debug output (developper only)])], 
+		[jdebug=yes],[jdebug=no])
+
+if test "$jdebug" = "yes"; then
+	AC_DEFINE([WITH_JDEBUG], [1], [Define to 1 if with extra debug output])
+fi
+
+
+dnl OS detection
+os=unknown
+osversion=unknown
+case `uname -a` in
+	Linux*)
+		os=linux
+		osversion=$(uname -r | sed -e 's/\([0-9]*.[0-9]*.[0-9]*\)-.*/\1/')
+		;;
+
+	FreeBSD*)
+		os=freebsd
+		osversion=$(uname -r | sed -e 's/\([0-9]*.[0-9]*\)-.*/\1/')
+		;;
+esac
+
+
+dnl Kernel support forced or auto-detect  
+AC_ARG_WITH([radclock-kernel],
+		[AS_HELP_STRING([--with-radclock-kernel], [Force compilation of radclock kernel support])], 
+		[tscexts=yes],[tscexts=no])
+
+if test "$tscexts" = "no"; then	
+case "$os" in
+	linux)
+		if test -e  /proc/sys/net/core/radclock_default_tsmode ; then
+			tscexts=yes
+		fi
+		;;
+	freebsd)
+		case "$osversion" in
+			# Sysctl for 6.x and 7.x kernels 
+			6* | 7*)
+				ext=`sysctl -n net.bpf.bpf_radclock_tsmode`
+				if test $ext ; then
+					tscexts=yes
+				fi
+				;;
+
+		esac
+		;;
+esac
+fi
+
+
+ioctlcount=0
+syscall_get_vcounter_number=0
+syscall_get_vcounter_latency_number=0
+
+if test "$tscexts" = "yes"; then
+case "$os" in
+	freebsd)
+		case "$osversion" in
+			# Sysctl for 6.x kernels 
+			6*)
+				ioctlcount=124
+				;;
+			# Sysctl for 7.x kernels 
+			7*)
+				ioctlcount=125
+				;;
+			*)
+				ioctlcount=0
+				;;
+		esac
+		;;
+	
+	linux)
+		case "$osversion" in
+			2.6.26*)
+
+				# Set the SYSCALL numbers
+				case "$target_cpu" in
+					i386 | i486 | i586 | i686)
+						syscall_get_vcounter_number=327
+						syscall_get_vcounter_latency_number=328
+					;;
+					x86_64)
+						syscall_get_vcounter_number=288
+						syscall_get_vcounter_latency_number=289
+					;;
+				esac
+			;;	
+			2.6.27*)
+				# Set the SYSCALL numbers
+				case "$target_cpu" in
+					i386 | i486 | i586 | i686)
+						syscall_get_vcounter_number=333
+						syscall_get_vcounter_latency_number=334
+					;;
+					x86_64)
+						syscall_get_vcounter_number=295
+						syscall_get_vcounter_latency_number=296
+					;;
+				esac
+			;;	
+			2.6.28*)
+				# Set the SYSCALL numbers
+				case "$target_cpu" in
+					i386 | i486 | i586 | i686)
+						syscall_get_vcounter_number=333
+						syscall_get_vcounter_latency_number=334
+					;;
+					x86_64)
+						syscall_get_vcounter_number=295
+						syscall_get_vcounter_latency_number=296
+					;;
+				esac
+			;;	
+			*)
+				syscall_get_vcounter_number=0
+				syscall_get_vcounter_latency_number=0
+			;;
+		esac
+		;;
+esac
+fi
+
+
+
+
+
+
+       
+if test "$os" = linux; then
+#not common header, use our own
+	AC_CHECK_HEADER(linux/genetlink.h, AC_DEFINE([HAVE_LINUX_GENETLINK_H], [],[Use a system copy of linux/genetlink.h]), AC_DEFINE([WITH_LOCAL_GENETLINK_H], [],[Use a local copy of linux/genetlink.h]))
+	AC_CHECK_HEADER(netlink/netlink.h,, netlink=no)
+	AC_CHECK_HEADER(linux/netlink.h,, netlink=no)
+	AC_CHECK_LIB(nl,nl_handle_alloc,, netlink=no)
+	AC_MSG_CHECKING([nl_recv for four or three params])
+	AC_COMPILE_IFELSE(
+			AC_LANG_PROGRAM([[#include <sys/socket.h>
+ #include <linux/netlink.h>
+ #include <netlink/netlink.h> ]], [[nl_recv(NULL,NULL,NULL,NULL);]]),
+			 nl_recv=four,
+			 nl_recv=unknown)
+	if test "${nl_recv}" = "four"; then
+		AC_DEFINE([WITH_NL_RECV_FOUR_PARM],[],[nl_recv takes 4 params])
+		AC_MSG_RESULT([four])
+	else
+		AC_MSG_RESULT([three])
+	fi
+
+		
+	if test "${netlink}" = "no"; then
+		AC_DEFINE([WITH_RADKERNEL_NONE],[1],[Define to 1 if NOT detected patched radclock kernel])
+		kernel_channel="no"
+	else
+		kernel_channel="yes"
+		if test "$tscexts" = "yes"; then	
+			LIBRADCLOCK_LIBS="${LIBRADCLOCK_LIBS} -lnl"
+			AC_DEFINE([WITH_RADKERNEL_LINUX], [1], [Define to 1 if detected patched radclock kernel])
+		else
+			AC_DEFINE([WITH_RADKERNEL_NONE],[1],[Define to 1 if NOT detected patched radclock kernel])
+		fi
+
+	fi
+	AC_DEFINE_UNQUOTED([LINUX_SYSCALL_GET_VCOUNTER],$syscall_get_vcounter_number,[Define get_vcounter_syscall number (Linux specific)])
+	AC_DEFINE_UNQUOTED([LINUX_SYSCALL_GET_VCOUNTER_LATENCY],$syscall_get_vcounter_latency_number,[Define get_vcounter_latency_syscall number (Linux specific)])
+fi
+
+if test "$os" = freebsd;
+then
+	AC_DEFINE_UNQUOTED([FREEBSD_RADCLOCK_IOCTL],$ioctlcount,[Define the first radclock specific ioctl number (freebsd specific)])
+	if test "$tscexts" = yes; then
+		AC_DEFINE([WITH_RADKERNEL_FBSD], [1], [Define to 1 if detected patched radclock kernel])
+		kernel_channel="yes"
+	else
+		AC_DEFINE([WITH_RADKERNEL_NONE], [1], [Define to 1 if NOT detected patched radclock kernel])
+		kernel_channel="no"
+	fi
+fi
+
+# Darwin* and other OS without kernel extensions
+if test "$os" = unknown;
+then 
+	AC_DEFINE([WITH_RADKERNEL_NONE],[1],[Define to 1 if NOT detected patched radclock kernel])
+	kernel_channel="no"
+fi
+
+
+dnl Check for correct version of libpcap
+pcap_ok=1
+AC_CHECK_LIB(pcap, pcap_next_ex,,pcap_ok=0)
+AC_CHECK_LIB(pcap, pcap_dump_flush,,pcap_ok=0)
+
+
+
+AC_SUBST([LIBRADCLOCK_LIBS])			       
+
+
+AC_OUTPUT
+
+AC_MSG_NOTICE([----------------------------------------])
+AC_MSG_NOTICE([RADClock version $PACKAGE_VERSION])
+AC_MSG_NOTICE([Found target arch: $target_cpu])
+AC_MSG_NOTICE([Compiling for $os])
+AC_MSG_NOTICE([Detected kernel RADClock extensions: $tscexts])
+AC_MSG_NOTICE([Detected kernel access channel: $kernel_channel])
+if test "$os" = linux
+then
+	if test "$tscexts" = yes
+	then
+		AC_MSG_NOTICE([get_counter syscall number: $syscall_get_vcounter_number])
+		AC_MSG_NOTICE([get_counter_latency syscall number: $syscall_get_vcounter_latency_number])
+		if test "$netlink" = no
+		then
+		AC_MSG_NOTICE([**ERROR** - Netlink library (libnl) not found])
+		fi
+	fi
+fi
+
+if test "$os" = freebsd
+then
+	if test "$tscexts" = yes
+	then
+		AC_MSG_NOTICE([ioctl Count Starting At $ioctlcount])
+	fi
+fi
+
+if test $pcap_ok -lt 1
+then 
+	AC_MSG_NOTICE([**ERROR** - It seems your version of libpcap is not valid (requires 0.8 or higher)])
+fi
+if test $ac_cv_sizeof_int -lt 4;
+then
+	AC_MSG_NOTICE([**ERROR** - Size of int is $ac_cv_sizeof_int bytes. You can not install the RADclock])
+fi
+
+if test $ac_cv_sizeof_long_long_int -lt 8;
+then
+	AC_MSG_NOTICE([**ERROR** - Size of long long int is $ac_cv_sizeof_long_long_int bytes. You can not install the RADclock)])
+fi
+AC_MSG_NOTICE([----------------------------------------])
+

@@ -1,0 +1,132 @@
+.\"                                      Hey, EMACS: -*- nroff -*-
+.\" First parameter, NAME, should be all caps
+.\" Second parameter, SECTION, should be 1-8, maybe w/ subsection
+.\" other parameters are allowed: see man(7), man(1)
+.TH RADCLOCK 8 "July 18, 2007" "" "The radclock daemon"
+.\" Please adjust this date whenever revising the manpage.
+.\"
+.\" Some roff macros, for reference:
+.\" .nh        disable hyphenation
+.\" .hy        enable hyphenation
+.\" .ad l      left justify
+.\" .ad b      justify to both left and right margins
+.\" .nf        disable filling
+.\" .fi        enable filling
+.\" .br        insert line break
+.\" .sp <n>    insert n+1 empty lines
+.\" for manpage-specific macros, see man(7)
+.SH NAME
+radclock \- The radclock daemon 
+.SH SYNOPSIS
+.B radclock
+[ -xdLvvvh ] [ -c config_file ] [ -l log_file ] [ -i iface ] [ -n hostname ] [ -t hostname ] [ -p period ] [ -r pcap_in ] [ -s ascii_in ] [ -w pcap_out ] [ -a ascii_out ] [ -o sync_out ] 
+.br
+.SH DESCRIPTION
+This manual page documents the \fBradclock\fP daemon. See README and INSTALL files 
+provided with the package for some basic documentation. Updates and troubleshooting
+can be found from the page:
+.br
+http://www.synclab.org/radclock/.
+.PP
+The \fBradclock\fP is a software clock taking advantage of the stability of the CPU
+oscillator. It relies on the processing of timestamps to a reference clock carried 
+over the network in NTP packets. To work correctly and provide maximum accuracy it
+is is essential to know an NTP compatible reference server (stratum-1 HIGHLY 
+recommended). Also the host running the radclock should be able to generate a stream
+of NTP packets (using ntpd daemon or ntpdate).
+.br
+The radclock does not affect the system clock on the system and both clocks can be run
+in parallel. An API is defined to access the time created by the radclock through the 
+libradclock library.
+.br
+The radclock runs in two distinct modes. If a radclock patched kernel has been installed
+the radclock is able to run in "kernel mode" providing low system noise synchronisation
+and kernel timestamping ability. Without kernel support, the radclock runs in "userland 
+mode" where the true timestamps are inferred without the possibility to timestamp packets.
+.SH OPTIONS
+.TP
+.B -x 
+If running with kernel support (that is with a radclock patched kernel) this option 
+prevents the update of the radclock in the kernel structure. This may be particularly 
+useful to have different instances of the radclock running for replay of data without
+interfering with the system daemon. Without kernel support this option has no effect.
+.TP
+.B -d
+Run the radclock as a daemon. Requires super-user privileges.
+.TP
+.B -L
+Do not use the local CPU rate refinement. The default behaviour is to use the local 
+rate refinement for faster adaptation.
+.TP
+.B -v
+Verbose output in the log file.
+.TP
+.B -vv
+More verbose output in the log file.
+.TP
+.B -h
+Show summary of options.
+.TP
+.B "-c config_file"
+Specifies the path to alternative configuration file. 
+.TP
+.B "-l log_file"
+Specifies the path to alternative log file.
+.TP
+.B "-i iface"
+Specifies the interface the radclock should use to capture NTP packets.
+.TP
+.B "-n hostname"
+Specifies the local hostname currently running the radclock. This is essential to 
+guarantee the radclock processes only the NTP requests originating at the host.  
+.TP
+.B "-t hostname"
+Specifies the time server hostname we send requests to. This should match the
+configuration used by the ntpd daemon if using piggy-backing mode.
+.TP
+.B "-p period"
+The radclock expects the ntpd daemon or the ntpdate calls to send packets with a fixed 
+polling period. The value provided MUST match the one used by the ntpd daemon or ntpdate.
+The default value is 16 seconds (2^4).
+.TP
+.B "-r pcap_in"
+Replay mode. Makes the radclock replay a previously stored raw file in pcap format instead
+of capturing packets on a live interface.
+.TP
+.B "-r ascii_in"
+Replay mode. Makes the radclock replay a previously stored raw file in ascii format instead
+of capturing packets on a live interface.
+.TP
+.B "-w pcap_out"
+Makes the radclock store a raw data file in pcap format. This pcap file can aslo be read in 
+tcpdump or process with libpcap. WARNING: there are some alterations to the original pcap 
+format.
+.TP
+.B "-a ascii_out"
+Makes the radclock store a raw data file in ascii format. This file contains the 
+timestamps extracted from NTP packets.
+.TP
+.B "-o sync_out"
+Makes the radclock store a synchronization data file that provides radclock 
+performance indicators.
+.SH FILES 
+.TP
+.I /etc/radclock.conf
+If run as a daemon the radclock parses the configuration file. If the configuration 
+file does not exist it is created. Command line parameters overwrite the parameter 
+values stored in the configuration file.
+.TP
+.I radclock.conf
+If the radclock does not run as a daemon it parses or creates a configuration 
+in the working directory.
+.SH SEE ALSO
+.BR radclock.conf (5)
+.P
+The home of RADclock: http://www.synclab.org/radclock
+.br
+.SH REPORTING BUGS 
+.SH COPYRIGHT
+.SH AUTHOR
+See AUTHORS file for a list of all contributors to the code.
+.PP
+This manual page was written by Julien Ridoux <julien@synclab.org>.

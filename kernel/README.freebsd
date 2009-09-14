@@ -1,0 +1,39 @@
+
+
+#---------------------------------------------------------------------
+# Files short description
+#---------------------------------------------------------------------
+
+bpfdesc.h:
+	- define  bpf_d  structure (with new members bpf_coef, tsc_flag)
+
+bpf.h:
+	- clock data structure
+	- declare new ioctls
+	- declare new tapping functions bpf_tstap, bpf_mtstap, and  macro BPF_MTSTAP
+
+bpf.c:
+	- catchpacketts:   declare and define, read ts, if raw, put into bpfheader, else convert first
+	- define static global clockdata variable
+	- bpfopen:  initialize  bpf_d  ( point to global clockdata, and flag to zero )
+	- bpfioctl: define new ioctls
+	- bpf_tstap:  call catchpacketts instead of catchpacket  (not currently used)
+	- bpf_mtstap:    ditto                                   (    currently used)
+	- bpfattach:  initialises bpf_lock, global clock data, and bpf_d member data for eachdevice
+	**- implements mode setting command, use like this: 
+	sysctl debug.bpf_tscmode=5    % sets default mode to 5  (= TSCDISABLED )
+
+if_ethersubr.c: 
+	- ether_input: read TSC, call BPF_MTSTAP macro (MTAP onlyno TSC version of TAP or TAP2 written)
+
+
+options.i386:
+	- declare include:  
+	TSC_CLOCK    opt_bpftsc.h
+
+TSC:
+	- add the kernel config option:
+		option       TSC_CLOCK
+
+
+

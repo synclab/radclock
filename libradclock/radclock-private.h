@@ -1,0 +1,308 @@
+/*
+ * Copyright (C) 2006-2009 Julien Ridoux <julien@synclab.org>
+ *
+ * This file is part of the radclock program.
+ * 
+ * This program is free software: you can redistribute it and/or modify it under
+ * the terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the GNU General Public License for more
+ * details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * this program. If not, see <http://www.gnu.org/licenses/>.
+ */
+
+
+#ifndef _RADCLOCK_PRIVATE_H
+#define _RADCLOCK_PRIVATE_H
+
+#include <netinet/in.h>
+#include <pthread.h>
+#include <pcap.h>
+
+/* See config.h for symbol definition */
+#ifdef WITH_JDEBUG
+#define JDEBUG fprintf(stdout, "Thread: %lu \t| %s() \t| %s - %d\n", pthread_self(), __FUNCTION__, __FILE__, __LINE__);
+#else
+#define JDEBUG
+#endif
+
+
+/* Defines bound on SKM scale. A bit redundant with other defines but easy to
+ * fix if needed.
+ */
+#define OUT_SKM	1024
+
+
+// TODO : should provide methods for modify this? 
+typedef enum { RADCLOCK_RUN_NOTSET, RADCLOCK_RUN_KERNEL, RADCLOCK_RUN_DEAD } radclock_runmode_t;
+typedef enum { RADCLOCK_IPC_CLIENT, RADCLOCK_IPC_SERVER, RADCLOCK_IPC_NONE} radclock_IPC_mode_t;
+typedef enum { RADCLOCK_UNIDIR, RADCLOCK_BIDIR} radclock_syncalgo_mode_t;
+
+
+/* Data related to the clock maintain out of the kernel but
+ * specific to FreeBSD
+ */
+struct radclock_impl_bsd
+{
+	int dev_fd;
+};
+
+struct radclock_impl_linux {
+	int radclock_gnl_id;
+};
+
+
+/* Protocol related stuff on the client side */
+struct radclock_client_data {
+	int socket;
+	struct sockaddr_in s_to;
+	struct sockaddr_in s_from;
+};
+
+/**
+ * NTP protocol specifics for being a server
+ */
+// TODO this could be renamed in a more generic network layer data structure in
+// the future ...
+struct radclock_ntpserver_data {
+	int burst;
+	uint32_t refid;
+	unsigned int stratum;
+	double serverdelay; 	/* RTThat to the server we sync to */
+	double rootdelay;		/* Cumulative RTThat from top of stratum hierarchy */
+	double rootdispersion;	/* Cumulative clock error from top of stratum hierarchy */
+};
+
+
+
+/**
+ * Structure representing the radclock parameters
+ */
+struct radclock_data {
+	double phat;
+	double phat_err;
+	double phat_local;
+	double phat_local_err;
+	long double ca;
+	double ca_err;
+	unsigned int status;
+	vcounter_t last_changed;
+	vcounter_t valid_till;
+};
+
+
+struct radclock_fixedpoint
+{
+	/** phat as an int shifted phat_shift to the left */
+	uint64_t phat_int;
+
+	/** the time reference to add a delta vcounter to as an int (<< TIME_SHIFT) */
+	uint64_t time_int;
+
+	/** the vcounter value corresponding to the time reference */
+	vcounter_t vcounter_ref;
+
+	/** the shift amount for phat_int */
+	uint8_t phat_shift;
+
+	/** the shift amount for ca_int */
+	uint8_t time_shift;
+
+	/** maximum bit for vcounter difference without overflow */
+	uint8_t countdiff_maxbits;
+};
+
+
+
+struct radclock {
+	/* Clock data, the real stuff */
+	struct radclock_data rad_data;
+
+	/* System specific stuff */
+	union {
+		struct radclock_impl_bsd 	bsd_data;
+		struct radclock_impl_linux 	linux_data;
+	};
+
+	/* UNIX signals */
+	unsigned int unix_signal;
+
+	/* Common data for the daemon */
+	// TODO some cleanup in this
+	int is_daemon;
+	int ipc_socket;
+	char *ipc_socket_path;
+	radclock_autoupdate_t 	autoupdate_mode;
+	radclock_local_period_t	local_period_mode;
+	radclock_runmode_t 		run_mode;
+	radclock_IPC_mode_t 	ipc_mode;
+
+	/* Protocol related stuff on the client side (NTP, 1588, ...) */
+	struct radclock_client_data *client_data;
+	
+	/* Protol related stuff (NTP, 1588, ...) */
+	struct radclock_ntpserver_data *server_data;
+
+	/* Pcap handler for the RADclock only */
+	pcap_t *pcap_handle;
+
+	/* Syscall */
+	int syscall_get_vcounter;
+	int syscall_get_vcounter_latency;
+
+	/* Output file descriptors */
+	FILE* stampout_fd;
+	FILE* matout_fd;
+
+	/* Threads */
+	pthread_t threads[8];		/* TODO: quite ugly implementation ... */
+	int	pthread_flag_stop;
+	pthread_attr_t thread_attr;
+	pthread_mutex_t globaldata_mutex;
+	int wakeup_data_ready;
+	pthread_mutex_t wakeup_mutex;
+	pthread_cond_t wakeup_cond;
+
+	/* Raw data capture buffer */
+	struct raw_data *rdb_start;
+	struct raw_data *rdb_end;
+
+	/* Configuration */
+	struct radclock_config *conf;
+
+	/* Algo output */
+	radclock_syncalgo_mode_t syncalgo_mode;
+	void *algo_output; 	/* Defined as void* since not part of the library */
+
+	/* Stamp source */
+	void *stamp_source; 	/* Defined as void* since not part of the library */
+};
+
+
+#define CLIENT_DATA(x) (x->client_data)
+#define SERVER_DATA(x) (x->server_data)
+#define GLOBAL_DATA(x) (&(x->rad_data))
+#define PRIV_USERDATA(x) (&(x->user_data))
+#ifdef linux
+# define PRIV_DATA(x) (&(x->linux_data))
+#else
+# define PRIV_DATA(x) (&(x->bsd_data))
+#endif
+
+#define ADD_STATUS(x,y) (GLOBAL_DATA(x)->status = GLOBAL_DATA(x)->status | y ) 
+#define DEL_STATUS(x,y) (GLOBAL_DATA(x)->status = GLOBAL_DATA(x)->status & ~y ) 
+#define HAS_STATUS(x,y) ((GLOBAL_DATA(x)->status & y ) == y ) 
+
+
+/* IPC using datagram UNIX sockets
+ * Types and messages for communication with the thread serving global data 
+ * We can imagine several messages in the future ...
+ */
+// TODO: somewhere else if not running as a daemon with root access?
+
+/* Socket for IPC used by the gb_pthread */
+#define RADCLOCK_RUN_DIRECTORY		"/var/run/radclock"
+#define IPC_SOCKET_SERVER			( RADCLOCK_RUN_DIRECTORY "/radclock.socket" )
+#define IPC_SOCKET_CLIENT			"/tmp/radclock-client"
+
+#define IPC_MAGIC_NUMBER			31051978
+#define IPC_REQ_GLOBALDATA			1
+
+struct ipc_request {
+	unsigned int magic_number;
+	unsigned int request_type;
+};
+
+struct ipc_reply {
+	unsigned int reply_type;
+	union {
+		struct radclock_data rad_data;
+	};
+};
+
+
+
+/**
+ * Detect possible kernel support for the RADclock prior initialisation 
+ * @return The run mode the clock should be initialise to 
+ */
+radclock_runmode_t radclock_detect_support(void);
+
+
+/**
+ * Wrapper around reading the clock parameters for kernel global data.
+ * @param  handle The private handle for accessing global data
+ * @return 0 on success, non-zero on failure
+ */
+int radclock_read_kernelclock(struct radclock *handle);
+
+
+/**
+ * Init the shared clock structure maintained in kernel. 
+ * @param  handle The private handle for accessing global data
+ * @return 0 on success, non-zero on failure
+ */
+int radclock_init_kernelclock(struct radclock *handle);
+
+
+/**
+ * Set the latest global data to the kernel copy of the clock.
+ * This function is dedicated to the sync algorithm and should not be called by
+ * a user application.
+ * @param  handle The private handle for accessing global data
+ * @param  data   Attempt to set the data from this.
+ * @return 0 on success, non-zero on failure
+ */
+int radclock_set_kernelclock(struct radclock *handle);
+
+
+/**
+ * Check if the parameters in the userland clock handle are outdated and update
+ * them if it is the case.
+ * The outdated criterion relies on the comparison of the vcount stamps stored in
+ * the global data structure.
+ * @param  handle The private handle for accessing global data
+ * @return 0 on success, non-zero on failure
+ */ 
+int radclock_check_outdated(struct radclock* handle);
+
+
+/**
+ * System specific call for setting the capture mode on the pcap capture device.
+ */
+int descriptor_set_tsmode(pcap_t *p_handle, int kmode);
+
+
+/**
+ * Set fixedpoint data in the kernel for computing timestamps there 
+ */
+inline int set_kernel_fixedpoint(struct radclock *handle, struct radclock_fixedpoint *fpdata);
+
+
+/**
+ * System specific call for getting the capture mode on the pcap capture device.
+ */
+int descriptor_get_tsmode(pcap_t *p_handle, int *kmode);
+
+
+/**
+ * System specific call for getting the capture mode on the pcap capture device.
+ */
+inline int extract_vcount_stamp(
+			pcap_t *p_handle, 
+			const struct pcap_pkthdr *header, 
+			const unsigned char *packet,
+			vcounter_t *vcount);
+
+
+
+int radclock_init_vcounter_syscall(struct radclock *handle);
+
+
+#endif

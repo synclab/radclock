@@ -1,0 +1,120 @@
+From 3b48afbad63528f6a44cf34e2894bea1c4297525 Mon Sep 17 00:00:00 2001
+From: Julien Ridoux <julien@synclab.org>
+Date: Tue, 30 Jun 2009 22:47:53 +1000
+Subject: [PATCH RADclock 7/9] RADclock packets timestamps
+
+Create raw vcounter and fair timeval timestamps on incoming and outgoing
+packets captured.
+---
+ net/core/dev.c |   64 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 64 insertions(+), 0 deletions(-)
+
+diff --git a/net/core/dev.c b/net/core/dev.c
+index fca23a3..3248630 100644
+--- a/net/core/dev.c
++++ b/net/core/dev.c
+@@ -120,6 +120,9 @@
+ #include <linux/ctype.h>
+ #include <linux/if_arp.h>
+ #include <linux/if_vlan.h>
++#ifdef CONFIG_RADCLOCK
++#include <linux/clocksource.h>
++#endif
+ 
+ #include "net-sysfs.h"
+ 
+@@ -1252,8 +1255,28 @@ static void dev_queue_xmit_nit(struct sk_buff *skb, struct net_device *dev)
+ {
+ 	struct packet_type *ptype;
+ 
++#ifdef CONFIG_RADCLOCK
++	ktime_t tv_fair;
++	vcounter_t vcount;
++#endif
++
+ 	net_timestamp(skb);
+ 
++#ifdef CONFIG_RADCLOCK
++	/* At this point, we have no way of knowing if we tap the packets
++	 * in RADCLOCK_TSMODE_FAIRCOMPARE mode or not. So we take another
++	 * timestamp we ensure to be 'fair'.
++	 */
++	rdtsc_barrier(); /* Make sure GCC doesn't mess up the compare */
++	tv_fair = ktime_get_real();
++	vcount = read_vcounter();
++	rdtsc_barrier(); /* Make sure GCC doesn't mess up the compare */
++
++	/* Copy the two specific RADclock timestamps to the skbuff */
++	skb->vcount_stamp = vcount;
++	skb->tstamp_fair = tv_fair;
++#endif
++
+ 	rcu_read_lock();
+ 	list_for_each_entry_rcu(ptype, &ptype_all, list) {
+ 		/* Never send packets back to the socket
+@@ -1792,10 +1815,31 @@ int netif_rx(struct sk_buff *skb)
+ 	struct softnet_data *queue;
+ 	unsigned long flags;
+ 
++	#ifdef CONFIG_RADCLOCK
++	/* At this point, we have no way of knowing if we tap the packets
++	 * in RADCLOCK_TSMODE_FAIRCOMPARE mode or not. So we take another
++	 * timestamp we ensure to be 'fair'.
++	 */
++	ktime_t tv_fair;
++	vcounter_t vcount;
++
++	rdtsc_barrier(); /* Make sure GCC doesn't mess up the compare */
++	vcount = read_vcounter();
++	tv_fair = ktime_get_real();
++	rdtsc_barrier(); /* Make sure GCC doesn't mess up the compare */
++	#endif
++
+ 	/* if netpoll wants it, pretend we never saw it */
+ 	if (netpoll_rx(skb))
+ 		return NET_RX_DROP;
+ 
++	#ifdef CONFIG_RADCLOCK
++	/* Copy the two specific RADclock timestamps to the skbuff */
++	skb->vcount_stamp = vcount;
++	skb->tstamp_fair  = tv_fair;
++	#endif
++
++
+ 	if (!skb->tstamp.tv64)
+ 		net_timestamp(skb);
+ 
+@@ -2052,10 +2096,30 @@ int netif_receive_skb(struct sk_buff *skb)
+ 	int ret = NET_RX_DROP;
+ 	__be16 type;
+ 
++	#ifdef CONFIG_RADCLOCK
++	/* At this point, we have no way of knowing if we tap the packets
++	 * in RADCLOCK_TSMODE_FAIRCOMPARE mode or not. So we take another
++	 * timestamp we ensure to be 'fair'.
++	 */
++	ktime_t tv_fair;
++	vcounter_t vcount;
++
++	rdtsc_barrier(); /* Make sure GCC doesn't mess up the compare */
++	vcount = read_vcounter();
++	tv_fair = ktime_get_real();
++	rdtsc_barrier(); /* Make sure GCC doesn't mess up the compare */
++	#endif
++
+ 	/* if we've gotten here through NAPI, check netpoll */
+ 	if (netpoll_receive_skb(skb))
+ 		return NET_RX_DROP;
+ 
++	#ifdef CONFIG_RADCLOCK
++	/* Copy the two specific RADclock timestamps to the skbuff */
++	skb->vcount_stamp = vcount;
++	skb->tstamp_fair = tv_fair;
++	#endif
++
+ 	if (!skb->tstamp.tv64)
+ 		net_timestamp(skb);
+ 
+-- 
+1.6.0.4
+

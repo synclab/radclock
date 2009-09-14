@@ -1,0 +1,13 @@
+Source: radclock
+Section: non-free/net
+Priority: extra
+Maintainer: Julien Ridoux <julien@synclab.org>
+Build-Depends: debhelper (>= 5), autotools-dev, libc6-dev, libpcap0.8-dev, libnl-dev 
+Standards-Version: 3.7.2
+
+Package: radclock
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: Robust Absolute and Difference Clock
+ The included daemon and library use the selected clock source to provide a robust 
+ feed-forward synchronisation algorithm.

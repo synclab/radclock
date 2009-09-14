@@ -1,0 +1,112 @@
+##
+## RADCLOCK README
+##
+
+This file covers the basic installation steps.  
+
+See INSTALL file for generic installation procedure.
+
+See http://www.synclab.org/radclock/ for more up-to-date
+and more detailed instructions.
+You can also find binary packages for your architecture there.
+
+
+==========================================================================
+Overview
+==========================================================================
+
+To run the RADclock you need to:
+- patch and recompile your kernel
+- install the radclock daemon
+- start the radclock daemon to create/update the configuration file 
+- edit the configuration file
+- restart the radclock daemon
+
+
+
+==========================================================================
+1. Kernel patch - FreeBSD
+==========================================================================
+
+The following assume your kernel source tree is installed in /usr/src
+
+  $ cd /usr/src
+  $ patch -Np0 < [path-to-radclock-package]/kernel-patches/freebsd/RADclock-FreeBSD-x.y.patch
+  $ cd /usr/src/sys/[ARCH]/conf
+  $ config RADCLOCK.[ARCH]
+  $ cd ../compile/RADCLOCK.[ARCH]
+  $ make cleandepend
+  $ make depend
+  $ make
+  $ sudo make install
+  $ sudo reboot 
+
+
+
+==========================================================================
+2. Kernel Patch - Linux
+==========================================================================
+
+The following assume your kernel source tree is installed in /usr/src
+
+  $ cd linux-x.y.z
+  $ patch -p1 < [path-to-radclock-package]/kernel-patches/linux/x.y.z/*
+
+Configure and compile the patched kernel using your favorite method.
+Reboot.
+
+
+
+
+==========================================================================
+3. RADclock daemon 
+==========================================================================
+
+In the unpacked archive directory run:
+
+  $ ./configure
+
+If you are not running a RADclock patched yet, you can force the
+compilation of the kernel support with:
+
+  $ ./configure --with-radclock-kernel
+
+Then
+
+  $ make
+  $ sudo make install
+
+Install an init script, see
+http://www.synclab.org/radclock/ for examples.
+
+
+
+==========================================================================
+4. First start / Configuration file
+==========================================================================
+
+Start the radclock daemon using the init script. It creates a configuration 
+file in /etc/radclock.conf.
+
+Edit the configuration file and make sure you provide a hostname and a 
+time_server to generate a dedicated flow of synchronisation packets.
+
+See man radclock.conf for information on the different configuration options.
+
+
+
+
+==========================================================================
+5. Programming with the RADClock
+==========================================================================
+
+As of today, the RADclock does NOT adjust the system clock.  Accessing
+the RADclock from your application requires to use the RADclock API
+defined in radclock.h and provided by the libradclock library.
+
+Include the radclock.h header file to your C code and compile against
+the libradclock library. The examples directory is surely a good
+starting point for using the API.
+
+The libm and libpcap librares may also have to be linked to your binary. 
+

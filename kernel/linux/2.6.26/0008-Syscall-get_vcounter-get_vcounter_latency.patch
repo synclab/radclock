@@ -1,0 +1,139 @@
+From 4e56e9fd5dd1aa5bb892f7be8edb4351217db62a Mon Sep 17 00:00:00 2001
+From: Julien Ridoux <julien@synclab.org>
+Date: Tue, 30 Jun 2009 23:03:56 +1000
+Subject: [PATCH RADclock 8/9] Syscall get_vcounter get_vcounter_latency
+
+Add get_vcounter() and get_vcounter_latency syscalls to access the
+raw vcounter and its latency from user space
+---
+ arch/x86/kernel/syscall_table_32.S |    4 +++
+ include/asm-x86/unistd_32.h        |    4 +++
+ include/asm-x86/unistd_64.h        |    6 +++++
+ include/linux/syscalls.h           |    7 ++++++
+ kernel/time.c                      |   41 ++++++++++++++++++++++++++++++++++++
+ 5 files changed, 62 insertions(+), 0 deletions(-)
+
+diff --git a/arch/x86/kernel/syscall_table_32.S b/arch/x86/kernel/syscall_table_32.S
+index adff556..36e280d 100644
+--- a/arch/x86/kernel/syscall_table_32.S
++++ b/arch/x86/kernel/syscall_table_32.S
+@@ -326,3 +326,7 @@ ENTRY(sys_call_table)
+ 	.long sys_fallocate
+ 	.long sys_timerfd_settime	/* 325 */
+ 	.long sys_timerfd_gettime
++#ifdef CONFIG_RADCLOCK
++	.long sys_get_vcounter
++	.long sys_get_vcounter_latency
++#endif
+diff --git a/include/asm-x86/unistd_32.h b/include/asm-x86/unistd_32.h
+index 8317d94..8bc55c4 100644
+--- a/include/asm-x86/unistd_32.h
++++ b/include/asm-x86/unistd_32.h
+@@ -332,6 +332,10 @@
+ #define __NR_fallocate		324
+ #define __NR_timerfd_settime	325
+ #define __NR_timerfd_gettime	326
++#ifdef CONFIG_RADCLOCK
++#define __NR_get_vcounter	327
++#define __NR_get_vcounter_latency	328
++#endif
+ 
+ #ifdef __KERNEL__
+ 
+diff --git a/include/asm-x86/unistd_64.h b/include/asm-x86/unistd_64.h
+index fe26e36..f482697 100644
+--- a/include/asm-x86/unistd_64.h
++++ b/include/asm-x86/unistd_64.h
+@@ -639,6 +639,12 @@ __SYSCALL(__NR_fallocate, sys_fallocate)
+ __SYSCALL(__NR_timerfd_settime, sys_timerfd_settime)
+ #define __NR_timerfd_gettime			287
+ __SYSCALL(__NR_timerfd_gettime, sys_timerfd_gettime)
++#ifdef CONFIG_RADCLOCK
++#define __NR_get_vcounter			288
++__SYSCALL(__NR_get_vcounter, sys_get_vcounter)
++#define __NR_get_vcounter_latency	289
++__SYSCALL(__NR_get_vcounter_latency, sys_get_vcounter_latency)
++#endif
+ 
+ 
+ #ifndef __NO_STUBS
+diff --git a/include/linux/syscalls.h b/include/linux/syscalls.h
+index 0522f36..7dbc092 100644
+--- a/include/linux/syscalls.h
++++ b/include/linux/syscalls.h
+@@ -64,6 +64,9 @@ struct getcpu_cache;
+ #include <asm/signal.h>
+ #include <linux/quota.h>
+ #include <linux/key.h>
++#ifdef CONFIG_RADCLOCK
++#include <linux/clocksource.h>
++#endif
+ 
+ asmlinkage long sys_time(time_t __user *tloc);
+ asmlinkage long sys_stime(time_t __user *tptr);
+@@ -615,6 +618,10 @@ asmlinkage long sys_timerfd_settime(int ufd, int flags,
+ asmlinkage long sys_timerfd_gettime(int ufd, struct itimerspec __user *otmr);
+ asmlinkage long sys_eventfd(unsigned int count);
+ asmlinkage long sys_fallocate(int fd, int mode, loff_t offset, loff_t len);
++#ifdef CONFIG_RADCLOCK
++asmlinkage long sys_get_vcounter(vcounter_t *vcounter);
++asmlinkage long sys_get_vcounter_latency(vcounter_t *vcounter, cycle_t *vcount_lat, cycle_t *tsc_lat);
++#endif
+ 
+ int kernel_execve(const char *filename, char *const argv[], char *const envp[]);
+ 
+diff --git a/kernel/time.c b/kernel/time.c
+index 6a08660..0eb1e4b 100644
+--- a/kernel/time.c
++++ b/kernel/time.c
+@@ -113,6 +113,47 @@ asmlinkage long sys_gettimeofday(struct timeval __user *tv,
+ 	return 0;
+ }
+ 
++#ifdef CONFIG_RADCLOCK
++asmlinkage long sys_get_vcounter(vcounter_t *vcounter)
++{
++	vcounter_t vcount;
++	vcount = read_vcounter();
++
++	if (copy_to_user(vcounter, &vcount, sizeof(vcounter_t)))
++		return -EFAULT;
++	return 0;
++}
++
++asmlinkage long sys_get_vcounter_latency(vcounter_t *vcounter, cycle_t *vcount_lat, cycle_t *tsc_lat)
++{
++	vcounter_t vcount;
++	cycle_t tsc1, tsc2, tsc3;
++
++	/* One for fun and warmup */
++	rdtscll(tsc1);
++	__asm __volatile("lfence" ::: "memory");
++	rdtscll(tsc1);
++	__asm __volatile("lfence" ::: "memory");
++	rdtscll(tsc2);
++	__asm __volatile("lfence" ::: "memory");
++	vcount = read_vcounter();
++	__asm __volatile("lfence" ::: "memory");
++	rdtscll(tsc3);
++	__asm __volatile("lfence" ::: "memory");
++
++	tsc1 = tsc2 - tsc1;
++	tsc2 = tsc3 - tsc2;
++
++	if (copy_to_user(vcounter, &vcount, sizeof(vcounter_t)))
++		return -EFAULT;
++	if (copy_to_user(vcount_lat, &tsc2, sizeof(cycle_t)))
++		return -EFAULT;
++	if (copy_to_user(tsc_lat, &tsc1, sizeof(cycle_t)))
++		return -EFAULT;
++	return 0;
++}
++#endif
++
+ /*
+  * Adjust the time obtained from the CMOS to be UTC time instead of
+  * local time.
+-- 
+1.6.0.4
+

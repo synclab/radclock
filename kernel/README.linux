@@ -1,0 +1,82 @@
+Patches description
+
+001-Add-a-module-to-store-synronisation-information-for-the-tsc-clock.txt
+002-Fix-possible-race-condition.txt
+003-Add-the-rw_long_long-method-for-returning-64-bit-ioctl-values.txt
+004-Add-TSC-ioctl-definitions.txt
+005-Add-TSC-build-config.txt
+006-Add-skbuff-tsc-parameters.txt
+007-Add-sysctl-and-sock-variables.txt
+008-Raw-tsc-ioctl-implimentation.txt
+009-Add-header-file.txt
+0010-Make-tsc-timestamps-on-incoming-and-outgoing-packets.txt
+0011-Make-tsc-stamps-readable-by-userspace.txt
+
+
+
+
+
+
+
+
+
+
+------------------------------------------------------------------------
+Preventing the overflow the tsc field (and the annoying error messages that go
+with it!)
+
+There is pesdueo code in driver/time/tscdata.c for doing this.
+
+Basically the idea is to invent a tsc field that  is greater than the
+tsc_stamp in fixed point data, but less than the max stamp. use this to
+calculate a new ca field. and continue until ca and the stamp are great enough
+to handle the requested tsc.
+
+
+Adding extra data to global data
+
+All data is currently one netlink attribute.
+In order to maintain backwards compatibility (if desired) then adding any
+extra data as a new attribute, would make backwards compatibility a lot
+easier, as the old user space still gets the same structure, new user space
+with an old kernel will just miss the new attributes and new both gets what it
+wants.
+
+
+Ideas for moving timestamping spot:
+using a cookie like structure, where the skb gets stamped with a cookie before
+its sent, and the packet goes over the packet socket with the cookie. Post
+sent the nic driver registers with the OS when the packet was sent and the
+cookie, the userspace can then poll on the cookie.
+
+
+A detail: giving the kernel modes for the clock (FAIRCOMPARE ...) the same name in Linux and BSD
+
+
+
+------------------------------------------------------------------------
+The modes are implemented as an IOCTL on the packet socket, valid modes
+are:
+
+TSC_MODE_NORMAL - Normal time stamps are available using either
+ancillary data, or the SIOGSTAMP ioctl, but in addition there is the
+ioctl SIOCTSCXMITTIME time, that returns a u64 of the TSC value in
+host byte order.
+
+TSC_MODE_TSC - Not implemented. Functionality would replace the normal
+software timestamp with a value calculated using the TSC stamp and the
+global clock data to get an absolute time. SIOCTSCXMITTIME would also
+be available
+
+TSC_MODE_COMPARE - Both stamps are available, and are done back to
+back, but they are not done in the usual place, and are instead done
+when the packet is queued to the packet socket.
+
+Global data is accessed using a generic netlink socket using a request
+reply format. The data makes use of the generic netlink name of
+"tscdata".  All data is currently made available via a request for the
+single global data structure named TSCDATA_ATTR_GLOBALDATA. It accepts
+TSCDATA_CMD_GETATTR and TSCDATA_CMD_SETATTR commands for the data that
+get and set respectively.
+
+
