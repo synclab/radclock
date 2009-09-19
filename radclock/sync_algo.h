@@ -59,10 +59,8 @@
 
 				 
 /* 
- * Internal alog parameters and default values
+ * Internal algo parameters and default values
  */
-
-#define MIN_NTP_POLL_PERIOD 	1	// 1  NTP pkt every NTP_POLL_PERIOD [sec]
 
 
 

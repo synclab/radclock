@@ -19,6 +19,7 @@
 
 
 #include <pthread.h>
+#include <sched.h>
 #include <signal.h>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -214,8 +215,13 @@ void* thread_fixedpoint(void *c_handle)
 int start_thread_IPC_SERV(struct radclock *clock_handle) 
 {
 	int err;
+	pthread_attr_t thread_attr;
+	pthread_attr_init(&thread_attr);
+	pthread_attr_setdetachstate(&thread_attr, PTHREAD_CREATE_JOINABLE);
+
 	verbose(LOG_NOTICE, "Starting IPC thread");
-	err = pthread_create(&(clock_handle->threads[PTH_IPC_SERV]), &(clock_handle->thread_attr), thread_ipc_server, (void *)(clock_handle));
+	err = pthread_create(&(clock_handle->threads[PTH_IPC_SERV]), &thread_attr, 
+			thread_ipc_server, (void *)(clock_handle));
 	if (err) 
 		verbose(LOG_ERR, "pthread_create() returned error number %d", err);
 	 return err;
@@ -225,8 +231,13 @@ int start_thread_IPC_SERV(struct radclock *clock_handle)
 int start_thread_NTP_SERV(struct radclock *clock_handle) 
 {
 	int err;
+	pthread_attr_t thread_attr;
+	pthread_attr_init(&thread_attr);
+	pthread_attr_setdetachstate(&thread_attr, PTHREAD_CREATE_JOINABLE);
+
 	verbose(LOG_NOTICE, "Starting NTP server thread");
-	err = pthread_create(&(clock_handle->threads[PTH_NTP_SERV]), &(clock_handle->thread_attr), thread_ntp_server, (void *)(clock_handle));
+	err = pthread_create(&(clock_handle->threads[PTH_NTP_SERV]), &thread_attr, 
+			thread_ntp_server, (void *)(clock_handle));
 	if (err) 
 		verbose(LOG_ERR, "pthread_create() returned error number %d", err);
 	 return err;
@@ -236,8 +247,13 @@ int start_thread_NTP_SERV(struct radclock *clock_handle)
 int start_thread_DATA_PROC(struct radclock *clock_handle) 
 {
 	int err;
+	pthread_attr_t thread_attr;
+	pthread_attr_init(&thread_attr);
+	pthread_attr_setdetachstate(&thread_attr, PTHREAD_CREATE_JOINABLE);
+
 	verbose(LOG_NOTICE, "Starting data processing thread");
-	err = pthread_create(&(clock_handle->threads[PTH_DATA_PROC]), &(clock_handle->thread_attr), thread_data_processing, (void *)(clock_handle));
+	err = pthread_create(&(clock_handle->threads[PTH_DATA_PROC]), &thread_attr,
+			thread_data_processing, (void *)(clock_handle));
 	if (err) 
 		verbose(LOG_ERR, "pthread_create() returned error number %d", err);
 	 return err;
@@ -247,19 +263,40 @@ int start_thread_DATA_PROC(struct radclock *clock_handle)
 int start_thread_TRIGGER(struct radclock *clock_handle) 
 {
 	int err;
+	pthread_attr_t thread_attr;
+	pthread_attr_init(&thread_attr);
+	pthread_attr_setdetachstate(&thread_attr, PTHREAD_CREATE_JOINABLE);
+	struct sched_param sched;
+
+	/* Increase the priority of that particular thread to improve the accuracy
+	 * of the packet sender
+	 */
+	err = pthread_attr_getschedparam (&thread_attr, &sched);
+	sched.sched_priority = sched_get_priority_max(SCHED_FIFO);
+	err = pthread_attr_setschedparam (&thread_attr, &sched);
+	
+	pthread_attr_setschedpolicy(&thread_attr, SCHED_FIFO);
+
 	verbose(LOG_NOTICE, "Starting trigger thread");
-	err = pthread_create(&(clock_handle->threads[PTH_TRIGGER]), &(clock_handle->thread_attr), thread_trigger, (void *)(clock_handle));
+	err = pthread_create(&(clock_handle->threads[PTH_TRIGGER]), &thread_attr, 
+			thread_trigger, (void *)(clock_handle));
 	if (err) 
 		verbose(LOG_ERR, "pthread_create() returned error number %d", err);
-	 return err;
+	
+	return err;
 }
 
 
 int start_thread_FIXEDPOINT(struct radclock *clock_handle) 
 {
 	int err;
+	pthread_attr_t thread_attr;
+	pthread_attr_init(&thread_attr);
+	pthread_attr_setdetachstate(&thread_attr, PTHREAD_CREATE_JOINABLE);
+
 	verbose(LOG_NOTICE, "Starting fixedpoint thread");
-	err = pthread_create(&(clock_handle->threads[PTH_FIXEDPOINT]), &(clock_handle->thread_attr), thread_fixedpoint, (void *)(clock_handle));
+	err = pthread_create(&(clock_handle->threads[PTH_FIXEDPOINT]), &thread_attr, 
+			thread_fixedpoint, (void *)(clock_handle));
 	if (err) 
 		verbose(LOG_ERR, "pthread_create() returned error number %d", err);
 	 return err;

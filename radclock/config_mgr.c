@@ -681,8 +681,9 @@ switch (codekey) {
 		// Indicate changed value
 		if ( conf->poll_period != ival )
 			SET_UPDATE(*mask, UPDMASK_POLLPERIOD);
-		if ((ival<1) || (ival>1024)) {	
-			verbose(LOG_WARNING, "Poll period value out of range (%d). Fall back to default.", ival);
+		if ((ival<RAD_MINPOLL) || (ival>RAD_MAXPOLL)) {	
+			verbose(LOG_WARNING, "Poll period value out of [%d,%d] range (%d). Fall back to default.",
+				   	ival, RAD_MINPOLL, RAD_MAXPOLL);
 			conf->poll_period = DEFAULT_NTP_POLL_PERIOD;
 		}
 		else {

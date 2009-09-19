@@ -30,6 +30,7 @@
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <signal.h>
+#include <sched.h>
 
 #include <syslog.h>
 #include <fcntl.h>
@@ -313,6 +314,9 @@ void signal_handler(int sig)
 /** Function that fork the process and creates the running daemon */
 int daemonize(char* lockfile, int *daemon_pid_fd) 
 {
+	/* Scheduler */
+	struct sched_param sched;
+
 	/* Process ID, Session ID, Lock file */ 
 	pid_t pid, sid;
 	char* str = (char*) malloc(20 * sizeof(char));
@@ -377,6 +381,14 @@ int daemonize(char* lockfile, int *daemon_pid_fd)
 	close(STDIN_FILENO);
 	close(STDOUT_FILENO);
 	close(STDERR_FILENO);
+
+
+	/* Boost our scheduler priority. Here I assume we have access to the 
+	 * Posix scheduling API ... and if not?
+	 */
+	sched.sched_priority = sched_get_priority_max(SCHED_FIFO);
+	if ( sched_setscheduler(0, SCHED_FIFO, &sched) == -1 )
+		verbose(LOG_ERR, "Could not set scheduler priority");
 
 	return 1;
 }
@@ -504,7 +516,20 @@ int main (int argc, char *argv[])
 				break;
 			case 'p':
 				SET_UPDATE(param_mask, UPDMASK_POLLPERIOD);
-				clock_handle->conf->poll_period = MAX(MIN_NTP_POLL_PERIOD,atoi(optarg));
+				if ( atoi(optarg) < RAD_MINPOLL )
+				{
+					clock_handle->conf->poll_period = RAD_MINPOLL;
+					fprintf(stdout, "Warning: Poll period too small, set to %d\n",
+						   	clock_handle->conf->poll_period);
+				}
+				else
+					clock_handle->conf->poll_period = MAX(RAD_MINPOLL,atoi(optarg));
+				if ( clock_handle->conf->poll_period > RAD_MAXPOLL )
+				{
+					clock_handle->conf->poll_period = RAD_MAXPOLL;
+					fprintf(stdout, "Warning: Poll period too big, set to %d\n",
+						   	clock_handle->conf->poll_period);
+				}
 				break;
 			case 'l':
 				SET_UPDATE(param_mask, UPDMASK_PLOCAL);
@@ -801,7 +826,6 @@ int main (int argc, char *argv[])
 			 */
 			verbose(LOG_NOTICE, "Send killing signal to threads. Wait for stop message.");
 			clock_handle->pthread_flag_stop = PTH_STOP_ALL;
-			pthread_attr_destroy(&(clock_handle->thread_attr));
 			if (clock_handle->conf->server_ntp == BOOL_ON) {
 				pthread_join(clock_handle->threads[PTH_NTP_SERV], &thread_status);
 				verbose(LOG_NOTICE, "NTP server thread is dead.");

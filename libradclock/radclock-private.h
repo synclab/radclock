@@ -38,6 +38,9 @@
  */
 #define OUT_SKM	1024
 
+#define	RAD_MINPOLL	1		/* min poll interval (s) */
+#define	RAD_MAXPOLL	1024	/* max poll interval (s) */
+
 
 // TODO : should provide methods for modify this? 
 typedef enum { RADCLOCK_RUN_NOTSET, RADCLOCK_RUN_KERNEL, RADCLOCK_RUN_DEAD } radclock_runmode_t;
@@ -163,7 +166,6 @@ struct radclock {
 	/* Threads */
 	pthread_t threads[8];		/* TODO: quite ugly implementation ... */
 	int	pthread_flag_stop;
-	pthread_attr_t thread_attr;
 	pthread_mutex_t globaldata_mutex;
 	int wakeup_data_ready;
 	pthread_mutex_t wakeup_mutex;

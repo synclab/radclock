@@ -88,9 +88,7 @@ struct radclock * radclock_create(void)
 	pthread_mutex_init(&(clock->globaldata_mutex), NULL);
 	pthread_mutex_init(&(clock->wakeup_mutex), NULL);
 	pthread_cond_init(&(clock->wakeup_cond), NULL);
-	pthread_attr_init(&(clock->thread_attr));
-	pthread_attr_setdetachstate(&(clock->thread_attr), PTHREAD_CREATE_JOINABLE);
-	
+
 	/* Raw data buffer */
 	clock->rdb_start 	= NULL;
 	clock->rdb_end 		= NULL;
@@ -237,12 +235,12 @@ int radclock_init(struct radclock *clock_handle)
 {
 	JDEBUG
 
-	/* Few branching to depending we are: 
-	 * - (1) a client process, 
-	 * - (2) the radclock algo serving data, 
-	 * - (3) the radclock NOT serving data
-	 */
-	int err = 0;
+		/* Few branching to depending we are: 
+		 * - (1) a client process, 
+		 * - (2) the radclock algo serving data, 
+		 * - (3) the radclock NOT serving data
+		 */
+		int err = 0;
 	if (clock_handle == NULL) {
 		logger(RADLOG_ERR, "The clock handle is NULL and can't be initialised");
 		return -1;
@@ -251,7 +249,7 @@ int radclock_init(struct radclock *clock_handle)
 	err = radclock_init_vcounter_syscall(clock_handle);
 	if ( err < 0 )
 		return -1;
-			
+
 	err = set_clock_run_mode(clock_handle);
 	if (err < 0)
 		return -1;
@@ -265,9 +263,9 @@ int radclock_init(struct radclock *clock_handle)
 				return -1;
 			break;
 
-		/* We are a radclock daemon and we are asked to serve data. Need to
-		 * init some kernel related data structure.
-		 */
+			/* We are a radclock daemon and we are asked to serve data. Need to
+			 * init some kernel related data structure.
+			 */
 		case RADCLOCK_IPC_NONE:
 		case RADCLOCK_IPC_SERVER:
 
@@ -296,13 +294,13 @@ int radclock_init(struct radclock *clock_handle)
 				default:
 					return -1;
 			}
-			
+
 			if (err < 0)
 				return -1;
 
 			break;
 
-		/* Should never go here */
+			/* Should never go here */
 		default:
 			logger(RADLOG_ERR, "Got something really wrong, unknown IPC run mode");
 			return -1;
@@ -318,7 +316,6 @@ void radclock_destroy(struct radclock *handle)
 		close(handle->ipc_socket);
 
 	/* Clear thread stuff */
-	pthread_attr_destroy(&(handle->thread_attr));
 	pthread_mutex_destroy(&(handle->globaldata_mutex));
 	pthread_mutex_destroy(&(handle->wakeup_mutex));
 	pthread_cond_destroy(&(handle->wakeup_cond));
