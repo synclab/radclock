@@ -28,7 +28,8 @@ radclock_SOURCES = sync_bidir.c fixedpoint.c create_stamp.c verbose.c config_mgr
 
 # Make sure the radclock binary is linked statically
 # Handy for not-installed runs
-radclock_LDFLAGS = -static
+radclock_LDFLAGS = -static -pthread
 
-radclock_LDADD = -lpcap -lm  @LIBRADCLOCK_LIBS@ 
+# We want librt for an accurate NTP packet sender
+radclock_LDADD = -lrt -lpcap -lm @LIBRADCLOCK_LIBS@ 
 

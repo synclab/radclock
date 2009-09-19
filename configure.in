@@ -101,13 +101,7 @@ AC_SUBST([PACKAGE_NAME])
 AC_SUBST([PACKAGE_VERSION])
 
 
-if test "$os" = unknown
-then
-dnl Mac OSX has pthread on by default. gcc don't know -pthread
-	AC_SUBST([CFLAGS], "${CFLAGS} -Wall -g")
-else
-	AC_SUBST([CFLAGS], "${CFLAGS} -Wall -g -pthread")
-fi
+AC_SUBST([CFLAGS], "${CFLAGS} -Wall -g")
 
 LIBRADCLOCK_LIBS="\$(top_builddir)/libradclock/libradclock.la"
 
