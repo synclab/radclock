@@ -397,7 +397,6 @@ int radclock_check_outdated(struct radclock* handle)
 	int err;
 	vcounter_t vcount;
 	vcounter_t valid_till;
-	vcounter_t last_changed;
 	radclock_autoupdate_t update_mode;
 
 	/* If we are the RADclock daemon, all this is useless and should actually

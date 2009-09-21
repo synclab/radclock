@@ -51,8 +51,8 @@ void init_thread_signal_mgt()
 	 * So first thing to do is to block all signals inherited from main.
 	 */
 	sigset_t block_mask;
-	sigfillset(&block_mask);
-	pthread_sigmask(SIG_BLOCK, &block_mask, NULL);
+	sigemptyset(&block_mask);
+	pthread_sigmask(SIG_SETMASK, &block_mask, NULL);
 }
 
 

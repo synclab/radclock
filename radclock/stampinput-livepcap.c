@@ -463,7 +463,6 @@ static pcap_t* open_live(struct radclock *handle, char *src_ipaddr)
 	char addr_name[16] = "";
 	char addr_if[16] = "";
 	int err = 0;
-	struct in_addr addr;
 
 	/* Retrieve required IP addresses
 	 * - useful to identify right interface to open
