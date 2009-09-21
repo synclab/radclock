@@ -298,22 +298,17 @@ int update_system_clock(struct radclock *clock_handle)
 	 * to converge faster when it is further away
 	 * Also set a the status of the sysclock when it gets very good.
 	 */
-	if (fabs(offset) > 50e-6) 
+	if (fabs(offset) > 100e-6) 
 	{
 		tx.constant = TIME_CONSTANT - 2;
 		DEL_STATUS(clock_handle, STARAD_SYSCLOCK);
 	}
 	else {
-		if (fabs(offset) > 20e-6) 
-		{
+		ADD_STATUS(clock_handle, STARAD_SYSCLOCK);
+		if (fabs(offset) > 40e-6) 
 			tx.constant = TIME_CONSTANT - 1;
-			DEL_STATUS(clock_handle, STARAD_SYSCLOCK);
-		}
 		else
-		{
 			tx.constant = TIME_CONSTANT;
-			ADD_STATUS(clock_handle, STARAD_SYSCLOCK);
-		}
 	}
 
 	err = NTP_ADJTIME(&tx);
