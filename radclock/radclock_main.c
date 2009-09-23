@@ -523,7 +523,7 @@ int main (int argc, char *argv[])
 						   	clock_handle->conf->poll_period);
 				}
 				else
-					clock_handle->conf->poll_period = MAX(RAD_MINPOLL,atoi(optarg));
+					clock_handle->conf->poll_period = atoi(optarg);
 				if ( clock_handle->conf->poll_period > RAD_MAXPOLL )
 				{
 					clock_handle->conf->poll_period = RAD_MAXPOLL;
