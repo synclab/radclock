@@ -3,6 +3,12 @@
 ## 
 
 
+- Version 0.2.2
+	* ??? 2009
+	* Use of POSIX Timers for accurate packet sender
+	* Add support for 802.11 networks
+
+
 - Version 0.2.1
 	* September 2009
 	* Fix compatibility of the RADclock server with ntpd clients

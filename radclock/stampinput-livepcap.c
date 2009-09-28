@@ -100,12 +100,13 @@ int insert_sll_header(radpcap_packet_t *packet)
 			/* Nothing to do here */
 			return 0;
 
+		/* Set the size of the ethernet header and the protocol carried by
+		 * the ethernet frame */
+		// TODO: here we suppose the ethernet frame carries IP(v4) packets
+		// TODO: but we can have several encapsulations (PPPoE, EAP,...)
+		// TODO: the offset to the IP packet should be computed accordingly
+		case DLT_IEEE802_11:
 		case DLT_EN10MB:
-			/* Set the size of the ethernet header and the protocol carried by
-			 * the ethernet frame */
-			// TODO: here we suppose the ethernet frame carries IP(v4) packets
-			// TODO: but we can have several encapsulations (PPPoE, EAP,...)
-			// TODO: the offset to the IP packet should be computed accordingly
 			proto_type   = ((struct ether_header*)packet->payload)->ether_type;
 			if (ntohs(proto_type) != ETHERTYPE_IP) {
 				verbose(LOG_ERR,"It seems we are trying to capture encapsulated packets");
