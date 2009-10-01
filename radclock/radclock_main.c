@@ -616,6 +616,12 @@ int main (int argc, char *argv[])
 	if (clock_handle->conf->verbose_level > 0)
 		SET_UPDATE(param_mask, UPDMASK_VERBOSE);
 	
+	/* Have not parsed the config file yet, so will have to do it again since it
+	 * may not be the right settings. Handles config parse messages in the right
+	 * log file though
+	 */
+	set_verbose(clock_handle->is_daemon, clock_handle->conf->verbose_level);
+	set_logger(logger_verbose_bridge);
 	
 	/* Daemonize now, so that we can open the log files and close connection to
 	 * stdin since we parsed the command line
