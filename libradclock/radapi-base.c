@@ -235,12 +235,12 @@ int radclock_init(struct radclock *clock_handle)
 {
 	JDEBUG
 
-		/* Few branching to depending we are: 
-		 * - (1) a client process, 
-		 * - (2) the radclock algo serving data, 
-		 * - (3) the radclock NOT serving data
-		 */
-		int err = 0;
+	/* Few branching to depending we are: 
+	 * - (1) a client process, 
+	 * - (2) the radclock algo serving data, 
+	 * - (3) the radclock NOT serving data
+	 */
+	int err = 0;
 	if (clock_handle == NULL) {
 		logger(RADLOG_ERR, "The clock handle is NULL and can't be initialised");
 		return -1;
@@ -314,6 +314,13 @@ void radclock_destroy(struct radclock *handle)
 	/* Close the IPC socket */
 	if (handle->ipc_socket > 0)
 		close(handle->ipc_socket);
+
+	/* Remove client socket file */
+	if ( strlen(handle->ipc_socket_path) > 0 )
+	{
+		if ( unlink(handle->ipc_socket_path) < 0 )
+			logger(RADLOG_ERR, "Cleaning IPC socket Unlink: %s", strerror(errno));
+	}
 
 	/* Clear thread stuff */
 	pthread_mutex_destroy(&(handle->globaldata_mutex));
