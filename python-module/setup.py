@@ -18,7 +18,7 @@
 
 
 from distutils.core import setup, Extension
-import os
+import os, re
 
 
 OS_LINUX 	= 'Linux'
@@ -28,17 +28,18 @@ os_uname = os.uname()
 OS = os_uname[0] 
 
 
+
 module_radclock_linux = Extension('radclock', 
 		include_dirs = ['../libradclock'],
 		libraries = ['radclock', 'nl'],
-		library_dirs = ['../libradclock'],
+		library_dirs = ['/usr/local/lib'],
 		sources = [ 'radclockmodule.c' ]
 		)
 
 module_radclock_freebsd = Extension('radclock', 
 		include_dirs = ['../libradclock'],
 		libraries = ['radclock'],
-		library_dirs = ['../libradclock'],
+		library_dirs = ['/usr/local/lib'],
 		sources = [ 'radclockmodule.c' ]
 		)
 
@@ -52,7 +53,7 @@ if OS == OS_FREEBSD:
 
 
 setup ( name = 'python-radclock',
-		version = '0.2.0',
+		version = '0.2.2',
 		description = 'This package provides python bindings to the libradclock C library.',
 		author = 'Julien Ridoux',
 		author_email = 'julien@synclab.org',

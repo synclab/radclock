@@ -26,7 +26,7 @@ import radclock
 clock = radclock.radclock()
 print 'Created a radclock instance'
 
-vcount = radclock.get_vcounter()
+vcount = clock.get_vcounter()
 print 'Read vcount = %d' %(vcount)
 
 
