@@ -634,6 +634,9 @@ int main (int argc, char *argv[])
 				return 1;
 			}
 		}
+		/* Check this everytime in case something happened */
+		chmod(RADCLOCK_RUN_DIRECTORY, 00755);
+
 		if ( !(daemonize(DAEMON_LOCK_FILE, &daemon_pid_fd)) ) {
 			fprintf(stderr, "Error: did not manage to create the daemon\n");
 			exit(EXIT_FAILURE);
