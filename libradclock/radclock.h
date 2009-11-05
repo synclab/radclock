@@ -242,12 +242,39 @@ int radclock_duration_fp(struct radclock *handle, const vcounter_t *start_vcount
 
 
 /** 
- * Get an estimate of the clock error in nanoseconds
+ * Get instantaneous estimate of the clock error bound in seconds
  * @param  handle The private handle for accessing global data 
  * @param  duration_fp A reference to the long double time value to be filled 
  * @return 0 on success, non-zero on failure
  */
-int radclock_get_clockerror(struct radclock *handle, double *clock_error);
+int radclock_get_clockerror_bound(struct radclock *handle, double *error_bound);
+
+
+/** 
+ * Get averaged estimate of the clock error bound in seconds
+ * @param  handle The private handle for accessing global data 
+ * @param  duration_fp A reference to the long double time value to be filled 
+ * @return 0 on success, non-zero on failure
+ */
+int radclock_get_clockerror_bound_avg(struct radclock *handle, double *error_bound_avg);
+
+
+/** 
+ * Get standard deviation estimate of the clock error bound in seconds
+ * @param  handle The private handle for accessing global data 
+ * @param  duration_fp A reference to the long double time value to be filled 
+ * @return 0 on success, non-zero on failure
+ */
+int radclock_get_clockerror_bound_std(struct radclock *handle, double *error_bound_std);
+
+
+/** 
+ * Get estimate of the minimum RTT to reference clock in seconds
+ * @param  handle The private handle for accessing global data 
+ * @param  duration_fp A reference to the long double time value to be filled 
+ * @return 0 on success, non-zero on failure
+ */
+int radclock_get_min_RTT(struct radclock *handle, double *min_RTT);
 
 
 /**

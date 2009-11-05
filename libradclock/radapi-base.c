@@ -45,15 +45,29 @@ struct radclock * radclock_create(void)
 		return NULL;
 
 	/* Default values for the RADclock global data */
-	GLOBAL_DATA(clock)->phat 			= 1e-9;
-	GLOBAL_DATA(clock)->phat_err 		= 0;
-	GLOBAL_DATA(clock)->phat_local 		= 1e-9;
-	GLOBAL_DATA(clock)->phat_local_err 	= 0;
-	GLOBAL_DATA(clock)->ca 				= 0;
-	GLOBAL_DATA(clock)->ca_err 			= 0;
-	GLOBAL_DATA(clock)->status 			= STARAD_UNSYNC | STARAD_WARMUP;
-	GLOBAL_DATA(clock)->last_changed 	= 0;
-	GLOBAL_DATA(clock)->valid_till 		= 0;
+	RAD_DATA(clock)->phat 			= 1e-9;
+	RAD_DATA(clock)->phat_err 		= 0;
+	RAD_DATA(clock)->phat_local 	= 1e-9;
+	RAD_DATA(clock)->phat_local_err = 0;
+	RAD_DATA(clock)->ca 			= 0;
+	RAD_DATA(clock)->ca_err 		= 0;
+	RAD_DATA(clock)->status 		= STARAD_UNSYNC | STARAD_WARMUP;
+	RAD_DATA(clock)->last_changed 	= 0;
+	RAD_DATA(clock)->valid_till 	= 0;
+
+	/* Clock error bound */
+	RAD_ERROR(clock)->error_bound 		= 0;
+	RAD_ERROR(clock)->error_bound_avg 	= 0;
+	RAD_ERROR(clock)->error_bound_std 	= 0;
+	RAD_ERROR(clock)->min_RTT 			= 0;
+	RAD_ERROR(clock)->Ebound_min_last	= 0;
+	RAD_ERROR(clock)->nerror 			= 0;
+	RAD_ERROR(clock)->cumsum 			= 0;
+	RAD_ERROR(clock)->sq_cumsum 		= 0;
+	RAD_ERROR(clock)->nerror_hwin 		= 0;
+	RAD_ERROR(clock)->cumsum_hwin 		= 0;
+	RAD_ERROR(clock)->sq_cumsum_hwin 	= 0;
+
 
 	/* Default values before calling init */
 	clock->is_daemon 			= 0;
@@ -338,10 +352,10 @@ void radclock_destroy(struct radclock *handle)
 /* Read global clock data 
  * This should be called by processes else than the radclock_algo
  */
-int radclock_read_IPCclock(struct radclock *handle)
+int radclock_read_IPCclock(struct radclock *handle, int req_type)
 {
-	int max_retries =1; /* set to the number of times to retry on EAGAIN */
-	int valid_message=0;
+	int max_retries 	= 1; /* set to the number of times to retry on EAGAIN */
+	int valid_message 	= 0;
 	int n;
 
 	/* Exchanged messages */
@@ -350,7 +364,7 @@ int radclock_read_IPCclock(struct radclock *handle)
 
 	/* Forge the request */
 	request.magic_number = IPC_MAGIC_NUMBER;
-	request.request_type = IPC_REQ_GLOBALDATA;
+	request.request_type = req_type;
 
 	/* Send request
 	 * The SOCK_DGRAM socket has been connected before, so no need to use sendto()
@@ -381,14 +395,22 @@ int radclock_read_IPCclock(struct radclock *handle)
 		}
 		else if ( n <0)
 			continue;
-		else if ( reply.reply_type != IPC_REQ_GLOBALDATA ) {
-			logger(RADLOG_ERR, "Received weird message from radclock_algo process");
-		}
 		else
 		{
 			valid_message = 1;
-			/* Update Global data */
-			*(GLOBAL_DATA(handle)) = reply.rad_data;
+			/* Update requested data */
+			switch (reply.reply_type)
+			{
+				case IPC_REQ_RAD_DATA:
+					*(RAD_DATA(handle)) = reply.rad_data;
+					break;
+				case IPC_REQ_RAD_ERROR:
+					*(RAD_ERROR(handle)) = reply.rad_error;
+					break;
+				default:
+					logger(RADLOG_ERR, "Received weird message from radclock_algo process");
+					break;
+			}
 		}
 	} while(n >0 || (errno == EAGAIN && max_retries >0));
 
@@ -419,7 +441,7 @@ int radclock_check_outdated(struct radclock* handle)
 	err = radclock_get_autoupdate(handle, &update_mode);
 	if ( err )  { return 1; }
 
-	valid_till = GLOBAL_DATA(handle)->valid_till;
+	valid_till = RAD_DATA(handle)->valid_till;
 	
 	// Check if we need to read the clock parameters from the kernel	
 	switch (update_mode) {
@@ -433,7 +455,9 @@ int radclock_check_outdated(struct radclock* handle)
 
 		case RADCLOCK_UPDATE_ALWAYS:
 			// Update the local copy of the clock
-			err = radclock_read_IPCclock(handle);
+			err = radclock_read_IPCclock(handle, IPC_REQ_RAD_DATA);
+			if ( err < 0 )  { return 1; }
+			err = radclock_read_IPCclock(handle, IPC_REQ_RAD_ERROR);
 			if ( err < 0 )  { return 1; }
 			break;
 

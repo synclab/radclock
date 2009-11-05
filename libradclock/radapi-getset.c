@@ -180,16 +180,51 @@ int radclock_get_status(struct radclock *handle, unsigned int *status)
 }
 
 
-// TODO : We may want to change this behavior that is identical to
-// radclock_get_offset_error() 
-int radclock_get_clockerror(struct radclock *handle, double *clock_error)
+int radclock_get_clockerror_bound(struct radclock *handle, double *error_bound)
 {
 	if (radclock_check_outdated(handle))  { return 1; }
-	if ( handle && GLOBAL_DATA(handle) ) {
-		*clock_error = GLOBAL_DATA(handle)->ca_err; 
+	if ( handle && RAD_ERROR(handle) ) {
+		*error_bound = RAD_ERROR(handle)->error_bound; 
 		return 0;
 	}
 	else
 		return 1;
 }
+
+
+int radclock_get_clockerror_bound_avg(struct radclock *handle, double *error_bound_avg)
+{
+	if (radclock_check_outdated(handle))  { return 1; }
+	if ( handle && RAD_ERROR(handle) ) {
+		*error_bound_avg = RAD_ERROR(handle)->error_bound_avg; 
+		return 0;
+	}
+	else
+		return 1;
+}
+
+
+int radclock_get_clockerror_bound_std(struct radclock *handle, double *error_bound_std)
+{
+	if (radclock_check_outdated(handle))  { return 1; }
+	if ( handle && RAD_ERROR(handle) ) {
+		*error_bound_std = RAD_ERROR(handle)->error_bound_std;
+		return 0;
+	}
+	else
+		return 1;
+}
+
+int radclock_get_min_RTT(struct radclock *handle, double *min_RTT)
+{
+	if (radclock_check_outdated(handle))  { return 1; }
+	if ( handle && RAD_ERROR(handle) ) {
+		*min_RTT = RAD_ERROR(handle)->min_RTT;
+		return 0;
+	}
+	else
+		return 1;
+}
+
+
 

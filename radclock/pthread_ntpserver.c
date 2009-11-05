@@ -59,7 +59,7 @@ static inline void build_timestamp_tval(
 	
 	/* Safe to use the clock handle for this test */
 	if ( (handle->local_period_mode == RADCLOCK_LOCAL_PERIOD_ON)
-		&& ((GLOBAL_DATA(handle)->status & STARAD_WARMUP) != STARAD_WARMUP) )
+		&& ((RAD_DATA(handle)->status & STARAD_WARMUP) != STARAD_WARMUP) )
 	{
 		base_time+= 
 			(long double)(vcount - rdata->last_changed) * 
@@ -228,8 +228,8 @@ void* thread_ntp_server(void *c_handle)
 		 * Loop it to ensure consistency
 		 */
 		do {
-			memcpy(&rdata, GLOBAL_DATA(clock_handle), sizeof(struct radclock_data));
-		} while ( memcmp(&rdata, GLOBAL_DATA(clock_handle), sizeof(struct radclock_data)) != 0 );
+			memcpy(&rdata, RAD_DATA(clock_handle), sizeof(struct radclock_data));
+		} while ( memcmp(&rdata, RAD_DATA(clock_handle), sizeof(struct radclock_data)) != 0 );
 
 		
 		/* NTP specification "seems" to indicate that the dispersion grows linear
@@ -242,7 +242,7 @@ void* thread_ntp_server(void *c_handle)
 		 * dispersion, I think it is safe to use the clock_handle for that value
 		 * (should be some kind of longer term value anyway)
 		 */
-		radclock_get_clockerror(clock_handle, &clockerror);
+		radclock_get_clockerror_bound_avg(clock_handle, &clockerror);
 		rootdispersion 	= SERVER_DATA(clock_handle)->rootdispersion 
 							+ clockerror + rdata.phat 
 							+ (vcount - rdata.last_changed) * rdata.phat_local * 15e-6;

@@ -569,6 +569,22 @@ int process_bidir_stamp(struct radclock *clock_handle, struct bidir_stamp *input
  static u_int32_t  poll_transition_th, adj_win;       // counter for transition period for thetahat after change in poll_period; adjusted window
  static double poll_ratio;                         // record of poll_period/old_poll made when period changes
 
+/* Error bound reporting. Error bound correspond to the last effective update of
+ * thetahat (i.e. it may not be the value computed with the current stamp).
+ * avg and std are tracked based on the size of the top window
+ * Only the ones needed to track top level window replacing values need to be
+ * static (until the window mechanism is rewritten to proper data structure to
+ * avoid statics).
+ * No need for a "_last", it is maintained outside the algo (as well as the
+ * current number)
+ */
+double Ebound;
+double Ebound_min = 0;
+double error_bound;
+double cumsum;
+double sq_cumsum;
+long nerror;
+
 
  /* Statistic string buffers */
  #define STAT_SZ 250 
@@ -942,9 +958,7 @@ RTT_hist[i%RTT_win] = RTT;
 if ( (i - st_end) == st_win )
 	st_end += 1;
 if ( (i - RTT_end) == RTT_win )
-	RTT_end += 1; 
-
-
+	RTT_end += 1;
 
 
 
@@ -977,6 +991,12 @@ if ( i == h_win/2 ) {
 	copystamp(stamp, &newstampj);
 	/* Now DelTb >= h_win/2,  become fussier */
 	Ep_qual /= 10;
+
+	/* Background error bounds reinitialisation */
+	RAD_ERROR(clock_handle)->cumsum_hwin 	= 0;
+	RAD_ERROR(clock_handle)->sq_cumsum_hwin = 0;
+	RAD_ERROR(clock_handle)->nerror_hwin 	= 0;
+
 	verbose(VERB_CONTROL, "Adjusting history window before normal processing of stamp %u. "
 			"FIRST 1/2 window reached",i);
 }
@@ -1008,6 +1028,15 @@ if ( i == history_end ) {
 	copystamp(stamp, &newstampj);
 	/* record that no pkt_i matching pkt_j at this point */
 	pkt_i = 0;
+	
+	/* Background error bounds taking over and restart all over again */
+	RAD_ERROR(clock_handle)->cumsum 		= RAD_ERROR(clock_handle)->cumsum_hwin;
+	RAD_ERROR(clock_handle)->sq_cumsum 		= RAD_ERROR(clock_handle)->sq_cumsum_hwin;
+	RAD_ERROR(clock_handle)->nerror 		= RAD_ERROR(clock_handle)->nerror_hwin;
+	RAD_ERROR(clock_handle)->cumsum_hwin 	= 0;
+	RAD_ERROR(clock_handle)->sq_cumsum_hwin = 0;
+	RAD_ERROR(clock_handle)->nerror_hwin 	= 0;
+
 
 	verbose(VERB_CONTROL, "Total number of sanity events:  phat: %u, plocal: %u, Offset: %u ",
 			phat_sanity_count, plocal_sanity_count, offset_sanity_count);
@@ -1447,17 +1476,22 @@ if ( i < Warmup_win ) {
 		ET  = phat * (double)( RTT_hist[j%RTT_win] - RTThat );
 		ET += phat * (double)( stamp->Tf - st_hist[j%st_win].Tf ) * phyparam->BestSKMrate;
 
+		/* Per point bound error is simply ET in here */
+		Ebound  = ET;
+
 		/* Record best in window, smaller the better. When i<offset_win,
 		 * bound to be zero since arg minRTT also in win 
 		 */
 		if ( j == (long)i ) {
 			minET = ET;
 			jbest = j;
+			Ebound_min = Ebound;
 		}
 		else {
 			if ( ET < minET) {
 				minET = ET;
 				jbest = j;
+				Ebound_min = Ebound;
 			}
 		}
 		/* calculate weight, is <=1
@@ -1487,6 +1521,12 @@ if ( i < Warmup_win ) {
 			thetahat_new /= wsum;
 			/* store est'd quality of new estimate */
 			minET_last = minET;
+			/* Record last good estimate of error bound.
+			 * Also need to track last time we updated theta to do proper aging of
+			 * clock error bound in warmup
+			 */
+			RAD_ERROR(clock_handle)->Ebound_min_last = Ebound_min;
+			copystamp(stamp, &lastthetastamp);
 		}
 		/* if result looks insane, give warning */
 		if ( fabs(thetahat - thetahat_new) > (Eoffset_sanity_min + Eoffset_sanity_rate * gapsize) ) {
@@ -1503,6 +1543,7 @@ if ( i < Warmup_win ) {
 
 		/* update value of thetahat, even if sanity triggered */
 		thetahat = thetahat_new;
+
 	}
 	else {
 		verbose(VERB_QUALITY, "thetahat: quality over offset window at i=%u very poor (%5.3lg [ms]), "
@@ -1605,8 +1646,14 @@ else {
 		 * timestamping on the server side (DAG, 1588) and punish good packets
 		 */
 		ET  = phat * (double) ( RTT_hist[j%RTT_win] - RTThat_hist[j%RTThat_win] );
-		ET += st_hist[j%st_win].Te - st_hist[j%st_win].Tb;
 		ET += phat * (double) ( stamp->Tf - st_hist[j%st_win].Tf ) * phyparam->BestSKMrate;
+
+		/* Per point bound error is ET without the SD penalty */
+		Ebound  = ET;
+
+		/* Add SD penalty to ET */
+		ET += st_hist[j%st_win].Te - st_hist[j%st_win].Tb;
+
 
 		/* Record best in window, smaller the better. When i<offset_win,
 		 * bound to be zero since arg minRTT also in win 
@@ -1614,11 +1661,16 @@ else {
 		if ( j == (long)i ) {
 			minET = ET;
 			jbest = j;
+			Ebound_min = Ebound;
 		}
 		else {
 			if (ET < minET) {
 				minET = ET;
 				jbest = j;
+			}
+			/* Ebound and ET are different in here */
+			if (Ebound < Ebound_min) {
+				Ebound_min = Ebound;
 			}
 		}
 		/* calculate weight, is <=1
@@ -1726,6 +1778,8 @@ else {
 		if ( ( minET < Eoffset_qual ) && ( wsum != 0 ) ) {
 			lastthetahat = i;
 			copystamp(stamp, &lastthetastamp);
+			/* Record last good estimate of error bound after sanity check */ 
+			RAD_ERROR(clock_handle)->Ebound_min_last = Ebound_min;
 		}
 		DEL_STATUS(clock_handle, STARAD_OFFSET_QUALITY);
 		DEL_STATUS(clock_handle, STARAD_OFFSET_SANITY);
@@ -1911,20 +1965,44 @@ i++;
 	 * packets with true period intervals [poll-1,poll+2] (see an histogram of 
 	 * capture if you are not convinced). Also an extra half a second to be safe.
 	 */ 
-	GLOBAL_DATA(clock_handle)->phat				= phat;
-	GLOBAL_DATA(clock_handle)->phat_err			= perr;
-	GLOBAL_DATA(clock_handle)->phat_local		= plocal;
-	GLOBAL_DATA(clock_handle)->phat_local_err	= plocalerr;
-	GLOBAL_DATA(clock_handle)->ca				= C-(long double)thetahat;
-	GLOBAL_DATA(clock_handle)->ca_err			= minET_last;
-	GLOBAL_DATA(clock_handle)->last_changed		= stamp->Tf;
-	GLOBAL_DATA(clock_handle)->valid_till		= stamp->Tf + ((poll_period -1.5) / phat);
+	RAD_DATA(clock_handle)->phat			= phat;
+	RAD_DATA(clock_handle)->phat_err		= perr;
+	RAD_DATA(clock_handle)->phat_local		= plocal;
+	RAD_DATA(clock_handle)->phat_local_err	= plocalerr;
+	RAD_DATA(clock_handle)->ca				= C-(long double)thetahat;
+	RAD_DATA(clock_handle)->ca_err			= minET_last;
+	RAD_DATA(clock_handle)->last_changed	= stamp->Tf;
+	RAD_DATA(clock_handle)->valid_till		= stamp->Tf + ((poll_period -1.5) / phat);
+
+
+	/* Clock error estimates.
+	 * Aging similar to fast recovery after gap
+	 * TODO put that in a function ...
+	 */
+	error_bound	= RAD_ERROR(clock_handle)->Ebound_min_last 
+				+ phat * (double)(stamp->Tf - lastthetastamp.Tf) * phyparam->RateErrBOUND;
+
+	RAD_ERROR(clock_handle)->cumsum_hwin 	= RAD_ERROR(clock_handle)->cumsum_hwin + error_bound;
+	RAD_ERROR(clock_handle)->sq_cumsum_hwin = RAD_ERROR(clock_handle)->sq_cumsum_hwin + ( error_bound * error_bound ) ;
+	RAD_ERROR(clock_handle)->nerror_hwin 	= RAD_ERROR(clock_handle)->nerror_hwin + 1;
+
+	cumsum 		= RAD_ERROR(clock_handle)->cumsum + error_bound;
+	sq_cumsum 	= RAD_ERROR(clock_handle)->sq_cumsum + ( error_bound * error_bound );
+	nerror 		= RAD_ERROR(clock_handle)->nerror + 1;
+
+	RAD_ERROR(clock_handle)->error_bound 		= error_bound;
+	RAD_ERROR(clock_handle)->error_bound_avg 	= cumsum / nerror;
+	RAD_ERROR(clock_handle)->error_bound_std 	= sqrt((sq_cumsum - ( cumsum*cumsum / nerror )) / (nerror - 1));
+	RAD_ERROR(clock_handle)->cumsum				= cumsum; 
+	RAD_ERROR(clock_handle)->sq_cumsum			= sq_cumsum; 
+	RAD_ERROR(clock_handle)->nerror				= nerror;
+	RAD_ERROR(clock_handle)->min_RTT			= RTThat * phat;
 
 	/* We don't want the leapsecond to create a jump in post processing of data,
 	 * so we reverse the operation performed in get_bidir_stamp. With this implementation
 	 * this will not have an impact on the matlab output file
 	 */
-	GLOBAL_DATA(clock_handle)->ca -= ((struct bidir_output*)clock_handle->algo_output)->leapsectotal;
+	RAD_DATA(clock_handle)->ca -= ((struct bidir_output*)clock_handle->algo_output)->leapsectotal;
 	
 	/* Note, retrospective recalcs not typically recorded!
 	 * Note: errTa should be -ve, errTf should be +ve 
@@ -1956,7 +2034,7 @@ i++;
 	OUTPUT(clock_handle, errTf) 		= errTf;
 	OUTPUT(clock_handle, wsum) 			= wsum;
 	OUTPUT(clock_handle, best_Tf) 		= st_hist[jbest%st_win].Tf;
-	OUTPUT(clock_handle, status) 		= GLOBAL_DATA(clock_handle)->status;
+	OUTPUT(clock_handle, status) 		= RAD_DATA(clock_handle)->status;
 
 
 	/* NTP server specific data */

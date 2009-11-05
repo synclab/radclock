@@ -144,9 +144,13 @@ void* thread_ipc_server(void *c_handle)
 		 */
 		pthread_mutex_lock(&clock_handle->globaldata_mutex);
 		switch (request.request_type) {
-			case IPC_REQ_GLOBALDATA:
-				reply.reply_type 	= IPC_REQ_GLOBALDATA;
-				reply.rad_data 		= *(GLOBAL_DATA(clock_handle)); 
+			case IPC_REQ_RAD_DATA:
+				reply.reply_type 	= IPC_REQ_RAD_DATA;
+				reply.rad_data 		= *(RAD_DATA(clock_handle)); 
+				break;
+			case IPC_REQ_RAD_ERROR:
+				reply.reply_type 	= IPC_REQ_RAD_ERROR;
+				reply.rad_error 	= *(RAD_ERROR(clock_handle)); 
 				break;
 			default:
 				verbose(LOG_WARNING, "IPC thread received unknown request from %s", sun_client.sun_path);

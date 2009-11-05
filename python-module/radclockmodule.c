@@ -167,14 +167,50 @@ pyradclock_gettimeofday_fp ( pyradclock *self )
 
 
 static PyObject *
-pyradclock_get_clockerror( pyradclock *self )
+pyradclock_get_clockerror_bound( pyradclock *self )
 {
 	int ret;
-	double clock_error;
-	ret = radclock_get_clockerror((struct radclock *) (self->radclock), &clock_error);
+	double error_bound;
+	ret = radclock_get_clockerror_bound((struct radclock *) (self->radclock), &error_bound);
 	if ( ret != 0 )
-		clock_error = -1.0;
-	return PyFloat_FromDouble(clock_error);
+		error_bound = -1.0;
+	return PyFloat_FromDouble(error_bound);
+}
+
+
+static PyObject *
+pyradclock_get_clockerror_bound_avg( pyradclock *self )
+{
+	int ret;
+	double error_bound_avg;
+	ret = radclock_get_clockerror_bound_avg((struct radclock *) (self->radclock), &error_bound_avg);
+	if ( ret != 0 )
+		error_bound_avg = -1.0;
+	return PyFloat_FromDouble(error_bound_avg);
+}
+
+
+static PyObject *
+pyradclock_get_clockerror_bound_std( pyradclock *self )
+{
+	int ret;
+	double error_bound_std;
+	ret = radclock_get_clockerror_bound_std((struct radclock *) (self->radclock), &error_bound_std);
+	if ( ret != 0 )
+		error_bound_std = -1.0;
+	return PyFloat_FromDouble(error_bound_std);
+}
+
+
+static PyObject *
+pyradclock_get_min_RTT( pyradclock *self )
+{
+	int ret;
+	double min_RTT;
+	ret = radclock_get_min_RTT((struct radclock *) (self->radclock), &min_RTT);
+	if ( ret != 0 )
+		min_RTT = -1.0;
+	return PyFloat_FromDouble(min_RTT);
 }
 
 
@@ -270,7 +306,10 @@ static PyMethodDef pyradclock_methods[] = {
 //	{ "gettimeofday_fp", pyradclock_gettimeofday_fp, METH_VARARGS, "Get the time from the RADclock." },
 	{ "get_vcounter", 		(PyCFunction) pyradclock_get_vcounter, 		METH_NOARGS, "Get the current vcounter value." },
 	{ "gettimeofday_fp", 	(PyCFunction) pyradclock_gettimeofday_fp, 	METH_NOARGS, "Get the time from the RADclock." },
-	{ "get_clockerror", 	(PyCFunction) pyradclock_get_clockerror, 	METH_NOARGS, "Get the final RADclock error." },
+	{ "get_clockerror_bound", 	(PyCFunction) pyradclock_get_clockerror_bound, 	METH_NOARGS, "Get instantaneous estimate of RADclock error." },
+	{ "get_clockerror_bound_avg", 	(PyCFunction) pyradclock_get_clockerror_bound_avg, 	METH_NOARGS, "Get average estimate of RADclock error." },
+	{ "get_clockerror_bound_std", 	(PyCFunction) pyradclock_get_clockerror_bound_std, 	METH_NOARGS, "Get standard deviation estimate of RADclock error." },
+	{ "get_min_RTT", 	(PyCFunction) pyradclock_get_min_RTT, 	METH_NOARGS, "Get estimate of minimum RTT to the reference clock." },
 	{ "get_last_stamp", 	(PyCFunction) pyradclock_get_last_stamp, 	METH_NOARGS, "Get the last stamp the RADclock was updated." },
 	{ "get_till_stamp", 	(PyCFunction) pyradclock_get_till_stamp, 	METH_NOARGS, "Get the foreseen stamp the RADclock will be updated." },
 	{ "get_period", 		(PyCFunction) pyradclock_get_period, 		METH_NOARGS, "Get the estimate of the oscillator period.." },

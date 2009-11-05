@@ -122,10 +122,34 @@ struct radclock_fixedpoint
 };
 
 
+/* TODO: split it in 2, clock errors and peer clock tracking, recompose with
+ * others for per peer algo
+ */ 
+struct radclock_error
+{
+	double error_bound;
+	double error_bound_avg;
+	double error_bound_std;
+	double min_RTT;
+	// ---------------- //
+	double Ebound_min_last;
+	long nerror;
+	double cumsum;
+	double sq_cumsum;
+	long nerror_hwin;
+	double cumsum_hwin;
+	double sq_cumsum_hwin;
+};
 
-struct radclock {
+
+
+struct radclock 
+{
 	/* Clock data, the real stuff */
 	struct radclock_data rad_data;
+
+	/* Clock error estimates */
+	struct radclock_error rad_error;
 
 	/* System specific stuff */
 	union {
@@ -189,7 +213,9 @@ struct radclock {
 
 #define CLIENT_DATA(x) (x->client_data)
 #define SERVER_DATA(x) (x->server_data)
-#define GLOBAL_DATA(x) (&(x->rad_data))
+#define RAD_DATA(x) (&(x->rad_data))
+#define GLOBAL_DATA(x) (&(x->rad_data))  // TODO: deprecate me ...
+#define RAD_ERROR(x) (&(x->rad_error))
 #define PRIV_USERDATA(x) (&(x->user_data))
 #ifdef linux
 # define PRIV_DATA(x) (&(x->linux_data))
@@ -197,9 +223,9 @@ struct radclock {
 # define PRIV_DATA(x) (&(x->bsd_data))
 #endif
 
-#define ADD_STATUS(x,y) (GLOBAL_DATA(x)->status = GLOBAL_DATA(x)->status | y ) 
-#define DEL_STATUS(x,y) (GLOBAL_DATA(x)->status = GLOBAL_DATA(x)->status & ~y ) 
-#define HAS_STATUS(x,y) ((GLOBAL_DATA(x)->status & y ) == y ) 
+#define ADD_STATUS(x,y) (RAD_DATA(x)->status = RAD_DATA(x)->status | y ) 
+#define DEL_STATUS(x,y) (RAD_DATA(x)->status = RAD_DATA(x)->status & ~y ) 
+#define HAS_STATUS(x,y) ((RAD_DATA(x)->status & y ) == y ) 
 
 
 /* IPC using datagram UNIX sockets
@@ -213,8 +239,9 @@ struct radclock {
 #define IPC_SOCKET_SERVER			( RADCLOCK_RUN_DIRECTORY "/radclock.socket" )
 #define IPC_SOCKET_CLIENT			"/tmp/radclock-client"
 
-#define IPC_MAGIC_NUMBER			31051978
-#define IPC_REQ_GLOBALDATA			1
+#define IPC_MAGIC_NUMBER		31051978
+#define IPC_REQ_RAD_DATA		1
+#define IPC_REQ_RAD_ERROR		2
 
 struct ipc_request {
 	unsigned int magic_number;
@@ -225,6 +252,7 @@ struct ipc_reply {
 	unsigned int reply_type;
 	union {
 		struct radclock_data rad_data;
+		struct radclock_error rad_error;
 	};
 };
 
