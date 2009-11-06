@@ -1977,26 +1977,31 @@ i++;
 
 	/* Clock error estimates.
 	 * Aging similar to fast recovery after gap
+	 * The first point is badly wrong due to our very first estimate of phat. So
+	 * let's not introduce this distortion that can be as large as 3 orders of magnitude
+	 * only drawback, we have no estimate on the first point ... big deal!
 	 * TODO put that in a function ...
 	 */
-	error_bound	= RAD_ERROR(clock_handle)->Ebound_min_last 
-				+ phat * (double)(stamp->Tf - lastthetastamp.Tf) * phyparam->RateErrBOUND;
+	if (i > 1) {
+		error_bound	= RAD_ERROR(clock_handle)->Ebound_min_last 
+					+ phat * (double)(stamp->Tf - lastthetastamp.Tf) * phyparam->RateErrBOUND;
 
-	RAD_ERROR(clock_handle)->cumsum_hwin 	= RAD_ERROR(clock_handle)->cumsum_hwin + error_bound;
-	RAD_ERROR(clock_handle)->sq_cumsum_hwin = RAD_ERROR(clock_handle)->sq_cumsum_hwin + ( error_bound * error_bound ) ;
-	RAD_ERROR(clock_handle)->nerror_hwin 	= RAD_ERROR(clock_handle)->nerror_hwin + 1;
+		RAD_ERROR(clock_handle)->cumsum_hwin 	= RAD_ERROR(clock_handle)->cumsum_hwin + error_bound;
+		RAD_ERROR(clock_handle)->sq_cumsum_hwin = RAD_ERROR(clock_handle)->sq_cumsum_hwin + ( error_bound * error_bound ) ;
+		RAD_ERROR(clock_handle)->nerror_hwin 	= RAD_ERROR(clock_handle)->nerror_hwin + 1;
 
-	cumsum 		= RAD_ERROR(clock_handle)->cumsum + error_bound;
-	sq_cumsum 	= RAD_ERROR(clock_handle)->sq_cumsum + ( error_bound * error_bound );
-	nerror 		= RAD_ERROR(clock_handle)->nerror + 1;
+		cumsum 		= RAD_ERROR(clock_handle)->cumsum + error_bound;
+		sq_cumsum 	= RAD_ERROR(clock_handle)->sq_cumsum + ( error_bound * error_bound );
+		nerror 		= RAD_ERROR(clock_handle)->nerror + 1;
 
-	RAD_ERROR(clock_handle)->error_bound 		= error_bound;
-	RAD_ERROR(clock_handle)->error_bound_avg 	= cumsum / nerror;
-	RAD_ERROR(clock_handle)->error_bound_std 	= sqrt((sq_cumsum - ( cumsum*cumsum / nerror )) / (nerror - 1));
-	RAD_ERROR(clock_handle)->cumsum				= cumsum; 
-	RAD_ERROR(clock_handle)->sq_cumsum			= sq_cumsum; 
-	RAD_ERROR(clock_handle)->nerror				= nerror;
-	RAD_ERROR(clock_handle)->min_RTT			= RTThat * phat;
+		RAD_ERROR(clock_handle)->error_bound 		= error_bound;
+		RAD_ERROR(clock_handle)->error_bound_avg 	= cumsum / nerror;
+		RAD_ERROR(clock_handle)->error_bound_std 	= sqrt((sq_cumsum - ( cumsum*cumsum / nerror )) / (nerror - 1));
+		RAD_ERROR(clock_handle)->cumsum				= cumsum; 
+		RAD_ERROR(clock_handle)->sq_cumsum			= sq_cumsum; 
+		RAD_ERROR(clock_handle)->nerror				= nerror;
+		RAD_ERROR(clock_handle)->min_RTT			= RTThat * phat;
+	}
 
 	/* We don't want the leapsecond to create a jump in post processing of data,
 	 * so we reverse the operation performed in get_bidir_stamp. With this implementation
