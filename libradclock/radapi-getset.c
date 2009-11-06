@@ -43,7 +43,7 @@ int radclock_set_autoupdate(struct radclock *handle, radclock_autoupdate_t *upda
 			return 1;
 	}
 
-	if ( handle && GLOBAL_DATA(handle)) {
+	if ( handle && RAD_DATA(handle)) {
 		handle->autoupdate_mode = *update_mode; 
 		return 0;
 	}
@@ -54,7 +54,7 @@ int radclock_set_autoupdate(struct radclock *handle, radclock_autoupdate_t *upda
 
 int radclock_get_autoupdate(struct radclock *handle, radclock_autoupdate_t *update_mode)
 {
-	if ( handle && GLOBAL_DATA(handle)) {
+	if ( handle && RAD_DATA(handle)) {
 		*update_mode = handle->autoupdate_mode; 
 		return 0;
 	}
@@ -74,7 +74,7 @@ int radclock_set_local_period_mode(struct radclock *handle, radclock_local_perio
 			return 1;
 	}
 
-	if ( handle && GLOBAL_DATA(handle)) {
+	if ( handle && RAD_DATA(handle)) {
 		handle->local_period_mode = *local_period_mode;
 		return 0;
 	}
@@ -85,7 +85,7 @@ int radclock_set_local_period_mode(struct radclock *handle, radclock_local_perio
 
 int radclock_get_local_period_mode(struct radclock *handle, radclock_local_period_t *local_period_mode)
 {
-	if ( handle && GLOBAL_DATA(handle)) {
+	if ( handle && RAD_DATA(handle)) {
 		*local_period_mode = handle->local_period_mode; 
 		return 0;
 	}
@@ -99,8 +99,8 @@ int radclock_get_local_period_mode(struct radclock *handle, radclock_local_perio
 int radclock_get_last_stamp(struct radclock *handle, vcounter_t *last_vcount)
 {
 	if (radclock_check_outdated(handle))  { return 1; }
-	if ( handle && GLOBAL_DATA(handle)) {
-		*last_vcount = GLOBAL_DATA(handle)->last_changed; 
+	if ( handle && RAD_DATA(handle)) {
+		*last_vcount = RAD_DATA(handle)->last_changed; 
 		return 0;
 	}
 	else
@@ -111,8 +111,8 @@ int radclock_get_last_stamp(struct radclock *handle, vcounter_t *last_vcount)
 int radclock_get_till_stamp(struct radclock *handle, vcounter_t *till_vcount)
 {
 	if (radclock_check_outdated(handle))  { return 1; }
-	if ( handle && GLOBAL_DATA(handle)) {
-		*till_vcount = GLOBAL_DATA(handle)->valid_till; 
+	if ( handle && RAD_DATA(handle)) {
+		*till_vcount = RAD_DATA(handle)->valid_till; 
 		return 0;
 	}
 	else
@@ -123,8 +123,8 @@ int radclock_get_till_stamp(struct radclock *handle, vcounter_t *till_vcount)
 int radclock_get_period(struct radclock *handle, double *period)
 {
 	if (radclock_check_outdated(handle))  { return 1; }
-	if ( handle && GLOBAL_DATA(handle) ) {
-		*period = GLOBAL_DATA(handle)->phat; 
+	if ( handle && RAD_DATA(handle) ) {
+		*period = RAD_DATA(handle)->phat; 
 		return 0;
 	}
 	else
@@ -135,8 +135,8 @@ int radclock_get_period(struct radclock *handle, double *period)
 int radclock_get_offset(struct radclock *handle, long double *offset)
 {
 	if (radclock_check_outdated(handle))  { return 1; }
-	if ( handle && GLOBAL_DATA(handle) ) {
-		*offset = GLOBAL_DATA(handle)->ca;
+	if ( handle && RAD_DATA(handle) ) {
+		*offset = RAD_DATA(handle)->ca;
 		return 0; 
 	}
 	else
@@ -147,8 +147,8 @@ int radclock_get_offset(struct radclock *handle, long double *offset)
 int radclock_get_period_error(struct radclock *handle, double *err_period)
 {
 	if (radclock_check_outdated(handle))  { return 1; }
-	if ( handle && GLOBAL_DATA(handle) ) {
-		*err_period = GLOBAL_DATA(handle)->phat_err; 
+	if ( handle && RAD_DATA(handle) ) {
+		*err_period = RAD_DATA(handle)->phat_err; 
 		return 0;
 	}
 	else
@@ -159,8 +159,8 @@ int radclock_get_period_error(struct radclock *handle, double *err_period)
 int radclock_get_offset_error(struct radclock *handle, double *err_offset)
 {
 	if (radclock_check_outdated(handle))  { return 1; }
-	if ( handle && GLOBAL_DATA(handle) ) {
-		*err_offset = GLOBAL_DATA(handle)->ca_err;
+	if ( handle && RAD_DATA(handle) ) {
+		*err_offset = RAD_DATA(handle)->ca_err;
 		return 0; 
 	}
 	else
@@ -171,8 +171,8 @@ int radclock_get_offset_error(struct radclock *handle, double *err_offset)
 int radclock_get_status(struct radclock *handle, unsigned int *status)
 {
 	if (radclock_check_outdated(handle))  { return 1; }
-	if ( handle && GLOBAL_DATA(handle) ) {
-		*status = GLOBAL_DATA(handle)->status;
+	if ( handle && RAD_DATA(handle) ) {
+		*status = RAD_DATA(handle)->status;
 		return 0; 
 	}
 	else

@@ -1961,9 +1961,6 @@ i++;
 	 */
 	pthread_mutex_lock(&clock_handle->globaldata_mutex);
 	/* Update clock variable for returning.
-	 * The valid_till field has to take into account the fact that ntpd sends
-	 * packets with true period intervals [poll-1,poll+2] (see an histogram of 
-	 * capture if you are not convinced). Also an extra half a second to be safe.
 	 */ 
 	RAD_DATA(clock_handle)->phat			= phat;
 	RAD_DATA(clock_handle)->phat_err		= perr;
@@ -1972,7 +1969,15 @@ i++;
 	RAD_DATA(clock_handle)->ca				= C-(long double)thetahat;
 	RAD_DATA(clock_handle)->ca_err			= minET_last;
 	RAD_DATA(clock_handle)->last_changed	= stamp->Tf;
-	RAD_DATA(clock_handle)->valid_till		= stamp->Tf + ((poll_period -1.5) / phat);
+	
+	/* The valid_till field has to take into account the fact that ntpd sends
+	 * packets with true period intervals [poll-1,poll+2] (see an histogram of 
+	 * capture if you are not convinced). Also an extra half a second to be safe.
+	 * Also, for very slow counters (e.g. ACPI), the first phat estimate can 
+	 * send this value far in the future. Wait for i > 1
+	 */
+	if ( i > 1 ) 
+		RAD_DATA(clock_handle)->valid_till	= stamp->Tf + ((poll_period -1.5) / phat);
 
 
 	/* Clock error estimates.
