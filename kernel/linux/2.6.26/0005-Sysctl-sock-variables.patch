@@ -1,6 +1,6 @@
-From f072eb7fea1c66712ba7c06b0a8ac06970ef7d5e Mon Sep 17 00:00:00 2001
+From 81e7668cac485ef8038867fe540d9fa2ab4e9070 Mon Sep 17 00:00:00 2001
 From: Julien Ridoux <julien@synclab.org>
-Date: Tue, 30 Jun 2009 22:35:58 +1000
+Date: Thu, 12 Nov 2009 16:43:52 +1100
 Subject: [PATCH RADclock 5/9] Sysctl sock variables
 
 Add the sysctl support for the default timestamping mode of captured

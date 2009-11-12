@@ -1,6 +1,6 @@
-From ef1e6dbe91ff25fed1bb15a4bc967b1019c40ec5 Mon Sep 17 00:00:00 2001
+From 67a2ffbbcfdfae35664355429d50ce97891096a3 Mon Sep 17 00:00:00 2001
 From: Julien Ridoux <julien@synclab.org>
-Date: Thu, 28 May 2009 12:31:31 +1000
+Date: Thu, 12 Nov 2009 15:31:11 +1100
 Subject: [PATCH RADclock 3/9] RADclock ioctl definitions
 
 Add ioctl definitions for the RADclock using a socket open with libpcap
@@ -86,5 +86,5 @@ index abef759..1ef72c4 100644
  		    /*  0x8950 - 0x8952  * obsolete calls, don't re-use */
  #define SIOCDARP	0x8953		/* delete ARP table entry	*/
 -- 
-1.5.6.3
+1.6.0.4
 

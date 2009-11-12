@@ -1,6 +1,6 @@
-From fbcfa6ad3809a1819616fe0a2518f58cc2a417b5 Mon Sep 17 00:00:00 2001
+From 1ce57c4e22953c4dd3f284dd906c28d7d9a1a1a8 Mon Sep 17 00:00:00 2001
 From: Julien Ridoux <julien@synclab.org>
-Date: Tue, 26 May 2009 17:58:13 +1000
+Date: Thu, 12 Nov 2009 16:07:18 +1100
 Subject: [PATCH RADclock 1/9] Module RADclock driver
 
 Add a module to store synronization information for the RADclock.
@@ -78,7 +78,7 @@ index 0000000..792a31c
 +obj-$(CONFIG_RADCLOCK) += radclock.o
 diff --git a/drivers/radclock/radclock.c b/drivers/radclock/radclock.c
 new file mode 100644
-index 0000000..ec7cbf9
+index 0000000..30ccaf8
 --- /dev/null
 +++ b/drivers/radclock/radclock.c
 @@ -0,0 +1,253 @@
@@ -414,5 +414,5 @@ index 0000000..09299ab
 +
 +#endif
 -- 
-1.5.6.3
+1.6.0.4
 

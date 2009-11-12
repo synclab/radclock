@@ -1,6 +1,6 @@
-From c69a36bc4b8ae1f550277825f1f5fe6839a83a56 Mon Sep 17 00:00:00 2001
+From c5c5412b7fcf3d82beb551050825b02111943fe1 Mon Sep 17 00:00:00 2001
 From: Julien Ridoux <julien@synclab.org>
-Date: Thu, 28 May 2009 13:10:57 +1000
+Date: Thu, 12 Nov 2009 15:31:57 +1100
 Subject: [PATCH RADclock 4/9] Skbuff vcounter support
 
 Add support for creating raw vcounter timestamps on captured packets
@@ -63,5 +63,5 @@ index ca1ccdf..7fcc156 100644
  	new->transport_header	= old->transport_header;
  	new->network_header	= old->network_header;
 -- 
-1.5.6.3
+1.6.0.4
 

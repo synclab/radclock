@@ -1,6 +1,6 @@
-From b59407194a3c7916f4b2e3679af413cf9011be2a Mon Sep 17 00:00:00 2001
+From 540d55cb027dc8526b384a8c6f5a55a2c3373e77 Mon Sep 17 00:00:00 2001
 From: Julien Ridoux <julien@synclab.org>
-Date: Thu, 2 Jul 2009 14:49:27 +1000
+Date: Thu, 12 Nov 2009 14:39:41 +1100
 Subject: [PATCH RADclock 1/9] Module RADclock driver
 
 Add a module to store synronization information for the RADclock.

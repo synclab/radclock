@@ -1,6 +1,6 @@
-From 8a75248422b4baa14dfbb3894a7d8b7f81bfbbac Mon Sep 17 00:00:00 2001
+From a7e6ff636e59a0b38185bc4ddab1ab752a157a02 Mon Sep 17 00:00:00 2001
 From: Julien Ridoux <julien@synclab.org>
-Date: Thu, 28 May 2009 13:57:36 +1000
+Date: Thu, 12 Nov 2009 15:32:40 +1100
 Subject: [PATCH RADclock 5/9] Sysctl sock variables
 
 Add the sysctl support for the default timestamping mode of captured
@@ -176,5 +176,5 @@ index 8a3ac1f..bbd335c 100644
  			err = sock_get_timestamp(sk, (struct timeval __user *)arg);
  			break;
 -- 
-1.5.6.3
+1.6.0.4
 

@@ -1,6 +1,6 @@
-From 3b48afbad63528f6a44cf34e2894bea1c4297525 Mon Sep 17 00:00:00 2001
+From c63a9d9509c7084fd800824e7893a89bc3885fe4 Mon Sep 17 00:00:00 2001
 From: Julien Ridoux <julien@synclab.org>
-Date: Tue, 30 Jun 2009 22:47:53 +1000
+Date: Thu, 12 Nov 2009 17:04:49 +1100
 Subject: [PATCH RADclock 7/9] RADclock packets timestamps
 
 Create raw vcounter and fair timeval timestamps on incoming and outgoing

@@ -1,6 +1,6 @@
-From d8b8531656b7b9f7391b03fbd69bcd3d7f545096 Mon Sep 17 00:00:00 2001
+From f0a96914a53bbf7d7b8729f3a648b90a454c095c Mon Sep 17 00:00:00 2001
 From: Julien Ridoux <julien@synclab.org>
-Date: Thu, 28 May 2009 14:07:07 +1000
+Date: Thu, 12 Nov 2009 15:46:18 +1100
 Subject: [PATCH RADclock 8/9] Syscall get_vcounter get_vcounter_latency
 
 Add get_vcounter() and get_vcounter_latency syscalls to access the
@@ -136,5 +136,5 @@ index 4ed46e3..5a1b0eb 100644
   * Adjust the time obtained from the CMOS to be UTC time instead of
   * local time.
 -- 
-1.5.6.3
+1.6.0.4
 

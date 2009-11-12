@@ -1,6 +1,6 @@
-From bbb25d83c8e6c562720c33486dca4c451a68d20e Mon Sep 17 00:00:00 2001
+From 51ee8d84d14332010239f7b24d3d2876bf7cb0a7 Mon Sep 17 00:00:00 2001
 From: Julien Ridoux <julien@synclab.org>
-Date: Thu, 28 May 2009 14:10:30 +1000
+Date: Thu, 12 Nov 2009 15:47:02 +1100
 Subject: [PATCH RADclock 9/9] VDSO get_vcounter
 
 Support for VDSO get_vcounter() for accessing the raw cumulative
@@ -129,5 +129,5 @@ index 3301f09..8fce630 100644
  	struct timespec wall_to_monotonic;
  };
 -- 
-1.5.6.3
+1.6.0.4
 

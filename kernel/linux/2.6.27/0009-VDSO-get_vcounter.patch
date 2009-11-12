@@ -1,6 +1,6 @@
-From 9e1b0626e8221614116ca0d2458e839aea1ebcc2 Mon Sep 17 00:00:00 2001
+From 454fcb8b8da6696a5e840a5eb923595779183e0f Mon Sep 17 00:00:00 2001
 From: Julien Ridoux <julien@synclab.org>
-Date: Tue, 26 May 2009 18:33:11 +1000
+Date: Thu, 12 Nov 2009 16:16:22 +1100
 Subject: [PATCH RADclock 9/9] VDSO get_vcounter
 
 Support for VDSO get_vcounter() for accessing the raw cumulative
@@ -28,7 +28,7 @@ index 0b8b669..a657645 100644
  }
  
 diff --git a/arch/x86/vdso/vclock_gettime.c b/arch/x86/vdso/vclock_gettime.c
-index 1ef0f90..e68c315 100644
+index 1ef0f90..8017643 100644
 --- a/arch/x86/vdso/vclock_gettime.c
 +++ b/arch/x86/vdso/vclock_gettime.c
 @@ -119,3 +119,81 @@ notrace int __vdso_gettimeofday(struct timeval *tv, struct timezone *tz)
@@ -129,5 +129,5 @@ index 3301f09..8fce630 100644
  	struct timespec wall_to_monotonic;
  };
 -- 
-1.5.6.3
+1.6.0.4
 

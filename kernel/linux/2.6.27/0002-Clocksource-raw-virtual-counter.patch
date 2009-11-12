@@ -1,6 +1,6 @@
-From ec3419ae981fc670e7920ebb22f4b10d2fda7bfb Mon Sep 17 00:00:00 2001
+From 6b62356f455c561595171f6aa20e880f713653b3 Mon Sep 17 00:00:00 2001
 From: Julien Ridoux <julien@synclab.org>
-Date: Tue, 26 May 2009 18:01:22 +1000
+Date: Thu, 12 Nov 2009 16:07:55 +1100
 Subject: [PATCH RADclock 2/9] Clocksource raw virtual counter
 
 Implement a vcounter_t cumulative counter to track consistent increment
@@ -40,7 +40,7 @@ index 2cf8b16..3869554 100644
 +
  #endif /* _LINUX_CLOCKSOURCE_H */
 diff --git a/kernel/time/timekeeping.c b/kernel/time/timekeeping.c
-index e91c29f..3531fec 100644
+index e91c29f..b7370cb 100644
 --- a/kernel/time/timekeeping.c
 +++ b/kernel/time/timekeeping.c
 @@ -56,6 +56,43 @@ void update_xtime_cache(u64 nsec)
@@ -137,5 +137,5 @@ index e91c29f..3531fec 100644
  
  	/* normally this loop will run just once, however in the
 -- 
-1.5.6.3
+1.6.0.4
 

@@ -1,6 +1,6 @@
-From ff3eaafdea51f12c6a880b179ff3df54d90cb98c Mon Sep 17 00:00:00 2001
+From babb857710b9f692b6bae9187ff4e373dd89d663 Mon Sep 17 00:00:00 2001
 From: Julien Ridoux <julien@synclab.org>
-Date: Tue, 30 Jun 2009 20:57:31 +1000
+Date: Thu, 12 Nov 2009 16:42:40 +1100
 Subject: [PATCH RADclock 3/9] RADclock ioctl definitions
 
 Add ioctl definitions for the RADclock using a socket open with libpcap

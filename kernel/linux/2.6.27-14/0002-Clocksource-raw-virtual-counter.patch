@@ -1,6 +1,6 @@
-From eda56b94706d13e90445370a8f87eb1d16ebca22 Mon Sep 17 00:00:00 2001
+From 3e23842921cf78bae087c5efe22b86a2784bf3ec Mon Sep 17 00:00:00 2001
 From: Julien Ridoux <julien@synclab.org>
-Date: Thu, 28 May 2009 11:54:36 +1000
+Date: Thu, 12 Nov 2009 15:30:14 +1100
 Subject: [PATCH RADclock 2/9] Clocksource raw virtual counter
 
 Implement a vcounter_t cumulative counter to track consistent increment
@@ -136,5 +136,5 @@ index 521960b..343e500 100644
  
  	/* normally this loop will run just once, however in the
 -- 
-1.5.6.3
+1.6.0.4
 

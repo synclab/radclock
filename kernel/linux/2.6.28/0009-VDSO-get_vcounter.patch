@@ -1,6 +1,6 @@
-From ab4a0725874d817a2245b8ee05c0b17abdf6e9d7 Mon Sep 17 00:00:00 2001
+From 060d2c5bae01a7501db2fc99ff69e1bc9ab98db0 Mon Sep 17 00:00:00 2001
 From: Julien Ridoux <julien@synclab.org>
-Date: Thu, 2 Jul 2009 16:45:50 +1000
+Date: Thu, 12 Nov 2009 15:15:23 +1100
 Subject: [PATCH RADclock 9/9] VDSO get_vcounter
 
 Support for VDSO get_vcounter() for accessing the raw cumulative
@@ -13,7 +13,7 @@ Changes to libc will be required to take advantage of it.
  3 files changed, 86 insertions(+), 0 deletions(-)
 
 diff --git a/arch/x86/include/asm/vgtod.h b/arch/x86/include/asm/vgtod.h
-index dc27a69..5c230ed 100644
+index dc27a69..685f7a9 100644
 --- a/arch/x86/include/asm/vgtod.h
 +++ b/arch/x86/include/asm/vgtod.h
 @@ -19,6 +19,10 @@ struct vsyscall_gtod_data {
@@ -23,7 +23,7 @@ index dc27a69..5c230ed 100644
 +#ifdef CONFIG_RADCLOCK
 +		vcounter_t vcounter_record;
 +		vcounter_t vcounter_source_record;
-+#endif 
++#endif
  	} clock;
  	struct timespec wall_to_monotonic;
  };
