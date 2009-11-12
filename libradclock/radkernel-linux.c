@@ -44,6 +44,9 @@
 #include <linux/rtnetlink.h>
 #include <linux/netlink.h>
 
+/* Check for kernel memory mapped capability */
+#include <linux/if_packet.h>
+
 #include <netlink/netlink.h>
 #include <netlink/attr.h>
 #include <netlink/utils.h>
@@ -90,10 +93,10 @@
  *  already supports ancilary data for the sw stamp, or patching pcap to use
  *  it
  *  - This would avoid 2 syscalls (one of sw stamp, one for vcount stamp)
+ *  - UPDATE: new packet MMAP support should solve all of this
  *  
  *  Concider moving the mode to a sockopt
- *  - This would just be cleaner and the right thing to do, no performance
- *  benifet
+ *  - This would just be cleaner and the right thing to do, no performance benifet
  */
 
 
@@ -558,15 +561,32 @@ int descriptor_get_tsmode(pcap_t *p_handle, int *kmode)
 	return 0;
 }
 
+/* We need to be sure that both the kernel AND libpcap support PACKET_MMAP
+ * Otherwise, use 'old' ioctl call to retrieve vcount.
+ * Try to make this as quick as possible
+ */
+#if defined(TPACKET_HDRLEN) && defined (HAVE_PCAP_ACTIVATE) 
 
-/* This should be as quick as possible */
 inline int extract_vcount_stamp(
 			pcap_t *p_handle, 
 			const struct pcap_pkthdr *header, 
 			const unsigned char *packet,
 			vcounter_t *vcount)
 {
-	/* Data structures that contain extracted vcount and timstamp */
+	char * bp;
+	bp = (char*)packet - sizeof(vcounter_t);
+	memcpy(vcount, bp, sizeof(vcounter_t)); 
+	return 0;
+}
+
+#else
+
+inline int extract_vcount_stamp(
+			pcap_t *p_handle, 
+			const struct pcap_pkthdr *header, 
+			const unsigned char *packet,
+			vcounter_t *vcount)
+{
 	if (ioctl(pcap_fileno(p_handle), SIOCGRADCLOCKSTAMP, vcount))
 	{
 		perror("ioctl");
@@ -575,6 +595,8 @@ inline int extract_vcount_stamp(
 	}
 	return 0;
 }
+
+#endif
 
 
 inline int set_kernel_fixedpoint(struct radclock *handle, struct radclock_fixedpoint *fpdata)

@@ -4,9 +4,11 @@
 
 
 - Version 0.2.2
-	* ??? 2009
+	* November 2009
 	* Use of POSIX Timers for accurate packet sender
 	* Add support for 802.11 networks
+	* Add support for Linux Packet MMAP and libpcap 1.x
+	* Expanded error self-assessment interface
 
 
 - Version 0.2.1

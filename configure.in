@@ -302,6 +302,13 @@ pcap_ok=1
 AC_CHECK_LIB(pcap, pcap_next_ex,,pcap_ok=0)
 AC_CHECK_LIB(pcap, pcap_dump_flush,,pcap_ok=0)
 
+dnl check if we have libpcap version >= 1.0.0. It is essential for Linux MMAP support
+dnl pcap_activate does not exist in previous versions
+dnl need AC_CHECK_LIB beforehand
+AC_CHECK_FUNCS(pcap_activate)
+
+
+
 
 
 AC_SUBST([LIBRADCLOCK_LIBS])			       
