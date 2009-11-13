@@ -49,6 +49,8 @@
 #include <math.h> 
 #include <time.h> 
 
+#include "../config.h"
+
 #include <radclock.h>
 #include "radclock-private.h"
 #include "logger.h"
@@ -64,7 +66,6 @@
 #include <stampoutput.h>
 #include <proto_ntp.h>
 
-#include "../config.h"
 
 
 /* Defines specific to the main program */
@@ -503,7 +504,6 @@ int main (int argc, char *argv[])
 	/* Init the mask we use to signal configuration updates */
 	param_mask = UPDMASK_NOUPD;
 
-
 	/* Reading the command line arguments */     
 	while ((ch = getopt(argc, argv, "dxvhli:n:t:r:w:s:a:o:p:")) != -1)
 		switch (ch) {
@@ -618,9 +618,10 @@ int main (int argc, char *argv[])
 	
 	/* Have not parsed the config file yet, so will have to do it again since it
 	 * may not be the right settings. Handles config parse messages in the right
-	 * log file though
+	 * log file though. So far clock has not been sent to init, no syscall
+	 * registered, pass a NULL pointer to verbose.
 	 */
-	set_verbose(clock_handle->is_daemon, clock_handle->conf->verbose_level);
+	set_verbose(NULL, clock_handle->is_daemon, clock_handle->conf->verbose_level);
 	set_logger(logger_verbose_bridge);
 	
 	/* Daemonize now, so that we can open the log files and close connection to
@@ -653,9 +654,9 @@ int main (int argc, char *argv[])
 
 
 	/* Now that we have the configuration to use (verbose level),  let's initialise the 
-	 * verbose function, useful to print out infos :) 
+	 * verbose level to correct value
 	 */
-	set_verbose(clock_handle->is_daemon, clock_handle->conf->verbose_level);
+	set_verbose(NULL, clock_handle->is_daemon, clock_handle->conf->verbose_level);
 	set_logger(logger_verbose_bridge);
 
 	/* Check for incompatible configurations and correct them */
@@ -702,6 +703,10 @@ int main (int argc, char *argv[])
 		verbose(LOG_ERR, "Could not initialise the RADclock");
 		return 1;
 	}
+	
+	/* Clock has been init', set the pointer to the clock */
+	set_verbose(clock_handle, clock_handle->is_daemon, clock_handle->conf->verbose_level);
+	set_logger(logger_verbose_bridge);
 
 	/* Create directory to store pid lock file and ipc socket */
 	if (  (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER) 
@@ -710,7 +715,8 @@ int main (int argc, char *argv[])
 		struct stat sb;
 		if (stat(RADCLOCK_RUN_DIRECTORY, &sb) < 0) {
 			if (mkdir(RADCLOCK_RUN_DIRECTORY, 0755) < 0) { 
-				verbose(LOG_ERR, "Cannot create %s directory. Run as root or (!daemon && !server)", RADCLOCK_RUN_DIRECTORY);
+				verbose(LOG_ERR, "Cannot create %s directory. Run as root or (!daemon && !server)",
+					   	RADCLOCK_RUN_DIRECTORY);
 				return 1;
 			}
 		}

@@ -21,6 +21,8 @@
 #ifndef _VERBOSE_H
 #define _VERBOSE_H
 
+#include "radclock.h"
+
 #define DAEMON_LOG_FILE	"/var/log/radclock.log"
 #define BIN_LOG_FILE	"radclock.log"
 
@@ -48,7 +50,7 @@ extern int verbose_level;
 
 void verbose(int facility, char* format, ...); 
 
-void set_verbose(int is_daemon, int verbose_level);
+void set_verbose(struct radclock *clock, int is_daemon, int verbose_level);
 void unset_verbose();
 int get_verbose_level();
 /* Short cut */

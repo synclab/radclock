@@ -1985,6 +1985,7 @@ i++;
 	 * The first point is badly wrong due to our very first estimate of phat. So
 	 * let's not introduce this distortion that can be as large as 3 orders of magnitude
 	 * only drawback, we have no estimate on the first point ... big deal!
+	 * Also (nerror-1) need to be > 0!
 	 * TODO put that in a function ...
 	 */
 	if (i > 1) {
@@ -2000,8 +2001,11 @@ i++;
 		nerror 		= RAD_ERROR(clock_handle)->nerror + 1;
 
 		RAD_ERROR(clock_handle)->error_bound 		= error_bound;
-		RAD_ERROR(clock_handle)->error_bound_avg 	= cumsum / nerror;
-		RAD_ERROR(clock_handle)->error_bound_std 	= sqrt((sq_cumsum - ( cumsum*cumsum / nerror )) / (nerror - 1));
+		if ( nerror > 2 )
+		{
+			RAD_ERROR(clock_handle)->error_bound_avg 	= cumsum / nerror;
+			RAD_ERROR(clock_handle)->error_bound_std 	= sqrt((sq_cumsum - ( cumsum*cumsum / nerror )) / (nerror - 1));
+		}
 		RAD_ERROR(clock_handle)->cumsum				= cumsum; 
 		RAD_ERROR(clock_handle)->sq_cumsum			= sq_cumsum; 
 		RAD_ERROR(clock_handle)->nerror				= nerror;

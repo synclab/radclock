@@ -26,22 +26,28 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
-
 #include <syslog.h>
+
+#include "../config.h"
+#include "radclock.h"
+#include "radclock-private.h"
 #include "verbose.h"
 
 
 
 // TODO : Implement a callback here 
 static struct verbose_data_t {
+	struct radclock *clock;
 	int is_daemon;
 	int verbose_level;
 	FILE* logfile;
-} verbose_data = { 0,0, NULL};
+} verbose_data = { NULL, 0, 0, NULL };
 
 
-void set_verbose(int is_daemon, int verbose_level) 
+void set_verbose(struct radclock *clock, int is_daemon, int verbose_level) 
 {
+	JDEBUG
+	verbose_data.clock = clock;
 	verbose_data.verbose_level = verbose_level;
 	verbose_data.is_daemon = is_daemon;
 }
@@ -49,7 +55,12 @@ void set_verbose(int is_daemon, int verbose_level)
 
 void unset_verbose()
 {
+	JDEBUG
+	verbose_data.clock = NULL;
+	verbose_data.verbose_level = 0;
+	verbose_data.is_daemon = 0;
 	fclose(verbose_data.logfile);
+	verbose_data.logfile = NULL;
 }
 
 
@@ -62,6 +73,7 @@ int get_verbose_level()
 /* Non daemon exits for now */
 static void verb_panic(char * message)
 {
+	JDEBUG
 	if ( verbose_data.is_daemon )
 		syslog(LOG_ALERT, "Verb_panic: %s", message);
 	else {
@@ -83,13 +95,19 @@ static void verbose_init()
 	}
 }
 
+char *months[12] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
 
 
 void verbose(int facility, char* format, ...) 
 {
+	JDEBUG
 	// Rebuild the entire string from the variable arguments 
 	char *str;
 	va_list arg;
+	char ctime_buf[27]	= "";
+	long double currtime;
+	time_t currsec;
+	struct tm *t;
 	
 	int n, size = 100;
 	char  * customize;
@@ -153,13 +171,32 @@ void verbose(int facility, char* format, ...)
 		str = realloc (str, size);
 	}
 
+
+	/* Retrieve date from RADclock, so cover the case of data replay, with
+	 * somewhat consistent timestamps. There is a possibility of discrepancy
+	 * between syslog timestamps and log file timestamps. The minute resolution
+	 * will hide that in most cases.
+	 */
+	if ( verbose_data.clock == NULL )
+	{
+		sprintf(ctime_buf, "-RADclock Init-");
+	}
+	else	
+	{
+		radclock_gettimeofday_fp(verbose_data.clock, &currtime);
+		/* The cast should 'floor' currtime */
+		currsec = (time_t) currtime;      
+		t = localtime(&currsec);
+		sprintf(ctime_buf, "%s %02d %02d:%02d:%02d", 
+				months[t->tm_mon], t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
+	}
+
 	
-	
-	// Output messages to the log file, depending on the verbose level 
+	/* Output messages to the log file, depending on the verbose level */ 
 	switch (facility) {	
 		case VERB_DEBUG:
 			if (verbose_data.verbose_level > 1) 
-				fprintf(verbose_data.logfile, "%s%s\n", customize, str);
+				fprintf(verbose_data.logfile, "%s: %s%s\n", ctime_buf, customize, str);
 			break;
 
 		case VERB_QUALITY:
@@ -169,16 +206,16 @@ void verbose(int facility, char* format, ...)
 		case VERB_SYNC:
 		case VERB_DEFAULT:
 			if (verbose_data.verbose_level > 0) 
-				fprintf(verbose_data.logfile, "%s%s\n", customize, str);
+				fprintf(verbose_data.logfile, "%s: %s%s\n", ctime_buf, customize, str);
 			break;
 
 		default:
 			/* In all other cases output in log file */
-			fprintf(verbose_data.logfile, "%s%s\n", customize, str);
+			fprintf(verbose_data.logfile, "%s: %s%s\n", ctime_buf, customize, str);
 			if ( verbose_data.is_daemon )
 				syslog(facility, "%s%s", customize, str);
 			else
-				fprintf(stderr, "%s%s\n", customize, str);
+				fprintf(stderr, "%s: %s%s\n", ctime_buf, customize, str);
 			break;
 	}
 

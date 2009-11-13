@@ -404,19 +404,18 @@ int process_rawdata(void *c_handle)
 	struct bidir_stamp stamp;
 	static struct bidir_stamp laststamp;
 
-
-	// TODO; fixme
-	/* Stuff */
-	char ctime_buf[27]	= "";
-	long double currtime;
-	time_t currsec;
-
-	int err;
+	/* Error control logging */
+	long double currtime 	= 0;
+	double min_RTT 			= 0;
+	double timediff 		= 0;
+	double error_bound 		= 0;
+	double error_bound_avg 	= 0;
+	double error_bound_std 	= 0;
 
 	/* Generic call for creating the stamps depending on the type of the 
 	 * input source.
 	 */
-	if ( (err = get_next_stamp(clock_handle, (struct stampsource *)clock_handle->stamp_source, &stamp)) < 0 )
+	if ( get_next_stamp(clock_handle, (struct stampsource *)clock_handle->stamp_source, &stamp) < 0 )
 	{
 		return 1;
 	}
@@ -488,26 +487,23 @@ int process_rawdata(void *c_handle)
 	print_out_files(clock_handle, &stamp);
 	
 	/* View updated RADclock data and compare with NTP server stamps in nice format */
-	long double  timediff=0;    // difference between Te and C(tf)
-	if (VERB_LEVEL &&   (((struct bidir_output*)clock_handle->algo_output)->n_stamps<4 
-					|| !((((struct bidir_output*)clock_handle->algo_output)->n_stamps-1)%200)) ) 
+	if (VERB_LEVEL &&   (((struct bidir_output*)clock_handle->algo_output)->n_stamps < 10 
+					|| !((((struct bidir_output*)clock_handle->algo_output)->n_stamps-1)%100)) ) 
 	{
-
-		currtime = stamp.Te;
-		currsec = (time_t)(floor(currtime));      
-		verbose(VERB_CONTROL, "Comparing clocks on packet %ld",((struct bidir_output*)clock_handle->algo_output)->n_stamps);
-		ctime_r(&currsec, ctime_buf);
-		*(strchr(ctime_buf, '\n')) = '\0';
-		verbose(VERB_CONTROL, " NTPserver: (%9.3Lf [ms] past)  %s",(currtime-currsec)*1000,ctime_buf);
-
 		radclock_vcount_to_abstime_fp(clock_handle, &(GLOBAL_DATA(clock_handle)->last_changed), &currtime);
-		
-		currsec = (time_t)(currtime);
-		timediff = currtime - (long double)stamp.Te;
-		ctime_r(&currsec, ctime_buf);
-		*(strchr(ctime_buf, '\n')) = '\0';
-		verbose(VERB_CONTROL, " RADclock:  (%9.3Lf [ms] past)  %s",(currtime-currsec)*1000,ctime_buf);
-		verbose(VERB_CONTROL, " RAD - NTP  = %9.3Lf [ms] (compare to RTT/2)",timediff*1000);
+		radclock_get_min_RTT(clock_handle, &min_RTT);
+		timediff = (double) (currtime - (long double)stamp.Te);
+
+		verbose(VERB_CONTROL, "i=%ld: NTPserver stamp %.6Lf, RAD - NTPserver = %.3f [ms], RTT/2 = %.3f [ms]",
+				((struct bidir_output*)clock_handle->algo_output)->n_stamps,
+				stamp.Te, timediff * 1000, min_RTT / 2 * 1000);
+
+		radclock_get_clockerror_bound(clock_handle, &error_bound);
+		radclock_get_clockerror_bound_avg(clock_handle, &error_bound_avg);
+		radclock_get_clockerror_bound_std(clock_handle, &error_bound_std);
+		verbose(VERB_CONTROL, "i=%ld: Clock Error Bound (cur,avg,std) %.6f %.6f %.6f [ms]",
+				((struct bidir_output*)clock_handle->algo_output)->n_stamps,
+				error_bound * 1000, error_bound_avg * 1000, error_bound_std * 1000);
 	}
 
 	/* Plocal 

@@ -27,7 +27,8 @@
 
 /* See config.h for symbol definition */
 #ifdef WITH_JDEBUG
-#define JDEBUG fprintf(stdout, "Thread: %lu \t| %s() \t| %s - %d\n", pthread_self(), __FUNCTION__, __FILE__, __LINE__);
+#define JDEBUG fprintf(stdout, "%s() \t| %s - %d\n", __FUNCTION__, __FILE__, __LINE__);
+//#define JDEBUG fprintf(stdout, "Thread: %lu \t| %s() \t| %s - %d\n", pthread_self(), __FUNCTION__, __FILE__, __LINE__);
 #else
 #define JDEBUG
 #endif
