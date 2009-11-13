@@ -1,6 +1,6 @@
-From c080eb2dcc7b2941ab20d49754c5f584825535dd Mon Sep 17 00:00:00 2001
+From f8d0100870a52fad1f0c953606bbaa73857c9f10 Mon Sep 17 00:00:00 2001
 From: Julien Ridoux <julien@synclab.org>
-Date: Thu, 12 Nov 2009 17:04:09 +1100
+Date: Fri, 13 Nov 2009 16:13:17 +1100
 Subject: [PATCH RADclock 6/9] RADclock export of packet timestamps
 
 IOCTL or PACKET_MMAP interfaces for passing timestamps to user space
@@ -10,12 +10,12 @@ on the RADclock timestamping mode.
 Add support for passing raw vcounter stamps created by the kernel.
 Implementation of IOCTL get/set timestamping modes for the RADclock.
 ---
- net/packet/af_packet.c |  128 ++++++++++++++++++++++++++++++++++++++++++++++++
+ net/packet/af_packet.c |  130 ++++++++++++++++++++++++++++++++++++++++++++++++
  net/socket.c           |   13 +++++
- 2 files changed, 141 insertions(+), 0 deletions(-)
+ 2 files changed, 143 insertions(+), 0 deletions(-)
 
 diff --git a/net/packet/af_packet.c b/net/packet/af_packet.c
-index 2cee87d..884bf64 100644
+index 2cee87d..16f1f6f 100644
 --- a/net/packet/af_packet.c
 +++ b/net/packet/af_packet.c
 @@ -80,6 +80,10 @@
@@ -29,18 +29,19 @@ index 2cee87d..884bf64 100644
  #ifdef CONFIG_INET
  #include <net/inet_common.h>
  #endif
-@@ -561,6 +565,10 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev, struct packe
+@@ -561,6 +565,11 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev, struct packe
  	unsigned short macoff, netoff;
  	struct sk_buff *copy_skb = NULL;
  	struct timeval tv;
 +#ifdef CONFIG_RADCLOCK
 +	unsigned short vcountoff;
 +	ktime_t rad_ktime;
++	void *raw;
 +#endif
  
  	if (skb->pkt_type == PACKET_LOOPBACK)
  		goto drop;
-@@ -592,10 +600,26 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev, struct packe
+@@ -592,10 +601,26 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev, struct packe
  		snaplen = res;
  
  	if (sk->sk_type == SOCK_DGRAM) {
@@ -53,7 +54,7 @@ index 2cee87d..884bf64 100644
 + * use more memory.
 + */
 +		macoff = netoff = TPACKET_ALIGN(TPACKET_HDRLEN + 16 + sizeof(vcounter_t));
-+#else 
++#else
  		macoff = netoff = TPACKET_ALIGN(TPACKET_HDRLEN) + 16;
 +#endif
  	} else {
@@ -67,12 +68,12 @@ index 2cee87d..884bf64 100644
  		macoff = netoff - maclen;
  	}
  
-@@ -634,6 +658,23 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev, struct packe
+@@ -634,6 +659,23 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev, struct packe
  
  	skb_copy_bits(skb, 0, (u8*)h + macoff, snaplen);
  
 +#ifdef CONFIG_RADCLOCK
-+	/* Provide a timeval stamp build based on the RADclock or a timestamp for 
++	/* Provide a timeval stamp build based on the RADclock or a timestamp for
 +	 * fair comparison. Replace existing timestamp in the skbuff if in the right
 +	 * mode. Default is to return normal stamp.
 +	 */
@@ -91,7 +92,7 @@ index 2cee87d..884bf64 100644
  	h->tp_len = skb->len;
  	h->tp_snaplen = snaplen;
  	h->tp_mac = macoff;
-@@ -656,6 +697,28 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev, struct packe
+@@ -656,6 +698,29 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev, struct packe
  	else
  		sll->sll_ifindex = dev->ifindex;
  
@@ -100,27 +101,28 @@ index 2cee87d..884bf64 100644
 +	 * pointer libpcap passes to the user callback. Because libpcap does write
 +	 * in the gap between the SLL header and tp_mac, things are a bit messy.
 +	 * Mimic libpcap logic in here, which will hopefully not change ...
-+	 * Clearly this code depends on libpcap design, a poor feature, but no 
++	 * Clearly this code depends on libpcap design, a poor feature, but no
 +	 * other choice so far.
 +	 */
 +	vcountoff = macoff;
 +
-+	/* If the socket has been open in mode DGRAM, libpcap will add a 
++	/* If the socket has been open in mode DGRAM, libpcap will add a
 +	 * sll_header (16bytes) (cooked interface)
 +	 */
 +	if (sk->sk_type == SOCK_DGRAM)
 +		vcountoff -= 16;
 +
 +	/* Copy the vcount stamp just before where the mac/sll header wil be */
-+	vcountoff -= sizeof(vcounter_t); 
-+	memcpy(h.raw + vcountoff, &(skb->vcount_stamp), sizeof(vcounter_t)); 
-+	
++	vcountoff -= sizeof(vcounter_t);
++	raw = (void*)h;
++	memcpy(raw + vcountoff, &(skb->vcount_stamp), sizeof(vcounter_t));
++
 +#endif
 +
  	h->tp_status = status;
  	smp_mb();
  
-@@ -1093,6 +1156,14 @@ static int packet_recvmsg(struct kiocb *iocb, struct socket *sock,
+@@ -1093,6 +1158,14 @@ static int packet_recvmsg(struct kiocb *iocb, struct socket *sock,
  	if (err)
  		goto out_free;
  
@@ -135,7 +137,7 @@ index 2cee87d..884bf64 100644
  	sock_recv_timestamp(msg, sk, skb);
  
  	if (msg->msg_name)
-@@ -1521,10 +1592,67 @@ static int packet_ioctl(struct socket *sock, unsigned int cmd,
+@@ -1521,10 +1594,67 @@ static int packet_ioctl(struct socket *sock, unsigned int cmd,
  			return put_user(amount, (int __user *)arg);
  		}
  		case SIOCGSTAMP:
