@@ -181,14 +181,21 @@ void verbose(int facility, char* format, ...)
 	{
 		sprintf(ctime_buf, "-RADclock Init-");
 	}
-	else	
+	else
 	{
-		radclock_gettimeofday_fp(verbose_data.clock, &currtime);
-		/* The cast should 'floor' currtime */
-		currsec = (time_t) currtime;      
-		t = localtime(&currsec);
-		sprintf(ctime_buf, "%s %02d %02d:%02d:%02d", 
-				months[t->tm_mon], t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
+		if ( verbose_data.clock->run_mode == RADCLOCK_RUN_DEAD  )
+		{
+			sprintf(ctime_buf, "Replay");
+		}
+		else
+		{
+			radclock_gettimeofday_fp(verbose_data.clock, &currtime);
+			/* The cast should 'floor' currtime */
+			currsec = (time_t) currtime;      
+			t = localtime(&currsec);
+			sprintf(ctime_buf, "%s %02d %02d:%02d:%02d", 
+					months[t->tm_mon], t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
+		}
 	}
 
 	
