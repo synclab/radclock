@@ -145,8 +145,8 @@ index 2cee87d..16f1f6f 100644
 +			if (sk->sk_radclock_tsmode == RADCLOCK_TSMODE_RADCLOCK)
 +			{
 +				/* Provide a timeval stamp build based on the  RADclock */
-+				radclock_fill_ktime(sk->sk_vcount_stamp, (ktime_t __user *)arg);
-+				return 0;
++				radclock_fill_ktime(sk->sk_vcount_stamp, &(sk->sk_stamp));
++
 +			}
 +			else if (sk->sk_radclock_tsmode == RADCLOCK_TSMODE_FAIRCOMPARE)
 +			{
@@ -162,8 +162,8 @@ index 2cee87d..16f1f6f 100644
 +			if (sk->sk_radclock_tsmode == RADCLOCK_TSMODE_RADCLOCK)
 +			{
 +				/* Provide a timeval stamp build based on the  RADclock */
-+				radclock_fill_ktime(sk->sk_vcount_stamp, (ktime_t __user *)arg);
-+				return 0;
++				radclock_fill_ktime(sk->sk_vcount_stamp, &(sk->sk_stamp));
++
 +			}
 +			else if (sk->sk_radclock_tsmode == RADCLOCK_TSMODE_FAIRCOMPARE)
 +			{
