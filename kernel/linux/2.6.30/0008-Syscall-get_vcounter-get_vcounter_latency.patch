@@ -1,0 +1,140 @@
+From 131094ee8927c662d7ee3779251336818a818d45 Mon Sep 17 00:00:00 2001
+From: Julien Ridoux <julien@synclab.org>
+Date: Tue, 19 Jan 2010 17:30:18 +1100
+Subject: [PATCH RADclock 8/9] Syscall get_vcounter get_vcounter_latency
+
+Add get_vcounter() and get_vcounter_latency syscalls to access the
+raw vcounter and its latency from user space
+---
+ arch/x86/include/asm/unistd_32.h   |    4 +++
+ arch/x86/include/asm/unistd_64.h   |    6 +++++
+ arch/x86/kernel/syscall_table_32.S |    4 +++
+ include/linux/syscalls.h           |    8 ++++++
+ kernel/time.c                      |   43 ++++++++++++++++++++++++++++++++++++
+ 5 files changed, 65 insertions(+), 0 deletions(-)
+
+diff --git a/arch/x86/include/asm/unistd_32.h b/arch/x86/include/asm/unistd_32.h
+index 6e72d74..c705f51 100644
+--- a/arch/x86/include/asm/unistd_32.h
++++ b/arch/x86/include/asm/unistd_32.h
+@@ -340,6 +340,10 @@
+ #define __NR_inotify_init1	332
+ #define __NR_preadv		333
+ #define __NR_pwritev		334
++#ifdef CONFIG_RADCLOCK
++#define __NR_get_vcounter	335
++#define __NR_get_vcounter_latency	336
++#endif
+ 
+ #ifdef __KERNEL__
+ 
+diff --git a/arch/x86/include/asm/unistd_64.h b/arch/x86/include/asm/unistd_64.h
+index f818294..6051a34 100644
+--- a/arch/x86/include/asm/unistd_64.h
++++ b/arch/x86/include/asm/unistd_64.h
+@@ -657,6 +657,12 @@ __SYSCALL(__NR_inotify_init1, sys_inotify_init1)
+ __SYSCALL(__NR_preadv, sys_preadv)
+ #define __NR_pwritev				296
+ __SYSCALL(__NR_pwritev, sys_pwritev)
++#ifdef CONFIG_RADCLOCK
++#define __NR_get_vcounter			297
++__SYSCALL(__NR_get_vcounter, sys_get_vcounter)
++#define __NR_get_vcounter_latency	298
++__SYSCALL(__NR_get_vcounter_latency, sys_get_vcounter_latency)
++#endif
+ 
+ 
+ #ifndef __NO_STUBS
+diff --git a/arch/x86/kernel/syscall_table_32.S b/arch/x86/kernel/syscall_table_32.S
+index ff5c873..e30f20e 100644
+--- a/arch/x86/kernel/syscall_table_32.S
++++ b/arch/x86/kernel/syscall_table_32.S
+@@ -334,3 +334,7 @@ ENTRY(sys_call_table)
+ 	.long sys_inotify_init1
+ 	.long sys_preadv
+ 	.long sys_pwritev
++#ifdef CONFIG_RADCLOCK
++	.long sys_get_vcounter
++	.long sys_get_vcounter_latency
++#endif
+diff --git a/include/linux/syscalls.h b/include/linux/syscalls.h
+index 3052084..1141c8f 100644
+--- a/include/linux/syscalls.h
++++ b/include/linux/syscalls.h
+@@ -66,6 +66,9 @@ struct old_linux_dirent;
+ #include <linux/quota.h>
+ #include <linux/key.h>
+ #include <trace/syscall.h>
++#ifdef CONFIG_RADCLOCK
++#include <linux/clocksource.h>
++#endif
+ 
+ #define __SC_DECL1(t1, a1)	t1 a1
+ #define __SC_DECL2(t2, a2, ...) t2 a2, __SC_DECL1(__VA_ARGS__)
+@@ -755,4 +758,9 @@ asmlinkage long sys_pipe(int __user *);
+ 
+ int kernel_execve(const char *filename, char *const argv[], char *const envp[]);
+ 
++#ifdef CONFIG_RADCLOCK
++asmlinkage long sys_get_vcounter(vcounter_t *vcounter);
++asmlinkage long sys_get_vcounter_latency(vcounter_t *vcounter, cycle_t *vcount_lat, cycle_t *tsc_lat);
++#endif
++
+ #endif
+diff --git a/kernel/time.c b/kernel/time.c
+index 2951194..2b9ad4d 100644
+--- a/kernel/time.c
++++ b/kernel/time.c
+@@ -115,6 +115,49 @@ SYSCALL_DEFINE2(gettimeofday, struct timeval __user *, tv,
+ 	return 0;
+ }
+ 
++
++#ifdef CONFIG_RADCLOCK
++asmlinkage long sys_get_vcounter(vcounter_t *vcounter)
++{
++	vcounter_t vcount;
++	vcount = read_vcounter();
++
++	if (copy_to_user(vcounter, &vcount, sizeof(vcounter_t)))
++		return -EFAULT;
++	return 0;
++}
++
++asmlinkage long sys_get_vcounter_latency(vcounter_t *vcounter, cycle_t *vcount_lat, cycle_t *tsc_lat)
++{
++	vcounter_t vcount;
++	cycle_t tsc1, tsc2, tsc3;
++
++	/* One for fun and warmup */
++	rdtscll(tsc1);
++	__asm __volatile("lfence" ::: "memory");
++	rdtscll(tsc1);
++	__asm __volatile("lfence" ::: "memory");
++	rdtscll(tsc2);
++	__asm __volatile("lfence" ::: "memory");
++	vcount = read_vcounter();
++	__asm __volatile("lfence" ::: "memory");
++	rdtscll(tsc3);
++	__asm __volatile("lfence" ::: "memory");
++
++	tsc1 = tsc2 - tsc1;
++	tsc2 = tsc3 - tsc2;
++
++	if (copy_to_user(vcounter, &vcount, sizeof(vcounter_t)))
++		return -EFAULT;
++	if (copy_to_user(vcount_lat, &tsc2, sizeof(cycle_t)))
++		return -EFAULT;
++	if (copy_to_user(tsc_lat, &tsc1, sizeof(cycle_t)))
++		return -EFAULT;
++	return 0;
++}
++#endif
++
++
+ /*
+  * Adjust the time obtained from the CMOS to be UTC time instead of
+  * local time.
+-- 
+1.6.0.4
+
