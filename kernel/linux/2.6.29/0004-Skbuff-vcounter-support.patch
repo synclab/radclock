@@ -1,0 +1,67 @@
+From 1965d058627eda55f284feff548871c05873808e Mon Sep 17 00:00:00 2001
+From: Julien Ridoux <julien@synclab.org>
+Date: Tue, 19 Jan 2010 15:56:26 +1100
+Subject: [PATCH RADclock 4/9] Skbuff vcounter support
+
+Add support for creating raw vcounter timestamps on captured packets
+---
+ include/linux/skbuff.h |    9 +++++++++
+ net/core/skbuff.c      |    8 ++++++++
+ 2 files changed, 17 insertions(+), 0 deletions(-)
+
+diff --git a/include/linux/skbuff.h b/include/linux/skbuff.h
+index 9dcf956..d192bb6 100644
+--- a/include/linux/skbuff.h
++++ b/include/linux/skbuff.h
+@@ -29,6 +29,10 @@
+ #include <linux/dmaengine.h>
+ #include <linux/hrtimer.h>
+ 
++#ifdef CONFIG_RADCLOCK
++#include <linux/clocksource.h>
++#endif
++
+ #define HAVE_ALLOC_SKB		/* For the drivers to know */
+ #define HAVE_ALIGNABLE_SKB	/* Ditto 8)		   */
+ 
+@@ -283,6 +287,11 @@ struct sk_buff {
+ 	 */
+ 	char			cb[48];
+ 
++	#ifdef CONFIG_RADCLOCK
++	vcounter_t		vcount_stamp;
++	ktime_t 		tstamp_fair; /* Specific to the FAIR_COMPARE mode, ns resolution */
++	#endif
++
+ 	unsigned int		len,
+ 				data_len;
+ 	__u16			mac_len,
+diff --git a/net/core/skbuff.c b/net/core/skbuff.c
+index c6a6b16..08f6608 100644
+--- a/net/core/skbuff.c
++++ b/net/core/skbuff.c
+@@ -196,6 +196,10 @@ struct sk_buff *__alloc_skb(unsigned int size, gfp_t gfp_mask,
+ 	skb->head = data;
+ 	skb->data = data;
+ 	skb_reset_tail_pointer(skb);
++	#ifdef CONFIG_RADCLOCK
++	skb->vcount_stamp = 0;
++	skb->tstamp_fair = ktime_set(-1L, -1L);
++	#endif
+ 	skb->end = skb->tail + size;
+ 	/* make sure we initialize shinfo sequentially */
+ 	shinfo = skb_shinfo(skb);
+@@ -484,6 +488,10 @@ EXPORT_SYMBOL(skb_recycle_check);
+ static void __copy_skb_header(struct sk_buff *new, const struct sk_buff *old)
+ {
+ 	new->tstamp		= old->tstamp;
++	#ifdef CONFIG_RADCLOCK
++	new->vcount_stamp 	= old->vcount_stamp;
++	new->tstamp_fair 	= old->tstamp_fair;
++	#endif
+ 	new->dev		= old->dev;
+ 	new->transport_header	= old->transport_header;
+ 	new->network_header	= old->network_header;
+-- 
+1.6.0.4
+

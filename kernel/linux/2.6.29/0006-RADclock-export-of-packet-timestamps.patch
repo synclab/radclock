@@ -1,6 +1,6 @@
-From 2097d235efb70548379fbf09ab919f8da5974754 Mon Sep 17 00:00:00 2001
+From e59e17f2fdfaca3c1a93922dc8b0a417cacbb4e8 Mon Sep 17 00:00:00 2001
 From: Julien Ridoux <julien@synclab.org>
-Date: Thu, 12 Nov 2009 15:07:33 +1100
+Date: Tue, 19 Jan 2010 16:19:21 +1100
 Subject: [PATCH RADclock 6/9] RADclock export of packet timestamps
 
 IOCTL or PACKET_MMAP interfaces for passing timestamps to user space
@@ -15,12 +15,12 @@ Implementation of IOCTL get/set timestamping modes for the RADclock.
  2 files changed, 152 insertions(+), 0 deletions(-)
 
 diff --git a/net/packet/af_packet.c b/net/packet/af_packet.c
-index c718e7e..9fd9522 100644
+index 1fc4a78..7fddd88 100644
 --- a/net/packet/af_packet.c
 +++ b/net/packet/af_packet.c
-@@ -78,6 +78,10 @@
- #include <linux/module.h>
+@@ -79,6 +79,10 @@
  #include <linux/init.h>
+ #include <linux/mutex.h>
  
 +#ifdef CONFIG_RADCLOCK
 +#include <linux/radclock.h>
@@ -29,7 +29,7 @@ index c718e7e..9fd9522 100644
  #ifdef CONFIG_INET
  #include <net/inet_common.h>
  #endif
-@@ -605,6 +609,10 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev, struct packe
+@@ -607,6 +611,10 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev, struct packe
  	struct sk_buff *copy_skb = NULL;
  	struct timeval tv;
  	struct timespec ts;
@@ -40,7 +40,7 @@ index c718e7e..9fd9522 100644
  
  	if (skb->pkt_type == PACKET_LOOPBACK)
  		goto drop;
-@@ -636,13 +644,31 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev, struct packe
+@@ -638,13 +646,31 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev, struct packe
  		snaplen = res;
  
  	if (sk->sk_type == SOCK_DGRAM) {
@@ -72,7 +72,7 @@ index c718e7e..9fd9522 100644
  		macoff = netoff - maclen;
  	}
  
-@@ -680,6 +706,23 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev, struct packe
+@@ -682,6 +708,23 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev, struct packe
  
  	skb_copy_bits(skb, 0, h.raw + macoff, snaplen);
  
@@ -96,7 +96,7 @@ index c718e7e..9fd9522 100644
  	switch (po->tp_version) {
  	case TPACKET_V1:
  		h.h1->tp_len = skb->len;
-@@ -723,6 +766,37 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev, struct packe
+@@ -725,6 +768,37 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev, struct packe
  	else
  		sll->sll_ifindex = dev->ifindex;
  
@@ -134,7 +134,7 @@ index c718e7e..9fd9522 100644
  	__packet_set_status(po, h.raw, status);
  	smp_mb();
  
-@@ -1160,6 +1234,14 @@ static int packet_recvmsg(struct kiocb *iocb, struct socket *sock,
+@@ -1165,6 +1239,14 @@ static int packet_recvmsg(struct kiocb *iocb, struct socket *sock,
  	if (err)
  		goto out_free;
  
@@ -149,7 +149,7 @@ index c718e7e..9fd9522 100644
  	sock_recv_timestamp(msg, sk, skb);
  
  	if (msg->msg_name)
-@@ -1658,10 +1740,67 @@ static int packet_ioctl(struct socket *sock, unsigned int cmd,
+@@ -1663,10 +1745,67 @@ static int packet_ioctl(struct socket *sock, unsigned int cmd,
  			return put_user(amount, (int __user *)arg);
  		}
  		case SIOCGSTAMP:
@@ -218,10 +218,10 @@ index c718e7e..9fd9522 100644
  		case SIOCADDRT:
  		case SIOCDELRT:
 diff --git a/net/socket.c b/net/socket.c
-index 76ba80a..ba70d54 100644
+index 35dd737..06edc6c 100644
 --- a/net/socket.c
 +++ b/net/socket.c
-@@ -97,6 +97,10 @@
+@@ -96,6 +96,10 @@
  #include <net/sock.h>
  #include <linux/netfilter.h>
  
@@ -232,7 +232,7 @@ index 76ba80a..ba70d54 100644
  static int sock_no_open(struct inode *irrelevant, struct file *dontcare);
  static ssize_t sock_aio_read(struct kiocb *iocb, const struct iovec *iov,
  			 unsigned long nr_segs, loff_t pos);
-@@ -917,6 +921,15 @@ static long sock_ioctl(struct file *file, unsigned cmd, unsigned long arg)
+@@ -916,6 +920,15 @@ static long sock_ioctl(struct file *file, unsigned cmd, unsigned long arg)
  				err = dlci_ioctl_hook(cmd, argp);
  			mutex_unlock(&dlci_ioctl_mutex);
  			break;
