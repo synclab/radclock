@@ -1,17 +1,17 @@
-From 80dd2d874dd9ee8a52433967a7c35591f97486a8 Mon Sep 17 00:00:00 2001
+From d824b5eefd85653f1078810b79503b5aac298119 Mon Sep 17 00:00:00 2001
 From: Julien Ridoux <julien@synclab.org>
-Date: Wed, 20 Jan 2010 15:58:38 +1100
+Date: Wed, 20 Jan 2010 16:46:37 +1100
 Subject: [PATCH RADclock 8/9] Syscall get_vcounter get_vcounter_latency
 
 Add get_vcounter() and get_vcounter_latency syscalls to access the
 raw vcounter and its latency from user space
 ---
  arch/x86/include/asm/unistd_32.h   |    4 +++
- arch/x86/include/asm/unistd_64.h   |    5 ++++
+ arch/x86/include/asm/unistd_64.h   |    6 +++++
  arch/x86/kernel/syscall_table_32.S |    4 +++
  include/linux/syscalls.h           |    9 +++++++
  kernel/time.c                      |   43 ++++++++++++++++++++++++++++++++++++
- 5 files changed, 65 insertions(+), 0 deletions(-)
+ 5 files changed, 66 insertions(+), 0 deletions(-)
 
 diff --git a/arch/x86/include/asm/unistd_32.h b/arch/x86/include/asm/unistd_32.h
 index 732a307..97fc050 100644
@@ -29,10 +29,10 @@ index 732a307..97fc050 100644
  #ifdef __KERNEL__
  
 diff --git a/arch/x86/include/asm/unistd_64.h b/arch/x86/include/asm/unistd_64.h
-index 900e161..e5cd261 100644
+index 900e161..29896a1 100644
 --- a/arch/x86/include/asm/unistd_64.h
 +++ b/arch/x86/include/asm/unistd_64.h
-@@ -661,6 +661,11 @@ __SYSCALL(__NR_pwritev, sys_pwritev)
+@@ -661,6 +661,12 @@ __SYSCALL(__NR_pwritev, sys_pwritev)
  __SYSCALL(__NR_rt_tgsigqueueinfo, sys_rt_tgsigqueueinfo)
  #define __NR_perf_counter_open			298
  __SYSCALL(__NR_perf_counter_open, sys_perf_counter_open)
@@ -41,6 +41,7 @@ index 900e161..e5cd261 100644
 +__SYSCALL(__NR_get_vcounter, sys_get_vcounter)
 +#define __NR_get_vcounter_latency	300
 +__SYSCALL(__NR_get_vcounter_latency, sys_get_vcounter_latency)
++#endif
  
  #ifndef __NO_STUBS
  #define __ARCH_WANT_OLD_READDIR
