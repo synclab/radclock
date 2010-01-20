@@ -1,6 +1,6 @@
-From 583b5fc6daca87fb004d36a296e318332c23cb47 Mon Sep 17 00:00:00 2001
+From 9505e275ee2962e6fe04147a356a087bdd294544 Mon Sep 17 00:00:00 2001
 From: Julien Ridoux <julien@synclab.org>
-Date: Tue, 19 Jan 2010 17:35:52 +1100
+Date: Wed, 20 Jan 2010 12:01:19 +1100
 Subject: [PATCH RADclock 9/9] VDSO get_vcounter
 
 Support for VDSO get_vcounter() for accessing the raw cumulative
@@ -9,8 +9,8 @@ Changes to libc will be required to take advantage of it.
 ---
  arch/x86/include/asm/vgtod.h   |    4 ++
  arch/x86/kernel/vsyscall_64.c  |    4 ++
- arch/x86/vdso/vclock_gettime.c |   78 ++++++++++++++++++++++++++++++++++++++++
- 3 files changed, 86 insertions(+), 0 deletions(-)
+ arch/x86/vdso/vclock_gettime.c |   87 ++++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 95 insertions(+), 0 deletions(-)
 
 diff --git a/arch/x86/include/asm/vgtod.h b/arch/x86/include/asm/vgtod.h
 index dc27a69..685f7a9 100644
@@ -43,10 +43,10 @@ index 44153af..0638d4b 100644
  }
  
 diff --git a/arch/x86/vdso/vclock_gettime.c b/arch/x86/vdso/vclock_gettime.c
-index 6a40b78..b92ac35 100644
+index 6a40b78..656b941 100644
 --- a/arch/x86/vdso/vclock_gettime.c
 +++ b/arch/x86/vdso/vclock_gettime.c
-@@ -124,3 +124,81 @@ notrace int __vdso_gettimeofday(struct timeval *tv, struct timezone *tz)
+@@ -124,3 +124,90 @@ notrace int __vdso_gettimeofday(struct timeval *tv, struct timezone *tz)
  }
  int gettimeofday(struct timeval *, struct timezone *)
  	__attribute__((weak, alias("__vdso_gettimeofday")));
@@ -95,6 +95,15 @@ index 6a40b78..b92ac35 100644
 +
 +notrace int __vdso_get_vcounter_latency(vcounter_t *vcounter, cycle_t *vcount_lat, cycle_t *tsc_lat)
 +{
++/* XEN paravirtualization does not seem to like the rdtscll call, and redefines
++ * it in parvirt.h. It is a bit dodgy but allow compilation ... and not used so
++ * far, it is more a record what should be done.
++ */
++#ifdef CONFIG_PARAVIRT
++#define real_rdtscll(val) (val = __native_read_tsc())
++#else
++#define real_rdtscll(val) rdtscll(val)
++#endif
 +	vcounter_t vcount;
 +	cycle_t tsc1, tsc2, tsc3;
 +
@@ -103,15 +112,15 @@ index 6a40b78..b92ac35 100644
 +	if (likely(gtod->sysctl_enabled && gtod->clock.vread)) {
 +
 +		/* One for fun and warmup */
-+		rdtscll(tsc1);
++		real_rdtscll(tsc1);
 +		__asm __volatile("lfence" ::: "memory");
-+		rdtscll(tsc1);
++		real_rdtscll(tsc1);
 +		__asm __volatile("lfence" ::: "memory");
-+		rdtscll(tsc2);
++		real_rdtscll(tsc2);
 +		__asm __volatile("lfence" ::: "memory");
 +		vcount = read_vcounter();
 +		__asm __volatile("lfence" ::: "memory");
-+		rdtscll(tsc3);
++		real_rdtscll(tsc3);
 +		__asm __volatile("lfence" ::: "memory");
 +
 +		*vcounter = vcount;
