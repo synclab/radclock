@@ -1,4 +1,4 @@
-From 2d1f039d4915305494fe3ec090f5cd432781c818 Mon Sep 17 00:00:00 2001
+From 34d9128d7b0f909f9153b6bdac5b222d39b150c6 Mon Sep 17 00:00:00 2001
 From: Julien Ridoux <julien@synclab.org>
 Date: Thu, 21 Jan 2010 16:15:52 +1100
 Subject: [PATCH RADclock 9/9] VDSO get_vcounter
@@ -43,7 +43,7 @@ index 8cb4974..efdbf55 100644
  }
  
 diff --git a/arch/x86/vdso/vclock_gettime.c b/arch/x86/vdso/vclock_gettime.c
-index ee55754..546ab5c 100644
+index ee55754..d1463c9 100644
 --- a/arch/x86/vdso/vclock_gettime.c
 +++ b/arch/x86/vdso/vclock_gettime.c
 @@ -157,3 +157,90 @@ notrace int __vdso_gettimeofday(struct timeval *tv, struct timezone *tz)
@@ -57,7 +57,7 @@ index ee55754..546ab5c 100644
 +/* Only called while gtod->lock is held */
 +notrace static inline vcounter_t vread_vcounter_delta(void)
 +{
-+	return((clocksource_read(clock) - clock->vcounter_source_record) & clock->mask);
++	return((gtod->clock.vread() - gtod->clock.vcounter_source_record) & gtod->clock.mask);
 +}
 +
 +/* Copy of the version in kernel/time/timekeeping.c which we cannot directly access */
@@ -68,7 +68,7 @@ index ee55754..546ab5c 100644
 +
 +	do {
 +		seq = read_seqbegin(&xtime_lock);
-+		vcount = clock->vcounter_record + vread_vcounter_delta();
++		vcount = gtod->clock.vcounter_record + vread_vcounter_delta();
 +	} while (read_seqretry(&xtime_lock, seq));
 +
 +	return vcount;
