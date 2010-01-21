@@ -1,0 +1,134 @@
+From 03f06b534ddc76503c784b2794fd869bea00ddcd Mon Sep 17 00:00:00 2001
+From: Julien Ridoux <julien@synclab.org>
+Date: Thu, 21 Jan 2010 15:05:52 +1100
+Subject: [PATCH RADclock 2/9] Clocksource raw virtual counter
+
+Implement a vcounter_t cumulative counter to track consistent increment
+of the selected clocksource.
+Provides data structure supprot and access via the read_vcounter()
+function. So far, counter implemented on 64 bits.
+---
+ include/linux/clocksource.h |   12 +++++++++
+ kernel/time/timekeeping.c   |   57 +++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 69 insertions(+), 0 deletions(-)
+
+diff --git a/include/linux/clocksource.h b/include/linux/clocksource.h
+index df46a1a..d1e4a40 100644
+--- a/include/linux/clocksource.h
++++ b/include/linux/clocksource.h
+@@ -189,6 +189,14 @@ struct clocksource {
+ 	 */
+ 	cycle_t cycle_last ____cacheline_aligned_in_smp;
+ 
++#ifdef CONFIG_RADCLOCK
++	/* Store a record of the virtual counter updated on each harware clock
++	 * tick, and the current value of the virtual counter.
++	 */
++	vcounter_t vcounter_record;
++	vcounter_t vcounter_source_record;
++#endif
++
+ #ifdef CONFIG_CLOCKSOURCE_WATCHDOG
+ 	/* Watchdog related data, used by the framework */
+ 	struct list_head wd_list;
+@@ -298,4 +306,8 @@ static inline void update_vsyscall_tz(void)
+ 
+ extern void timekeeping_notify(struct clocksource *clock);
+ 
++#ifdef CONFIG_RADCLOCK
++extern vcounter_t read_vcounter(void);
++#endif
++
+ #endif /* _LINUX_CLOCKSOURCE_H */
+diff --git a/kernel/time/timekeeping.c b/kernel/time/timekeeping.c
+index c3a4e29..aca2893 100644
+--- a/kernel/time/timekeeping.c
++++ b/kernel/time/timekeeping.c
+@@ -66,6 +66,10 @@ static void timekeeper_setup_internals(struct clocksource *clock)
+ 
+ 	timekeeper.clock = clock;
+ 	clock->cycle_last = clock->read(clock);
++#ifdef CONFIG_RADCLOCK
++	clock->vcounter_record = 0;
++	clock->vcounter_source_record = (vcounter_t) clock->cycle_last;
++#endif
+ 
+ 	/* Do the ns -> cycle conversion first, using original mult */
+ 	tmp = NTP_INTERVAL_LENGTH;
+@@ -180,6 +184,48 @@ void timekeeping_leap_insert(int leapsecond)
+ 	update_vsyscall(&xtime, timekeeper.clock);
+ }
+ 
++#ifdef CONFIG_RADCLOCK
++/**
++ * read_vcounter_delta - retrieve the clocksource cycles since last tick
++ *
++ * private function, must hold xtime_lock lock when being
++ * called. Returns the number of cycles on the current
++ * clocksource since the last tick (since the last call to
++ * update_wall_time).
++ *
++ */
++static inline vcounter_t read_vcounter_delta(void)
++{
++	struct clocksource *clock;
++	clock = timekeeper.clock;
++	return((clock->read(clock) - clock->vcounter_source_record) & clock->mask);
++}
++
++/**
++ * read_vcounter - retrieve the current value of the vcounter
++ *
++ * Return the value of the cumulative count of cycles to functions
++ * within the kernel.
++ *
++ */
++vcounter_t read_vcounter(void)
++{
++	unsigned long seq;
++	vcounter_t vcount;
++
++	struct clocksource *clock;
++	clock = timekeeper.clock;
++
++	do {
++		seq = read_seqbegin(&xtime_lock);
++		vcount = clock->vcounter_record + read_vcounter_delta();
++	} while (read_seqretry(&xtime_lock, seq));
++
++	return vcount;
++}
++EXPORT_SYMBOL(read_vcounter);
++#endif
++
+ #ifdef CONFIG_GENERIC_TIME
+ 
+ /**
+@@ -733,6 +779,10 @@ void update_wall_time(void)
+ 	cycle_t offset;
+ 	u64 nsecs;
+ 
++#ifdef CONFIG_RADCLOCK
++	vcounter_t vcounter_delta;
++#endif
++
+ 	/* Make sure we're fully resumed: */
+ 	if (unlikely(timekeeping_suspended))
+ 		return;
+@@ -743,6 +793,13 @@ void update_wall_time(void)
+ #else
+ 	offset = timekeeper.cycle_interval;
+ #endif
++
++#ifdef CONFIG_RADCLOCK
++	vcounter_delta = read_vcounter_delta();
++	clock->vcounter_record += vcounter_delta;
++	clock->vcounter_source_record += vcounter_delta;
++#endif
++
+ 	timekeeper.xtime_nsec = (s64)xtime.tv_nsec << timekeeper.shift;
+ 
+ 	/* normally this loop will run just once, however in the
+-- 
+1.6.0.4
+
