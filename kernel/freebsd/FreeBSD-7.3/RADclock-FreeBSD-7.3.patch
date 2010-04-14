@@ -1,0 +1,1867 @@
+Support for the RADclock and cumulative virtual timecounter
+Freebsd Kernel patch: FreeBSD-7.3
+Julien Ridoux
+julien@synclab.org
+
+diff -aur --unidirectional-new-file sys/amd64/conf/RADCLOCK.amd64 FreeBSD-7.3/amd64/conf/RADCLOCK.amd64
+--- sys/amd64/conf/RADCLOCK.amd64	1970-01-01 10:00:00.000000000 +1000
++++ FreeBSD-7.3/amd64/conf/RADCLOCK.amd64	2010-04-14 08:19:13.000000000 +1000
+@@ -0,0 +1,322 @@
++#
++# GENERIC -- Generic kernel configuration file for FreeBSD/amd64
++#
++# For more information on this file, please read the handbook section on
++# Kernel Configuration Files:
++#
++#    http://www.FreeBSD.org/doc/en_US.ISO8859-1/books/handbook/kernelconfig-config.html
++#
++# The handbook is also available locally in /usr/share/doc/handbook
++# if you've installed the doc distribution, otherwise always see the
++# FreeBSD World Wide Web server (http://www.FreeBSD.org/) for the
++# latest information.
++#
++# An exhaustive list of options and more detailed explanations of the
++# device lines is also present in the ../../conf/NOTES and NOTES files.
++# If you are in doubt as to the purpose or necessity of a line, check first
++# in NOTES.
++#
++# $FreeBSD: src/sys/amd64/conf/GENERIC,v 1.484.2.24.2.1 2010/02/10 00:26:20 kensmith Exp $
++
++cpu		HAMMER
++ident	RADCLOCK
++
++# To statically compile in device wiring instead of /boot/device.hints
++#hints		"GENERIC.hints"		# Default places to look for devices.
++
++makeoptions	DEBUG=-g		# Build kernel with gdb(1) debug symbols
++
++options 	SCHED_ULE		# ULE scheduler
++options 	PREEMPTION		# Enable kernel thread preemption
++options 	INET			# InterNETworking
++options 	INET6			# IPv6 communications protocols
++options 	SCTP			# Stream Control Transmission Protocol 
++options 	FFS			# Berkeley Fast Filesystem
++options 	SOFTUPDATES		# Enable FFS soft updates support
++options 	UFS_ACL			# Support for access control lists
++options 	UFS_DIRHASH		# Improve performance on big directories
++options 	UFS_GJOURNAL		# Enable gjournal-based UFS journaling
++options 	MD_ROOT			# MD is a potential root device
++options 	NFSCLIENT		# Network Filesystem Client
++options 	NFSSERVER		# Network Filesystem Server
++options 	NFSLOCKD		# Network Lock Manager
++options 	NFS_ROOT		# NFS usable as /, requires NFSCLIENT
++options 	MSDOSFS			# MSDOS Filesystem
++options 	CD9660			# ISO 9660 Filesystem
++options 	PROCFS			# Process filesystem (requires PSEUDOFS)
++options 	PSEUDOFS		# Pseudo-filesystem framework
++options 	GEOM_PART_GPT		# GUID Partition Tables.
++options 	GEOM_LABEL		# Provides labelization
++options 	COMPAT_43TTY		# BSD 4.3 TTY compat [KEEP THIS!]
++options 	COMPAT_IA32		# Compatible with i386 binaries
++options 	COMPAT_FREEBSD4		# Compatible with FreeBSD4
++options 	COMPAT_FREEBSD5		# Compatible with FreeBSD5
++options 	COMPAT_FREEBSD6		# Compatible with FreeBSD6
++options 	SCSI_DELAY=5000		# Delay (in ms) before probing SCSI
++options 	KTRACE			# ktrace(1) support
++options 	STACK			# stack(9) support
++options 	SYSVSHM			# SYSV-style shared memory
++options 	SYSVMSG			# SYSV-style message queues
++options 	SYSVSEM			# SYSV-style semaphores
++options 	P1003_1B_SEMAPHORES	# POSIX-style semaphores
++options 	_KPOSIX_PRIORITY_SCHEDULING # POSIX P1003_1B real-time extensions
++options 	KBD_INSTALL_CDEV	# install a CDEV entry in /dev
++options 	ADAPTIVE_GIANT		# Giant mutex is adaptive.
++options 	STOP_NMI		# Stop CPUS using NMI instead of IPI
++options 	AUDIT			# Security event auditing
++#options 	KDTRACE_FRAME		# Ensure frames are compiled in
++#options 	KDTRACE_HOOKS		# Kernel DTrace hooks
++options 	INCLUDE_CONFIG_FILE     # Include this file in kernel
++
++# Make an SMP-capable kernel by default
++options 	SMP			# Symmetric MultiProcessor Kernel
++
++# CPU frequency control
++device		cpufreq
++
++# Bus support.
++device		acpi
++device		pci
++
++# Floppy drives
++device		fdc
++
++# ATA and ATAPI devices
++device		ata
++device		atadisk		# ATA disk drives
++device		ataraid		# ATA RAID drives
++device		atapicd		# ATAPI CDROM drives
++device		atapifd		# ATAPI floppy drives
++device		atapist		# ATAPI tape drives
++options 	ATA_STATIC_ID	# Static device numbering
++
++# SCSI Controllers
++device		ahc		# AHA2940 and onboard AIC7xxx devices
++options 	AHC_REG_PRETTY_PRINT	# Print register bitfields in debug
++					# output.  Adds ~128k to driver.
++device		ahd		# AHA39320/29320 and onboard AIC79xx devices
++options 	AHD_REG_PRETTY_PRINT	# Print register bitfields in debug
++					# output.  Adds ~215k to driver.
++device		amd		# AMD 53C974 (Tekram DC-390(T))
++device		hptiop		# Highpoint RocketRaid 3xxx series
++device		isp		# Qlogic family
++#device 	ispfw		# Firmware for QLogic HBAs- normally a module
++device		mpt		# LSI-Logic MPT-Fusion
++#device		ncr		# NCR/Symbios Logic
++device		sym		# NCR/Symbios Logic (newer chipsets + those of `ncr')
++device		trm		# Tekram DC395U/UW/F DC315U adapters
++
++device		adv		# Advansys SCSI adapters
++device		adw		# Advansys wide SCSI adapters
++device		aic		# Adaptec 15[012]x SCSI adapters, AIC-6[23]60.
++device		bt		# Buslogic/Mylex MultiMaster SCSI adapters
++
++
++# SCSI peripherals
++device		scbus		# SCSI bus (required for SCSI)
++device		ch		# SCSI media changers
++device		da		# Direct Access (disks)
++device		sa		# Sequential Access (tape etc)
++device		cd		# CD
++device		pass		# Passthrough device (direct SCSI access)
++device		ses		# SCSI Environmental Services (and SAF-TE)
++
++# RAID controllers interfaced to the SCSI subsystem
++device		amr		# AMI MegaRAID
++device		arcmsr		# Areca SATA II RAID
++device		ciss		# Compaq Smart RAID 5*
++device		dpt		# DPT Smartcache III, IV - See NOTES for options
++device		hptmv		# Highpoint RocketRAID 182x
++device		hptrr		# Highpoint RocketRAID 17xx, 22xx, 23xx, 25xx
++device		iir		# Intel Integrated RAID
++device		ips		# IBM (Adaptec) ServeRAID
++device		mly		# Mylex AcceleRAID/eXtremeRAID
++device		twa		# 3ware 9000 series PATA/SATA RAID
++
++# RAID controllers
++device		aac		# Adaptec FSA RAID
++device		aacp		# SCSI passthrough for aac (requires CAM)
++device		ida		# Compaq Smart RAID
++device		mfi		# LSI MegaRAID SAS
++device		mlx		# Mylex DAC960 family
++#XXX pointer/int warnings
++#device		pst		# Promise Supertrak SX6000
++device		twe		# 3ware ATA RAID
++
++# atkbdc0 controls both the keyboard and the PS/2 mouse
++device		atkbdc		# AT keyboard controller
++device		atkbd		# AT keyboard
++device		psm		# PS/2 mouse
++
++device		kbdmux		# keyboard multiplexer
++
++device		vga		# VGA video card driver
++
++device		splash		# Splash screen and screen saver support
++
++# syscons is the default console driver, resembling an SCO console
++device		sc
++
++device		agp		# support several AGP chipsets
++
++# PCCARD (PCMCIA) support
++# PCMCIA and cardbus bridge support
++device		cbb		# cardbus (yenta) bridge
++device		pccard		# PC Card (16-bit) bus
++device		cardbus		# CardBus (32-bit) bus
++
++# Serial (COM) ports
++device		sio		# 8250, 16[45]50 based serial ports
++device		uart		# Generic UART driver
++
++# Parallel port
++device		ppc
++device		ppbus		# Parallel port bus (required)
++device		lpt		# Printer
++device		plip		# TCP/IP over parallel
++device		ppi		# Parallel port interface device
++#device		vpo		# Requires scbus and da
++
++# If you've got a "dumb" serial or parallel PCI card that is
++# supported by the puc(4) glue driver, uncomment the following
++# line to enable it (connects to sio, uart and/or ppc drivers):
++#device		puc
++
++# PCI Ethernet NICs.
++device		de		# DEC/Intel DC21x4x (``Tulip'')
++device		em		# Intel PRO/1000 Gigabit Ethernet Family
++device		igb		# Intel PRO/1000 PCIE Server Gigabit Family
++device		ixgbe		# Intel PRO/10GbE PCIE Ethernet Family
++device		le		# AMD Am7900 LANCE and Am79C9xx PCnet
++device		txp		# 3Com 3cR990 (``Typhoon'')
++device		vx		# 3Com 3c590, 3c595 (``Vortex'')
++
++# PCI Ethernet NICs that use the common MII bus controller code.
++# NOTE: Be sure to keep the 'device miibus' line in order to use these NICs!
++device		miibus		# MII bus support
++device		age		# Attansic/Atheros L1 Gigabit Ethernet
++device		alc		# Atheros AR8131/AR8132 Ethernet
++device		ale		# Atheros AR8121/AR8113/AR8114 Ethernet
++device		bce		# Broadcom BCM5706/BCM5708 Gigabit Ethernet
++device		bfe		# Broadcom BCM440x 10/100 Ethernet
++device		bge		# Broadcom BCM570xx Gigabit Ethernet
++device		dc		# DEC/Intel 21143 and various workalikes
++device		et		# Agere ET1310 10/100/Gigabit Ethernet
++device		fxp		# Intel EtherExpress PRO/100B (82557, 82558)
++device		jme		# JMicron JMC250 Gigabit/JMC260 Fast Ethernet
++device		lge		# Level 1 LXT1001 gigabit Ethernet
++device		msk		# Marvell/SysKonnect Yukon II Gigabit Ethernet
++device		nfe		# nVidia nForce MCP on-board Ethernet
++device		nge		# NatSemi DP83820 gigabit Ethernet
++#device		nve		# nVidia nForce MCP on-board Ethernet Networking
++device		pcn		# AMD Am79C97x PCI 10/100 (precedence over 'le')
++device		re		# RealTek 8139C+/8169/8169S/8110S
++device		rl		# RealTek 8129/8139
++device		sf		# Adaptec AIC-6915 (``Starfire'')
++device		sis		# Silicon Integrated Systems SiS 900/SiS 7016
++device		sk		# SysKonnect SK-984x & SK-982x gigabit Ethernet
++device		ste		# Sundance ST201 (D-Link DFE-550TX)
++device		ti		# Alteon Networks Tigon I/II gigabit Ethernet
++device		tl		# Texas Instruments ThunderLAN
++device		tx		# SMC EtherPower II (83c170 ``EPIC'')
++device		vge		# VIA VT612x gigabit Ethernet
++device		vr		# VIA Rhine, Rhine II
++device		wb		# Winbond W89C840F
++device		xl		# 3Com 3c90x (``Boomerang'', ``Cyclone'')
++
++# ISA Ethernet NICs.  pccard NICs included.
++device		cs		# Crystal Semiconductor CS89x0 NIC
++# 'device ed' requires 'device miibus'
++device		ed		# NE[12]000, SMC Ultra, 3c503, DS8390 cards
++device		ex		# Intel EtherExpress Pro/10 and Pro/10+
++device		ep		# Etherlink III based cards
++device		fe		# Fujitsu MB8696x based cards
++device		sn		# SMC's 9000 series of Ethernet chips
++device		xe		# Xircom pccard Ethernet
++
++# Wireless NIC cards
++device		wlan		# 802.11 support
++device		wlan_wep	# 802.11 WEP support
++device		wlan_ccmp	# 802.11 CCMP support
++device		wlan_tkip	# 802.11 TKIP support
++device		wlan_amrr	# AMRR transmit rate control algorithm
++device		wlan_scan_ap	# 802.11 AP mode scanning
++device		wlan_scan_sta	# 802.11 STA mode scanning
++device		an		# Aironet 4500/4800 802.11 wireless NICs.
++device		ath		# Atheros pci/cardbus NIC's
++device		ath_hal		# Atheros HAL (Hardware Access Layer)
++options		AH_SUPPORT_AR5416	# enable AR5416 tx/rx descriptors
++device		ath_rate_sample	# SampleRate tx rate control for ath
++device		awi		# BayStack 660 and others
++device		ral		# Ralink Technology RT2500 wireless NICs.
++device		wi		# WaveLAN/Intersil/Symbol 802.11 wireless NICs.
++
++# Pseudo devices.
++device		loop		# Network loopback
++device		random		# Entropy device
++device		ether		# Ethernet support
++device		vlan		# 802.1Q VLAN support
++device		sl		# Kernel SLIP
++device		ppp		# Kernel PPP
++device		tun		# Packet tunnel.
++device		pty		# Pseudo-ttys (telnet etc)
++device		md		# Memory "disks"
++device		gif		# IPv6 and IPv4 tunneling
++device		faith		# IPv6-to-IPv4 relaying (translation)
++device		firmware	# firmware assist module
++
++# The `bpf' device enables the Berkeley Packet Filter.
++# Be aware of the administrative consequences of enabling this!
++# Note that 'bpf' is required for DHCP.
++device		bpf		# Berkeley packet filter
++
++# USB support
++device		uhci		# UHCI PCI->USB interface
++device		ohci		# OHCI PCI->USB interface
++device		ehci		# EHCI PCI->USB interface (USB 2.0)
++device		usb		# USB Bus (required)
++#device		udbp		# USB Double Bulk Pipe devices
++device		ugen		# Generic
++device		uhid		# "Human Interface Devices"
++device		ukbd		# Keyboard
++device		ulpt		# Printer
++device		umass		# Disks/Mass storage - Requires scbus and da
++device		ums		# Mouse
++device		urio		# Diamond Rio 500 MP3 player
++device		uscanner	# Scanners
++# USB Serial devices
++device		ucom		# Generic com ttys
++device		uark		# Technologies ARK3116 based serial adapters
++device		ubsa		# Belkin F5U103 and compatible serial adapters
++device		ubser		# BWCT console serial adapters
++device		uftdi		# For FTDI usb serial adapters
++device		uipaq		# Some WinCE based devices
++device		uplcom		# Prolific PL-2303 serial adapters
++device		uslcom		# SI Labs CP2101/CP2102 serial adapters
++device		uvisor		# Visor and Palm devices
++device		uvscom		# USB serial support for DDI pocket's PHS
++# USB Ethernet, requires miibus
++device		aue		# ADMtek USB Ethernet
++device		axe		# ASIX Electronics USB Ethernet
++device		cdce		# Generic USB over Ethernet
++device		cue		# CATC USB Ethernet
++device		kue		# Kawasaki LSI USB Ethernet
++device		rue		# RealTek RTL8150 USB Ethernet
++# USB Wireless
++device		rum		# Ralink Technology RT2501USB wireless NICs
++device		ural		# Ralink Technology RT2500USB wireless NICs
++
++# FireWire support
++device		firewire	# FireWire bus code
++device		sbp		# SCSI over FireWire (Requires scbus and da)
++device		fwe		# Ethernet over FireWire (non-standard!)
++device		fwip		# IP over FireWire (RFC 2734,3146)
++device		dcons		# Dumb console driver
++device		dcons_crom	# Configuration ROM for dcons
++
++# enable RADclock support
++options     RADCLOCK
++
++#enable PPS management in Kernel
++#options     PPS_SYNC
++
+diff -aur --unidirectional-new-file sys/conf/options.amd64 FreeBSD-7.3/conf/options.amd64
+--- sys/conf/options.amd64	2010-04-14 08:15:18.000000000 +1000
++++ FreeBSD-7.3/conf/options.amd64	2010-04-14 08:19:13.000000000 +1000
+@@ -68,3 +68,7 @@
+ 
+ # BPF just-in-time compiler
+ BPF_JITTER		opt_bpf.h
++
++# RADclock support 
++RADCLOCK		opt_radclock.h
++
+diff -aur --unidirectional-new-file sys/conf/options.i386 FreeBSD-7.3/conf/options.i386
+--- sys/conf/options.i386	2010-04-14 08:15:18.000000000 +1000
++++ FreeBSD-7.3/conf/options.i386	2010-04-14 08:19:13.000000000 +1000
+@@ -148,3 +148,7 @@
+ 
+ # BPF just-in-time compiler
+ BPF_JITTER		opt_bpf.h
++
++# RADclock support 
++RADCLOCK		opt_radclock.h
++
+diff -aur --unidirectional-new-file sys/i386/conf/RADCLOCK.i386 FreeBSD-7.3/i386/conf/RADCLOCK.i386
+--- sys/i386/conf/RADCLOCK.i386	1970-01-01 10:00:00.000000000 +1000
++++ FreeBSD-7.3/i386/conf/RADCLOCK.i386	2010-04-14 08:19:13.000000000 +1000
+@@ -0,0 +1,335 @@
++#
++# GENERIC -- Generic kernel configuration file for FreeBSD/i386
++#
++# For more information on this file, please read the handbook section on
++# Kernel Configuration Files:
++#
++#    http://www.FreeBSD.org/doc/en_US.ISO8859-1/books/handbook/kernelconfig-config.html
++#
++# The handbook is also available locally in /usr/share/doc/handbook
++# if you've installed the doc distribution, otherwise always see the
++# FreeBSD World Wide Web server (http://www.FreeBSD.org/) for the
++# latest information.
++#
++# An exhaustive list of options and more detailed explanations of the
++# device lines is also present in the ../../conf/NOTES and NOTES files.
++# If you are in doubt as to the purpose or necessity of a line, check first
++# in NOTES.
++#
++# $FreeBSD: src/sys/i386/conf/GENERIC,v 1.474.2.22.2.1 2010/02/10 00:26:20 kensmith Exp $
++
++cpu		I486_CPU
++cpu		I586_CPU
++cpu		I686_CPU
++ident	RADCLOCK
++
++# To statically compile in device wiring instead of /boot/device.hints
++#hints		"GENERIC.hints"		# Default places to look for devices.
++
++makeoptions	DEBUG=-g		# Build kernel with gdb(1) debug symbols
++
++options 	SCHED_ULE		# ULE scheduler
++options 	PREEMPTION		# Enable kernel thread preemption
++options 	INET			# InterNETworking
++options 	INET6			# IPv6 communications protocols
++options 	SCTP			# Stream Control Transmission Protocol
++options 	FFS			# Berkeley Fast Filesystem
++options 	SOFTUPDATES		# Enable FFS soft updates support
++options 	UFS_ACL			# Support for access control lists
++options 	UFS_DIRHASH		# Improve performance on big directories
++options 	UFS_GJOURNAL		# Enable gjournal-based UFS journaling
++options 	MD_ROOT			# MD is a potential root device
++options 	NFSCLIENT		# Network Filesystem Client
++options 	NFSSERVER		# Network Filesystem Server
++options 	NFSLOCKD		# Network Lock Manager
++options 	NFS_ROOT		# NFS usable as /, requires NFSCLIENT
++options 	MSDOSFS			# MSDOS Filesystem
++options 	CD9660			# ISO 9660 Filesystem
++options 	PROCFS			# Process filesystem (requires PSEUDOFS)
++options 	PSEUDOFS		# Pseudo-filesystem framework
++options 	GEOM_PART_GPT		# GUID Partition Tables.
++options 	GEOM_LABEL		# Provides labelization
++options 	COMPAT_43TTY		# BSD 4.3 TTY compat [KEEP THIS!]
++options 	COMPAT_FREEBSD4		# Compatible with FreeBSD4
++options 	COMPAT_FREEBSD5		# Compatible with FreeBSD5
++options 	COMPAT_FREEBSD6		# Compatible with FreeBSD6
++options 	SCSI_DELAY=5000		# Delay (in ms) before probing SCSI
++options 	KTRACE			# ktrace(1) support
++options 	STACK			# stack(9) support
++options 	SYSVSHM			# SYSV-style shared memory
++options 	SYSVMSG			# SYSV-style message queues
++options 	SYSVSEM			# SYSV-style semaphores
++options 	P1003_1B_SEMAPHORES	# POSIX-style semaphores
++options 	_KPOSIX_PRIORITY_SCHEDULING # POSIX P1003_1B real-time extensions
++options 	KBD_INSTALL_CDEV	# install a CDEV entry in /dev
++options 	ADAPTIVE_GIANT		# Giant mutex is adaptive.
++options 	STOP_NMI		# Stop CPUS using NMI instead of IPI
++options 	AUDIT			# Security event auditing
++#options 	KDTRACE_HOOKS		# Kernel DTrace hooks
++options 	INCLUDE_CONFIG_FILE     # Include this file in kernel
++
++# To make an SMP kernel, the next two lines are needed
++options 	SMP			# Symmetric MultiProcessor Kernel
++device		apic			# I/O APIC
++
++# CPU frequency control
++device		cpufreq
++
++# Bus support.
++device		eisa
++device		pci
++
++# Floppy drives
++device		fdc
++
++# ATA and ATAPI devices
++device		ata
++device		atadisk		# ATA disk drives
++device		ataraid		# ATA RAID drives
++device		atapicd		# ATAPI CDROM drives
++device		atapifd		# ATAPI floppy drives
++device		atapist		# ATAPI tape drives
++options 	ATA_STATIC_ID	# Static device numbering
++
++# SCSI Controllers
++device		ahb		# EISA AHA1742 family
++device		ahc		# AHA2940 and onboard AIC7xxx devices
++options 	AHC_REG_PRETTY_PRINT	# Print register bitfields in debug
++					# output.  Adds ~128k to driver.
++device		ahd		# AHA39320/29320 and onboard AIC79xx devices
++options 	AHD_REG_PRETTY_PRINT	# Print register bitfields in debug
++					# output.  Adds ~215k to driver.
++device		amd		# AMD 53C974 (Tekram DC-390(T))
++device		hptiop		# Highpoint RocketRaid 3xxx series
++device		isp		# Qlogic family
++#device 	ispfw		# Firmware for QLogic HBAs- normally a module
++device		mpt		# LSI-Logic MPT-Fusion
++#device		ncr		# NCR/Symbios Logic
++device		sym		# NCR/Symbios Logic (newer chipsets + those of `ncr')
++device		trm		# Tekram DC395U/UW/F DC315U adapters
++
++device		adv		# Advansys SCSI adapters
++device		adw		# Advansys wide SCSI adapters
++device		aha		# Adaptec 154x SCSI adapters
++device		aic		# Adaptec 15[012]x SCSI adapters, AIC-6[23]60.
++device		bt		# Buslogic/Mylex MultiMaster SCSI adapters
++
++device		ncv		# NCR 53C500
++device		nsp		# Workbit Ninja SCSI-3
++device		stg		# TMC 18C30/18C50
++
++# SCSI peripherals
++device		scbus		# SCSI bus (required for SCSI)
++device		ch		# SCSI media changers
++device		da		# Direct Access (disks)
++device		sa		# Sequential Access (tape etc)
++device		cd		# CD
++device		pass		# Passthrough device (direct SCSI access)
++device		ses		# SCSI Environmental Services (and SAF-TE)
++
++# RAID controllers interfaced to the SCSI subsystem
++device		amr		# AMI MegaRAID
++device		arcmsr		# Areca SATA II RAID
++device		asr		# DPT SmartRAID V, VI and Adaptec SCSI RAID
++device		ciss		# Compaq Smart RAID 5*
++device		dpt		# DPT Smartcache III, IV - See NOTES for options
++device		hptmv		# Highpoint RocketRAID 182x
++device		hptrr		# Highpoint RocketRAID 17xx, 22xx, 23xx, 25xx
++device		iir		# Intel Integrated RAID
++device		ips		# IBM (Adaptec) ServeRAID
++device		mly		# Mylex AcceleRAID/eXtremeRAID
++device		twa		# 3ware 9000 series PATA/SATA RAID
++
++# RAID controllers
++device		aac		# Adaptec FSA RAID
++device		aacp		# SCSI passthrough for aac (requires CAM)
++device		ida		# Compaq Smart RAID
++device		mfi		# LSI MegaRAID SAS
++device		mlx		# Mylex DAC960 family
++device		pst		# Promise Supertrak SX6000
++device		twe		# 3ware ATA RAID
++
++# atkbdc0 controls both the keyboard and the PS/2 mouse
++device		atkbdc		# AT keyboard controller
++device		atkbd		# AT keyboard
++device		psm		# PS/2 mouse
++
++device		kbdmux		# keyboard multiplexer
++
++device		vga		# VGA video card driver
++
++device		splash		# Splash screen and screen saver support
++
++# syscons is the default console driver, resembling an SCO console
++device		sc
++
++device		agp		# support several AGP chipsets
++
++# Power management support (see NOTES for more options)
++#device		apm
++# Add suspend/resume support for the i8254.
++device		pmtimer
++
++# PCCARD (PCMCIA) support
++# PCMCIA and cardbus bridge support
++device		cbb		# cardbus (yenta) bridge
++device		pccard		# PC Card (16-bit) bus
++device		cardbus		# CardBus (32-bit) bus
++
++# Serial (COM) ports
++device		sio		# 8250, 16[45]50 based serial ports
++device		uart		# Generic UART driver
++
++# Parallel port
++device		ppc
++device		ppbus		# Parallel port bus (required)
++device		lpt		# Printer
++device		plip		# TCP/IP over parallel
++device		ppi		# Parallel port interface device
++#device		vpo		# Requires scbus and da
++
++# If you've got a "dumb" serial or parallel PCI card that is
++# supported by the puc(4) glue driver, uncomment the following
++# line to enable it (connects to sio, uart and/or ppc drivers):
++#device		puc
++
++# PCI Ethernet NICs.
++device		de		# DEC/Intel DC21x4x (``Tulip'')
++device		em		# Intel PRO/1000 Gigabit Ethernet Family
++device		igb		# Intel PRO/1000 PCIE Server Gigabit Family
++device		ixgb		# Intel PRO/10GbE Ethernet Card
++device		le		# AMD Am7900 LANCE and Am79C9xx PCnet
++device		txp		# 3Com 3cR990 (``Typhoon'')
++device		vx		# 3Com 3c590, 3c595 (``Vortex'')
++
++# PCI Ethernet NICs that use the common MII bus controller code.
++# NOTE: Be sure to keep the 'device miibus' line in order to use these NICs!
++device		miibus		# MII bus support
++device		age		# Attansic/Atheros L1 Gigabit Ethernet
++device		alc		# Atheros AR8131/AR8132 Ethernet
++device		ale		# Atheros AR8121/AR8113/AR8114 Ethernet
++device		bce		# Broadcom BCM5706/BCM5708 Gigabit Ethernet
++device		bfe		# Broadcom BCM440x 10/100 Ethernet
++device		bge		# Broadcom BCM570xx Gigabit Ethernet
++device		dc		# DEC/Intel 21143 and various workalikes
++device		et		# Agere ET1310 10/100/Gigabit Ethernet
++device		fxp		# Intel EtherExpress PRO/100B (82557, 82558)
++device		jme		# JMicron JMC250 Gigabit/JMC260 Fast Ethernet
++device		lge		# Level 1 LXT1001 gigabit Ethernet
++device		msk		# Marvell/SysKonnect Yukon II Gigabit Ethernet
++device		nfe		# nVidia nForce MCP on-board Ethernet
++device		nge		# NatSemi DP83820 gigabit Ethernet
++#device		nve		# nVidia nForce MCP on-board Ethernet Networking
++device		pcn		# AMD Am79C97x PCI 10/100 (precedence over 'le')
++device		re		# RealTek 8139C+/8169/8169S/8110S
++device		rl		# RealTek 8129/8139
++device		sf		# Adaptec AIC-6915 (``Starfire'')
++device		sis		# Silicon Integrated Systems SiS 900/SiS 7016
++device		sk		# SysKonnect SK-984x & SK-982x gigabit Ethernet
++device		ste		# Sundance ST201 (D-Link DFE-550TX)
++device		stge		# Sundance/Tamarack TC9021 gigabit Ethernet
++device		ti		# Alteon Networks Tigon I/II gigabit Ethernet
++device		tl		# Texas Instruments ThunderLAN
++device		tx		# SMC EtherPower II (83c170 ``EPIC'')
++device		vge		# VIA VT612x gigabit Ethernet
++device		vr		# VIA Rhine, Rhine II
++device		wb		# Winbond W89C840F
++device		xl		# 3Com 3c90x (``Boomerang'', ``Cyclone'')
++
++# ISA Ethernet NICs.  pccard NICs included.
++device		cs		# Crystal Semiconductor CS89x0 NIC
++# 'device ed' requires 'device miibus'
++device		ed		# NE[12]000, SMC Ultra, 3c503, DS8390 cards
++device		ex		# Intel EtherExpress Pro/10 and Pro/10+
++device		ep		# Etherlink III based cards
++device		fe		# Fujitsu MB8696x based cards
++device		ie		# EtherExpress 8/16, 3C507, StarLAN 10 etc.
++device		sn		# SMC's 9000 series of Ethernet chips
++device		xe		# Xircom pccard Ethernet
++
++# Wireless NIC cards
++device		wlan		# 802.11 support
++device		wlan_wep	# 802.11 WEP support
++device		wlan_ccmp	# 802.11 CCMP support
++device		wlan_tkip	# 802.11 TKIP support
++device		wlan_amrr	# AMRR transmit rate control algorithm
++device		wlan_scan_ap	# 802.11 AP mode scanning
++device		wlan_scan_sta	# 802.11 STA mode scanning
++device		an		# Aironet 4500/4800 802.11 wireless NICs.
++device		ath		# Atheros pci/cardbus NIC's
++device		ath_hal		# Atheros HAL (Hardware Access Layer)
++options		AH_SUPPORT_AR5416	# enable AR5416 tx/rx descriptors
++device		ath_rate_sample	# SampleRate tx rate control for ath
++device		awi		# BayStack 660 and others
++device		ral		# Ralink Technology RT2500 wireless NICs.
++device		wi		# WaveLAN/Intersil/Symbol 802.11 wireless NICs.
++#device		wl		# Older non 802.11 Wavelan wireless NIC.
++
++# Pseudo devices.
++device		loop		# Network loopback
++device		random		# Entropy device
++device		ether		# Ethernet support
++device		vlan		# 802.1Q VLAN support
++device		sl		# Kernel SLIP
++device		ppp		# Kernel PPP
++device		tun		# Packet tunnel.
++device		pty		# Pseudo-ttys (telnet etc)
++device		md		# Memory "disks"
++device		gif		# IPv6 and IPv4 tunneling
++device		faith		# IPv6-to-IPv4 relaying (translation)
++device		firmware	# firmware assist module
++
++# The `bpf' device enables the Berkeley Packet Filter.
++# Be aware of the administrative consequences of enabling this!
++# Note that 'bpf' is required for DHCP.
++device		bpf		# Berkeley packet filter
++
++# USB support
++device		uhci		# UHCI PCI->USB interface
++device		ohci		# OHCI PCI->USB interface
++device		ehci		# EHCI PCI->USB interface (USB 2.0)
++device		usb		# USB Bus (required)
++#device		udbp		# USB Double Bulk Pipe devices
++device		ugen		# Generic
++device		uhid		# "Human Interface Devices"
++device		ukbd		# Keyboard
++device		ulpt		# Printer
++device		umass		# Disks/Mass storage - Requires scbus and da
++device		ums		# Mouse
++device		urio		# Diamond Rio 500 MP3 player
++device		uscanner	# Scanners
++# USB Serial devices
++device		ucom		# Generic com ttys
++device		uark		# Technologies ARK3116 based serial adapters
++device		ubsa		# Belkin F5U103 and compatible serial adapters
++device		ubser		# BWCT console serial adapters
++device		uftdi		# For FTDI usb serial adapters
++device		uipaq		# Some WinCE based devices
++device		uplcom		# Prolific PL-2303 serial adapters
++device		uslcom		# SI Labs CP2101/CP2102 serial adapters
++device		uvisor		# Visor and Palm devices
++device		uvscom		# USB serial support for DDI pocket's PHS
++# USB Ethernet, requires miibus
++device		aue		# ADMtek USB Ethernet
++device		axe		# ASIX Electronics USB Ethernet
++device		cdce		# Generic USB over Ethernet
++device		cue		# CATC USB Ethernet
++device		kue		# Kawasaki LSI USB Ethernet
++device		rue		# RealTek RTL8150 USB Ethernet
++# USB Wireless
++device		rum		# Ralink Technology RT2501USB wireless NICs
++device		ural		# Ralink Technology RT2500USB wireless NICs
++
++# FireWire support
++device		firewire	# FireWire bus code
++device		sbp		# SCSI over FireWire (Requires scbus and da)
++device		fwe		# Ethernet over FireWire (non-standard!)
++device		fwip		# IP over FireWire (RFC 2734,3146)
++device		dcons		# Dumb console driver
++device		dcons_crom	# Configuration ROM for dcons
++
++# enable RADCLOCK support 
++options		RADCLOCK
++
++#enable PPS management in Kernel
++#options		PPS_SYNC
+diff -aur --unidirectional-new-file sys/kern/kern_tc.c FreeBSD-7.3/kern/kern_tc.c
+--- sys/kern/kern_tc.c	2010-04-14 08:15:39.000000000 +1000
++++ FreeBSD-7.3/kern/kern_tc.c	2010-04-14 08:19:13.000000000 +1000
+@@ -11,6 +11,7 @@
+ __FBSDID("$FreeBSD: src/sys/kern/kern_tc.c,v 1.178.2.3.4.1 2010/02/10 00:26:20 kensmith Exp $");
+ 
+ #include "opt_ntp.h"
++#include "opt_radclock.h"
+ 
+ #include <sys/param.h>
+ #include <sys/kernel.h>
+@@ -53,6 +54,11 @@
+ 	int64_t			th_adjustment;
+ 	u_int64_t		th_scale;
+ 	u_int	 		th_offset_count;
++
++#ifdef RADCLOCK
++	vcounter_t		vcounter_record;
++#endif
++
+ 	struct bintime		th_offset;
+ 	struct timeval		th_microtime;
+ 	struct timespec		th_nanotime;
+@@ -61,6 +67,30 @@
+ 	struct timehands	*th_next;
+ };
+ 
++#ifdef RADCLOCK
++static struct timehands th0;
++static struct timehands th9 = { NULL, 0, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th0};
++static struct timehands th8 = { NULL, 0, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th9};
++static struct timehands th7 = { NULL, 0, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th8};
++static struct timehands th6 = { NULL, 0, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th7};
++static struct timehands th5 = { NULL, 0, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th6};
++static struct timehands th4 = { NULL, 0, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th5};
++static struct timehands th3 = { NULL, 0, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th4};
++static struct timehands th2 = { NULL, 0, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th3};
++static struct timehands th1 = { NULL, 0, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th2};
++static struct timehands th0 = {
++	&dummy_timecounter,
++	0,
++	(uint64_t)-1 / 1000000,
++	0,
++	0,
++	{1, 0},
++	{0, 0},
++	{0, 0},
++	1,
++	&th1
++};
++#else
+ static struct timehands th0;
+ static struct timehands th9 = { NULL, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th0};
+ static struct timehands th8 = { NULL, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th9};
+@@ -82,6 +112,7 @@
+ 	1,
+ 	&th1
+ };
++#endif	/* RADCLOCK */
+ 
+ static struct timehands *volatile timehands = &th0;
+ struct timecounter *timecounter = &dummy_timecounter;
+@@ -179,6 +210,24 @@
+  * the comment in <sys/time.h> for a description of these 12 functions.
+  */
+ 
++#ifdef RADCLOCK
++vcounter_t
++read_vcounter(void)
++{
++	struct timehands *th;
++	u_int gen, delta;
++	vcounter_t vcount;
++	do{
++		th = timehands;
++		gen = th->th_generation;
++		delta = tc_delta(th);
++		vcount = th->vcounter_record;
++	} while ( gen == 0 || gen != th->th_generation);
++
++	return(vcount + delta);
++}
++#endif	/* RADCLOCK */
++
+ void
+ binuptime(struct bintime *bt)
+ {
+@@ -469,6 +518,11 @@
+ 		ncount = timecounter->tc_get_timecount(timecounter);
+ 	else
+ 		ncount = 0;
++
++#ifdef RADCLOCK
++	th->vcounter_record += delta;
++#endif
++
+ 	th->th_offset_count += delta;
+ 	th->th_offset_count &= th->th_counter->tc_counter_mask;
+ 	bintime_addx(&th->th_offset, th->th_scale * delta);
+@@ -513,6 +567,9 @@
+ 	if (th->th_counter != timecounter) {
+ 		th->th_counter = timecounter;
+ 		th->th_offset_count = ncount;
++		#ifdef RADCLOCK
++		th->vcounter_record = 0;
++		#endif
+ 	}
+ 
+ 	/*-
+@@ -621,6 +678,10 @@
+ {
+ 	pps_params_t *app;
+ 	struct pps_fetch_args *fapi;
++#ifdef RADCLOCK
++	struct radclock_pps_fetch_args *radclock_fapi;
++#endif
++
+ #ifdef PPS_SYNC
+ 	struct pps_kcbind_args *kapi;
+ #endif
+@@ -654,6 +715,19 @@
+ 		pps->ppsinfo.current_mode = pps->ppsparam.mode;
+ 		fapi->pps_info_buf = pps->ppsinfo;
+ 		return (0);
++
++#ifdef RADCLOCK
++	case RADCLOCK_PPS_IOC_FETCH:
++		radclock_fapi = (struct radclock_pps_fetch_args *)data;
++		if (radclock_fapi->tsformat && radclock_fapi->tsformat != PPS_TSFMT_TSPEC)
++			return (EINVAL);
++		if (radclock_fapi->timeout.tv_sec || radclock_fapi->timeout.tv_nsec)
++			return (EOPNOTSUPP);
++		pps->ppsinfo.current_mode = pps->ppsparam.mode;
++		radclock_fapi->pps_info_buf = pps->radclock_ppsinfo;
++		return (0);
++#endif 	/* RADCLOCK */
++
+ 	case PPS_IOC_KCBIND:
+ #ifdef PPS_SYNC
+ 		kapi = (struct pps_kcbind_args *)data;
+@@ -706,6 +780,12 @@
+ 	u_int tcount, *pcount;
+ 	int foff, fhard;
+ 	pps_seq_t *pseq;
++#ifdef RADCLOCK
++	struct timespec *radclock_tsp;
++	pps_seq_t *radclock_pseq;
++	vcounter_t *vcount;
++	vcounter_t vcounter_record;
++#endif
+ 
+ 	KASSERT(pps != NULL, ("NULL pps pointer in pps_event"));
+ 	/* If the timecounter was wound up underneath us, bail out. */
+@@ -720,6 +800,11 @@
+ 		fhard = pps->kcmode & PPS_CAPTUREASSERT;
+ 		pcount = &pps->ppscount[0];
+ 		pseq = &pps->ppsinfo.assert_sequence;
++#ifdef RADCLOCK
++		vcount = &pps->radclock_ppsinfo.assert_vcount;
++		radclock_tsp = &pps->radclock_ppsinfo.assert_timestamp;
++		radclock_pseq = &pps->radclock_ppsinfo.assert_sequence;
++#endif
+ 	} else {
+ 		tsp = &pps->ppsinfo.clear_timestamp;
+ 		osp = &pps->ppsparam.clear_offset;
+@@ -727,6 +812,11 @@
+ 		fhard = pps->kcmode & PPS_CAPTURECLEAR;
+ 		pcount = &pps->ppscount[1];
+ 		pseq = &pps->ppsinfo.clear_sequence;
++#ifdef RADCLOCK
++		vcount = &pps->radclock_ppsinfo.clear_vcount;
++		radclock_tsp = &pps->radclock_ppsinfo.clear_timestamp;
++		radclock_pseq = &pps->radclock_ppsinfo.clear_sequence;
++#endif
+ 	}
+ 
+ 	/*
+@@ -743,6 +833,9 @@
+ 	/* Convert the count to a timespec. */
+ 	tcount = pps->capcount - pps->capth->th_offset_count;
+ 	tcount &= pps->capth->th_counter->tc_counter_mask;
++#ifdef RADCLOCK
++	vcounter_record = pps->capth->vcounter_record;
++#endif
+ 	bt = pps->capth->th_offset;
+ 	bintime_addx(&bt, pps->capth->th_scale * tcount);
+ 	bintime_add(&bt, &boottimebin);
+@@ -755,6 +848,11 @@
+ 	*pcount = pps->capcount;
+ 	(*pseq)++;
+ 	*tsp = ts;
++#ifdef RADCLOCK
++	(*radclock_pseq)++;
++	*radclock_tsp = ts;
++	*vcount = (vcounter_record + tcount);
++#endif
+ 
+ 	if (foff) {
+ 		timespecadd(tsp, osp);
+diff -aur --unidirectional-new-file sys/kern/radclock.c FreeBSD-7.3/kern/radclock.c
+--- sys/kern/radclock.c	1970-01-01 10:00:00.000000000 +1000
++++ FreeBSD-7.3/kern/radclock.c	2010-04-14 08:19:13.000000000 +1000
+@@ -0,0 +1,160 @@
++/*
++ * System calls to access the cumulative virtual timecounter
++ */
++
++#include <sys/types.h>
++#include <sys/param.h>
++#include <sys/proc.h>
++#include <sys/module.h>
++#include <sys/sysent.h>
++#include <sys/kernel.h>
++#include <sys/systm.h>
++#include <sys/time.h>
++#include <sys/sysproto.h>
++#include <sys/bus.h>
++
++
++/*
++ * First system call is get_vcounter to retrieve the current value
++ * of the cumulative vritual counter from the timecounter interface
++ */
++
++struct get_vcounter_args {
++	vcounter_t *vcount;
++};
++
++static int
++get_vcounter(struct proc *td, void *syscall_args)
++{
++	vcounter_t vcount = 0;
++	int error = 0;
++	struct get_vcounter_args *uap;
++
++	uap = (struct get_vcounter_args *) syscall_args;
++	if ( uap->vcount == NULL )
++		return -1;
++	
++	vcount = read_vcounter();
++	error = copyout(&vcount, uap->vcount, sizeof(vcounter_t));
++	
++	if ( vcount == 0 ) 
++		error = -1;
++
++	return(error);
++}
++
++
++static struct sysent get_vcounter_sysent = {
++	1,
++	(sy_call_t *) get_vcounter,
++	AUE_NULL, 
++	NULL, 
++	0, 
++	0 
++};
++
++
++static int get_vcounter_offset = NO_SYSCALL;
++
++static int
++get_vcounter_load (struct module *module, int cmd, void *arg)
++{
++	int error = 0;
++	switch (cmd) {
++		case MOD_LOAD :
++			printf("get_vcounter syscall loaded at %d \n", get_vcounter_offset);
++		break;
++		case MOD_UNLOAD :
++			printf("get_vcounter syscall unloaded from %d\n", get_vcounter_offset);
++		break;
++		default :
++			error = EINVAL;
++		break;
++	}
++	return error;
++}
++
++SYSCALL_MODULE(get_vcounter, &get_vcounter_offset, &get_vcounter_sysent, get_vcounter_load, NULL);
++
++
++
++/*
++ * Second system call is get_vcounter_latency to compute the latency of
++ * the timecounter interface from within the kernel
++ *
++ * XXX: of course this makes sense ONLY if we have a stable TSC
++ * (i.e. no SMP, no power management, no frequency jumps etc.) 
++ */
++
++struct get_vcounter_latency_args {
++	vcounter_t *vcount;
++	uint64_t *vcount_lat;
++	uint64_t *tsc_lat;
++};
++
++static int
++get_vcounter_latency(struct proc *td, void *syscall_args)
++{
++	uint64_t tsc1 = 0, tsc2 = 0, tsc3 = 0, vcount_lat = 0, tsc_lat = 0;
++	vcounter_t vcount;
++	int error = 0;
++	struct get_vcounter_latency_args *uap;
++
++	uap = (struct get_vcounter_latency_args *) syscall_args;
++
++	/* One for fun and warmup */
++	tsc1 = rdtsc();
++	__asm __volatile("lfence" ::: "memory");
++	tsc1 = rdtsc();
++	__asm __volatile("lfence" ::: "memory");
++	tsc2 = rdtsc();
++	__asm __volatile("lfence" ::: "memory");
++	vcount = read_vcounter();
++	__asm __volatile("lfence" ::: "memory");
++	tsc3 = rdtsc();
++	__asm __volatile("lfence" ::: "memory");
++
++	tsc_lat = tsc2 - tsc1;
++	vcount_lat = tsc3 - tsc2;
++
++	error += copyout(&vcount, uap->vcount, sizeof(vcounter_t));
++	error += copyout(&vcount_lat, uap->vcount_lat, sizeof(uint64_t));
++	error += copyout(&tsc_lat, uap->tsc_lat, sizeof(uint64_t));
++
++	return(error);
++}
++
++
++static struct sysent get_vcounter_latency_sysent = {
++	3,
++	(sy_call_t *) get_vcounter_latency,
++	AUE_NULL, 
++	NULL, 
++	0, 
++	0 
++};
++
++
++static int get_vcounter_latency_offset = NO_SYSCALL;
++
++static int
++get_vcounter_latency_load (struct module *module, int cmd, void *arg)
++{
++	int error = 0;
++	switch (cmd) {
++		case MOD_LOAD :
++			printf("get_vcounter_latency syscall loaded at %d \n", get_vcounter_latency_offset);
++		break;
++		case MOD_UNLOAD :
++			printf("get_vcounter_latency syscall unloaded from %d\n", get_vcounter_latency_offset);
++		break;
++		default :
++			error = EINVAL;
++		break;
++	}
++	return error;
++}
++
++SYSCALL_MODULE(get_vcounter_latency, &get_vcounter_latency_offset, &get_vcounter_latency_sysent, get_vcounter_latency_load, NULL);
++
++
+diff -aur --unidirectional-new-file sys/modules/Makefile FreeBSD-7.3/modules/Makefile
+--- sys/modules/Makefile	2010-04-14 08:15:44.000000000 +1000
++++ FreeBSD-7.3/modules/Makefile	2010-04-14 08:19:13.000000000 +1000
+@@ -2,7 +2,7 @@
+ 
+ .include <bsd.own.mk>
+ 
+-SUBDIR=	${_3dfx} \
++SUBDIR= radclock 	${_3dfx} \
+ 	${_3dfx_linux} \
+ 	${_aac} \
+ 	accf_data \
+@@ -652,7 +652,7 @@
+ .endif
+ 
+ .if defined(MODULES_OVERRIDE) && !defined(ALL_MODULES)
+-SUBDIR=${MODULES_OVERRIDE}
++SUBDIR= radclock ${MODULES_OVERRIDE}
+ .endif
+ 
+ .for reject in ${WITHOUT_MODULES}
+diff -aur --unidirectional-new-file sys/modules/radclock/Makefile FreeBSD-7.3/modules/radclock/Makefile
+--- sys/modules/radclock/Makefile	1970-01-01 10:00:00.000000000 +1000
++++ FreeBSD-7.3/modules/radclock/Makefile	2010-04-14 08:19:13.000000000 +1000
+@@ -0,0 +1,15 @@
++# This make file creates the .ko module for retrieving the vitual counter through syscall.
++
++.PATH: ${.CURDIR}/../../kern
++
++KMOD    =  radclock
++SRCS    =  radclock.c
++
++SRCS+=	opt_radclock.h
++
++.if !defined(KERNBUILDDIR)
++opt_radclock.h:
++	echo "#define RADCLOCK 1" > opt_radclock.h
++.endif
++
++.include <bsd.kmod.mk>
+diff -aur --unidirectional-new-file sys/net/bpf.c FreeBSD-7.3/net/bpf.c
+--- sys/net/bpf.c	2010-04-14 08:15:44.000000000 +1000
++++ FreeBSD-7.3/net/bpf.c	2010-04-14 08:19:13.000000000 +1000
+@@ -106,9 +106,17 @@
+ static void	bpf_timed_out(void *);
+ static __inline void
+ 		bpf_wakeup(struct bpf_d *);
++/* RADCLOCK
++ * Replace catchpacket by our new prototype ...
++ * static void	catchpacket(struct bpf_d *, u_char *, u_int,
++ *		    u_int, void (*)(const void *, void *, size_t),
++ *		    struct timeval *);
++ */
+ static void	catchpacket(struct bpf_d *, u_char *, u_int,
+ 		    u_int, void (*)(const void *, void *, size_t),
+-		    struct timeval *);
++			struct timeval *, vcounter_t *);
++static void radclock_fill_timeval(vcounter_t vcounter, struct timeval *time);
++/* end RADCLOCK */
+ static void	reset_d(struct bpf_d *);
+ static int	 bpf_setf(struct bpf_d *, struct bpf_program *, u_long cmd);
+ static int	bpf_getdltlist(struct bpf_d *, struct bpf_dltlist *);
+@@ -131,6 +139,11 @@
+     &bpf_maxinsns, 0, "Maximum bpf program instructions");
+ SYSCTL_NODE(_net_bpf, OID_AUTO, stats, CTLFLAG_MPSAFE | CTLFLAG_RW,
+     bpf_stats_sysctl, "bpf statistics portal");
++#ifdef RADCLOCK
++static int bpf_radclock_tsmode = RADCLOCK_TSMODE_SYSCLOCK;
++SYSCTL_INT(_net_bpf, OID_AUTO, bpf_radclock_tsmode, CTLFLAG_RW,
++	&bpf_radclock_tsmode, 0, "Default RADclock timestamping mode");
++#endif /* RADCLOCK */
+ 
+ static	d_open_t	bpfopen;
+ static	d_close_t	bpfclose;
+@@ -156,6 +169,14 @@
+ static struct filterops bpfread_filtops =
+ 	{ 1, NULL, filt_bpfdetach, filt_bpfread };
+ 
++#ifdef RADCLOCK
++/* Global data structure containing clock calibration data 
++ * rough guess of 1Ghz beats zero 
++ */ 
++static struct radclock_data radclock = {1e-9,0,0,0,0,0,0,0,0};
++static struct radclock_fixedpoint radclock_fp = {0,0,0,0,0,0};
++#endif /* RADCLOCK */
++
+ static int
+ bpf_movein(struct uio *uio, int linktype, struct ifnet *ifp, struct mbuf **mp,
+     struct sockaddr *sockp, int *hdrlen, struct bpf_insn *wfilter)
+@@ -427,6 +448,11 @@
+ 	callout_init(&d->bd_callout, CALLOUT_MPSAFE);
+ 	knlist_init_mtx(&d->bd_sel.si_note, &d->bd_mtx);
+ 
++#ifdef RADCLOCK
++	/* Timestamping mode for this device, default is use SYSCLOCK */
++	d->radclock_tsmode = bpf_radclock_tsmode;
++#endif /* RADCLOCK */
++
+ 	return (0);
+ }
+ 
+@@ -1060,6 +1086,49 @@
+ 	case BIOCGRSIG:
+ 		*(u_int *)addr = d->bd_sig;
+ 		break;
++
++#ifdef RADCLOCK
++	/* Set RADclock data */
++	case BIOCSRADCLOCKDATA:
++		{
++			BPFD_LOCK(d);
++			radclock = *(struct radclock_data *)addr;
++			BPFD_UNLOCK(d);
++			break;
++		}
++	/* Get RADclock data */
++	case BIOCGRADCLOCKDATA:
++		{
++			BPFD_LOCK(d);
++			*(struct radclock_data *)addr = radclock;
++			BPFD_UNLOCK(d);
++			break;
++		}
++	/* Set RADclock timestamping mode for this device) */
++	case BIOCSRADCLOCKTSMODE:
++		{
++			BPFD_LOCK(d);
++			d->radclock_tsmode = *(int8_t *)addr;  
++			BPFD_UNLOCK(d);
++			break;
++		}
++	/* Get RADclock timestamping mode for this device) */
++	case BIOCGRADCLOCKTSMODE:
++		{
++			BPFD_LOCK(d);
++			*(int8_t *)addr = d->radclock_tsmode;
++			BPFD_UNLOCK(d);
++			break;
++		}
++	/* Set RADclock fixedpoint data */
++	case BIOCSRADCLOCKFIXED:
++		{
++			BPFD_LOCK(d);
++			radclock_fp = *(struct radclock_fixedpoint *)addr;
++			BPFD_UNLOCK(d);
++			break;
++		}
++#endif /* RADCLOCK */
+ 	}
+ 	return (error);
+ }
+@@ -1294,6 +1363,9 @@
+ 	u_int slen;
+ 	int gottime;
+ 	struct timeval tv;
++#ifdef RADCLOCK
++	vcounter_t vcount;
++#endif
+ 
+ 	gottime = 0;
+ 	BPFIF_LOCK(bp);
+@@ -1311,12 +1383,19 @@
+ 			d->bd_fcount++;
+ 			if (!gottime) {
+ 				microtime(&tv);
++#ifdef RADCLOCK
++				vcount = read_vcounter();
++#endif
+ 				gottime = 1;
+ 			}
+ #ifdef MAC
+ 			if (mac_check_bpfdesc_receive(d, bp->bif_ifp) == 0)
+ #endif
+-				catchpacket(d, pkt, pktlen, slen, bcopy, &tv);
++#ifdef RADCLOCK
++				catchpacket(d, pkt, pktlen, slen, bcopy, &tv, &vcount);
++#else
++				catchpacket(d, pkt, pktlen, slen, bcopy, &tv, NULL);
++#endif
+ 		}
+ 		BPFD_UNLOCK(d);
+ 	}
+@@ -1365,6 +1444,10 @@
+ 	int gottime;
+ 	struct timeval tv;
+ 
++#ifdef RADCLOCK
++	vcounter_t vcount;
++#endif
++
+ 	/* Skip outgoing duplicate packets. */
+ 	if ((m->m_flags & M_PROMISC) != 0 && m->m_pkthdr.rcvif == NULL) {
+ 		m->m_flags &= ~M_PROMISC;
+@@ -1393,13 +1476,23 @@
+ 			d->bd_fcount++;
+ 			if (!gottime) {
+ 				microtime(&tv);
++
++#ifdef RADCLOCK
++				vcount = read_vcounter();
++#endif
+ 				gottime = 1;
+ 			}
+ #ifdef MAC
+ 			if (mac_check_bpfdesc_receive(d, bp->bif_ifp) == 0)
+ #endif
++
++#ifdef RADCLOCK
++				catchpacket(d, (u_char *)m, pktlen, slen,
++				    bpf_mcopy, &tv, &vcount);
++#else
+ 				catchpacket(d, (u_char *)m, pktlen, slen,
+-				    bpf_mcopy, &tv);
++				    bpf_mcopy, &tv, NULL);
++#endif 	/* RADCLOCK */
+ 		}
+ 		BPFD_UNLOCK(d);
+ 	}
+@@ -1419,6 +1512,10 @@
+ 	int gottime;
+ 	struct timeval tv;
+ 
++#ifdef RADCLOCK
++	vcounter_t vcount;
++#endif 	/* RADCLOCK */
++
+ 	/* Skip outgoing duplicate packets. */
+ 	if ((m->m_flags & M_PROMISC) != 0 && m->m_pkthdr.rcvif == NULL) {
+ 		m->m_flags &= ~M_PROMISC;
+@@ -1449,21 +1546,168 @@
+ 			d->bd_fcount++;
+ 			if (!gottime) {
+ 				microtime(&tv);
++
++#ifdef RADCLOCK
++				vcount = read_vcounter();
++#endif 	/* RADCLOCK */
+ 				gottime = 1;
+ 			}
+ #ifdef MAC
+ 			if (mac_check_bpfdesc_receive(d, bp->bif_ifp) == 0)
+ #endif
++
++#ifdef RADCLOCK
++				catchpacket(d, (u_char *)&mb, pktlen, slen,
++				    bpf_mcopy, &tv, &vcount);
++#else
+ 				catchpacket(d, (u_char *)&mb, pktlen, slen,
+-				    bpf_mcopy, &tv);
++				    bpf_mcopy, &tv, NULL);
++#endif	/* RADCLOCK */
+ 		}
+ 		BPFD_UNLOCK(d);
+ 	}
+ 	BPFIF_UNLOCK(bp);
+ }
+ 
++
++#ifdef RADCLOCK
++/*
++ * Incoming linkage from device drivers, when packet is in an mbuf chain.
++ * RADCLOCK version
++ */
++void
++bpf_mtap_radclock_rcv(struct bpf_if *bp, struct mbuf *m, struct timeval *tv, vcounter_t *vcount)
++{
++	struct bpf_d *d;
++	u_int pktlen, slen;
++	int gottime;
++	/* RADCLOCK: memory allocated before on the receiving side */
++	/*	struct timeval tv; */
++
++	/* Skip outgoing duplicate packets. */
++	if ((m->m_flags & M_PROMISC) != 0 && m->m_pkthdr.rcvif == NULL) {
++		m->m_flags &= ~M_PROMISC;
++		return;
++	}
++
++	gottime = 0;
++
++	pktlen = m_length(m, NULL);
++
++	BPFIF_LOCK(bp);
++	LIST_FOREACH(d, &bp->bif_dlist, bd_next) {
++		if (BPF_CHECK_DIRECTION(d, m->m_pkthdr.rcvif, bp->bif_ifp))
++			continue;
++		BPFD_LOCK(d);
++		++d->bd_rcount;
++#ifdef BPF_JITTER
++		/* XXX We cannot handle multiple mbufs. */
++		if (bpf_jitter_enable != 0 && d->bd_bfilter != NULL &&
++		    m->m_next == NULL)
++			slen = (*(d->bd_bfilter->func))(mtod(m, u_char *),
++			    pktlen, pktlen);
++		else
++#endif
++		slen = bpf_filter(d->bd_rfilter, (u_char *)m, pktlen, 0);
++		if (slen != 0) {
++			d->bd_fcount++;
++
++			/* RADCLOCK
++			 * If SYSCLOCK mode, no reason for us to improve microtime()
++			 */
++			switch (d->radclock_tsmode) { 
++				case RADCLOCK_TSMODE_SYSCLOCK:
++				case RADCLOCK_TSMODE_RADCLOCK:
++					gottime = 0;
++					break;
++				case RADCLOCK_TSMODE_FAIRCOMPARE:
++					gottime = 1;
++					break;
++				default:
++					panic("bpf_mtap_radclock_rcv - Unknown RADclock timestamping mode");
++			}
++
++			if (!gottime) {
++				/* RADCLOCK
++				 * microtime(&tv);
++				 */
++				microtime(tv);
++				gottime = 1;
++			}
++#ifdef MAC
++			if (mac_check_bpfdesc_receive(d, bp->bif_ifp) == 0)
++#endif
++				/* RADCLOCK
++				 * Passes tval and tc directly to catchpacket() on receiving 
++				 */
++				catchpacket(d, (u_char *)m, pktlen, slen,
++				    bpf_mcopy, tv, vcount);
++		}
++		BPFD_UNLOCK(d);
++	}
++	BPFIF_UNLOCK(bp);
++}
++#endif /* RADCLOCK */
++
++
+ #undef	BPF_CHECK_DIRECTION
+ 
++
++#ifdef RADCLOCK
++static void 
++radclock_fill_timeval(vcounter_t vcounter, struct timeval *time)
++{
++	vcounter_t countdiff;
++	struct timeval tval;
++	uint64_t time_f;
++	uint64_t frac;
++
++	/* Synchronization algorithm (userland) should update the fixed point data
++	 * often enough to make sure the timeval does not overflow. If no sync algo
++	 * updates the data, we loose precision, but in that case, nobody is tracking
++	 * the clock drift anyway ... so send warning and stop worrying.
++	 */
++
++	/* XXX: So far we are called from catchpacket() only, that ia called from
++	 * one of the *tap functions, each of them holding the BPFD_LOCK(bd) lock.
++	 * ioctl ops are conditioned by the same lock, ensuring the consistency of
++	 * the fixedpoint data. If we move away from the BPF code (and we should),
++	 * we should lock in here.
++	 */
++
++	countdiff = vcounter - radclock_fp.vcount;
++	if (countdiff & ~((1ll << (radclock_fp.countdiff_maxbits +1)) -1))
++		printf("RADclock: warning stamp may overflow timeval at %llu!\n",
++				(long long unsigned) vcounter);
++
++	/* Add the counter delta in second to the recorded fixed point time */
++	time_f 	= radclock_fp.time_int
++			  + ((radclock_fp.phat_int * countdiff) >> (radclock_fp.phat_shift - radclock_fp.time_shift)) ;
++
++	tval.tv_sec = time_f >> radclock_fp.time_shift;
++
++	frac = (time_f - ((uint64_t)tval.tv_sec << radclock_fp.time_shift));
++	tval.tv_usec = (frac * 1000000LL)  >> radclock_fp.time_shift;
++	/* tv.tv_usec truncates at the nano-second digit, so check for next digit rounding */
++	if ( ((frac * 10000000LL) >> radclock_fp.time_shift) >= (tval.tv_usec * 10LL + 5) )
++	{
++		tval.tv_usec++;
++	}
++
++	/* Push the built timeval */
++	*time = tval;
++	
++	/* XXX: If not called with BPFD_LOCK(bd), then should release the fixedpoint data
++	 * lock in here
++	 */
++}
++#else 	/* RADCLOCK */
++static void radclock_fill_timeval(vcounter_t vcounter, struct timeval *tval)
++{
++}
++#endif	/* RADCLOCK */
++
++
+ /*
+  * Move the packet data from interface memory (pkt) into the
+  * store buffer.  "cpfn" is the routine called to do the actual data
+@@ -1471,9 +1715,14 @@
+  * bpf_mcopy is passed in to copy mbuf chains.  In the latter case,
+  * pkt is really an mbuf.
+  */
++/* RADCLOCK
+ static void
+ catchpacket(struct bpf_d *d, u_char *pkt, u_int pktlen, u_int snaplen,
+     void (*cpfn)(const void *, void *, size_t), struct timeval *tv)
++*/
++static void
++catchpacket(struct bpf_d *d, u_char *pkt, u_int pktlen, u_int snaplen,
++	void (*cpfn)(const void *, void *, size_t), struct timeval *tv, vcounter_t *vcount)
+ {
+ 	struct bpf_hdr *hp;
+ 	int totlen, curlen;
+@@ -1525,7 +1774,47 @@
+ 	 * Append the bpf header.
+ 	 */
+ 	hp = (struct bpf_hdr *)(d->bd_sbuf + curlen);
+-	hp->bh_tstamp = *tv;
++
++	/* RADCLOCK */
++	if (vcount == NULL) {
++		/* We have been called by a non-RADCLOCK function so
++		 * default to normal behaviour. Note: receiving side will 
++		 * never passes in here because of BPF_MTAP_RADCLOCK_RCV().
++		 */
++		hp->bh_tstamp = *tv;
++		hp->vcount_stamp = 0;
++	}
++	else {
++		/* We have been called with valid tv and tc values
++		 * from a RADCLOCK aware function
++		 */
++		hp->vcount_stamp = *vcount;  // In all cases, store the vcount read previously
++		switch (d->radclock_tsmode) { 
++			case RADCLOCK_TSMODE_SYSCLOCK:
++				/* Return SYSCLOCK timeval as normal.
++				 * Note: any incoming packet of non-RADCLOCK application
++				 * should be seen here (tcpdump for example) since default.
++				 */
++				hp->bh_tstamp = *tv;
++				break;
++			case RADCLOCK_TSMODE_RADCLOCK:
++				/* Return timeval based on RADCLOCK clock.
++				 * Use fixed point arithmetic
++				 */ 
++				radclock_fill_timeval( *vcount, &(hp->bh_tstamp) );
++				break;
++			case RADCLOCK_TSMODE_FAIRCOMPARE:
++				/* Copy the timeval read back to back to the vcounter earlier, there
++				 * isn't much difference with NORMAL mode anymore except in the
++				 * receive direction
++				 */
++				hp->bh_tstamp = *tv;
++				break;
++			default:
++				panic("Unknown RADclock timestamping mode");
++		}
++	} /* end of RADCLOCK modification */
++
+ 	hp->bh_datalen = pktlen;
+ 	hp->bh_hdrlen = hdrlen;
+ 	/*
+diff -aur --unidirectional-new-file sys/net/bpf.h FreeBSD-7.3/net/bpf.h
+--- sys/net/bpf.h	2010-04-14 08:15:44.000000000 +1000
++++ FreeBSD-7.3/net/bpf.h	2010-04-14 08:19:13.000000000 +1000
+@@ -37,9 +37,57 @@
+  * $FreeBSD: src/sys/net/bpf.h,v 1.47.2.2.6.1 2010/02/10 00:26:20 kensmith Exp $
+  */
+ 
++
++#include "opt_radclock.h" 
++
+ #ifndef _NET_BPF_H_
+ #define _NET_BPF_H_
+ 
++
++#ifdef RADCLOCK
++/* RADclock synchronisation structure.
++ * TODO: this should not be defined in here and not stored on the BPF device
++ * but historically, we use the BPF device to set/get timestamping modes and
++ * RADclock data
++ */
++
++#include <sys/time.h>
++
++struct radclock_data {
++	double 		phat;
++	double 		phat_err;
++	double 		phat_local;
++	double 		phat_local_err;
++	long double	ca;
++	double 		ca_err;
++	uint32_t	status;
++	vcounter_t	last_changed;
++	vcounter_t	valid_till;
++};
++
++struct radclock_fixedpoint
++{
++	/* phat as an int shifted phat_shift to the left */
++	uint64_t phat_int;
++	/* Record of last time update from synchronization algorithm as an int */
++	uint64_t time_int;
++	/* The counter value to convert in seconds */
++	vcounter_t vcount;
++	/* the shift amount for phat_int */
++	uint8_t phat_shift;
++	/* the shift amount for time_int */
++	uint8_t time_shift;
++	/* Warn if stamp is over this many bits */
++	uint8_t countdiff_maxbits;
++};
++
++/* RADclock timestamping modes */
++#define RADCLOCK_TSMODE_SYSCLOCK		0x0001  /* return SW timeval (normal behavior) and raw vcounter */
++#define RADCLOCK_TSMODE_RADCLOCK		0x0002  /* return timeval based on RADclock and raw vcounter */
++#define RADCLOCK_TSMODE_FAIRCOMPARE 	0x0003  /* return SW timeval and raw vcounter read back to back */
++#endif /* RADCLOCK */
++
++
+ /* BSD style release date */
+ #define	BPF_RELEASE 199606
+ 
+@@ -122,6 +170,14 @@
+ #define	BIOCGSEESENT	BIOCGDIRECTION
+ #define	BIOCSSEESENT	BIOCSDIRECTION
+ 
++#ifdef RADCLOCK
++#define BIOCSRADCLOCKDATA	_IOW('B',125, struct radclock_data)  /* Set RADclock data */
++#define BIOCGRADCLOCKDATA	_IOR('B',126, struct radclock_data)  /* Get RADclock data */
++#define BIOCSRADCLOCKTSMODE	_IOW('B',127, int8_t) /* Set timestamping mode for this device) */
++#define BIOCGRADCLOCKTSMODE	_IOR('B',128, int8_t) /* Get timestamping  mode for this device */
++#define BIOCSRADCLOCKFIXED	_IOW('B',129, struct radclock_fixedpoint)  /* Set RADclock fixedpoint data */
++#endif /* RADCLOCK */
++
+ /* Packet directions */
+ enum bpf_direction {
+ 	BPF_D_IN,	/* See incoming packets */
+@@ -129,6 +185,34 @@
+ 	BPF_D_OUT	/* See outgoing packets */
+ };
+ 
++#ifdef RADCLOCK
++/*
++ * Structure prepended to each packet.
++ * For the RADclock, need to embed the raw vcounter value with 
++ * each packet
++ */
++struct bpf_hdr {
++	struct timeval	bh_tstamp;	/* time stamp */
++	bpf_u_int32	bh_caplen;	/* length of captured portion */
++	bpf_u_int32	bh_datalen;	/* original length of packet */
++	u_short		bh_hdrlen;	/* length of bpf header (this struct
++					   plus alignment padding) */
++	u_short		padding;		/* padding to align the fields */
++	vcounter_t	vcount_stamp;	/* raw virtual timecounter timestamp for this packet */
++};
++/*
++ * Because the structure above is not a multiple of 4 bytes, some compilers
++ * will insist on inserting padding; hence, sizeof(struct bpf_hdr) won't work.
++ * Only the kernel needs to know about it; applications use bh_hdrlen.
++ * The value of bpf_if->bif_hdrlen should then be ok, when set by bpfattach2
++ * Force the value to avoid problems with padding. 
++ */
++#ifdef _KERNEL
++#define	SIZEOF_BPF_HDR	(sizeof(struct bpf_hdr) <= 28 ? 28 : \
++    sizeof(struct bpf_hdr))
++#endif
++
++#else   /* No RADCLOCK */
+ /*
+  * Structure prepended to each packet.
+  */
+@@ -149,6 +233,10 @@
+     sizeof(struct bpf_hdr))
+ #endif
+ 
++#endif /* RADCLOCK */
++
++
++
+ /*
+  * Data-link level type codes.
+  */
+@@ -777,6 +865,9 @@
+ int	 bpf_validate(const struct bpf_insn *, int);
+ void	 bpf_tap(struct bpf_if *, u_char *, u_int);
+ void	 bpf_mtap(struct bpf_if *, struct mbuf *);
++#ifdef RADCLOCK
++void	 bpf_mtap_radclock_rcv(struct bpf_if *, struct mbuf *, struct timeval *, uint64_t *);
++#endif /* RADCLOCK */
+ void	 bpf_mtap2(struct bpf_if *, void *, u_int, struct mbuf *);
+ void	 bpfattach(struct ifnet *, u_int, u_int);
+ void	 bpfattach2(struct ifnet *, u_int, u_int, struct bpf_if **);
+@@ -794,6 +885,21 @@
+ 	return (0);
+ }
+ 
++#ifdef RADCLOCK
++/* The receiving direction is common to all NIC drivers.
++ * This macro is called from ether_input() in if_ethersubr.c
++ * This macro is needed because we create the timestamps in ether_input()
++ * and the tap function prototype is then different.
++ * In the sending direction, the function prototype is the same.
++ */
++#define	BPF_MTAP_RADCLOCK_RCV(_ifp,_m,tv,vcount) do {	\
++	if (bpf_peers_present((_ifp)->if_bpf)) {			\
++		M_ASSERTVALID(_m);				 				\
++		bpf_mtap_radclock_rcv((_ifp)->if_bpf, (_m), tv, vcount);	\
++	}	\
++} while (0)
++#endif    /* RADCLOCK */
++
+ #define	BPF_TAP(_ifp,_pkt,_pktlen) do {				\
+ 	if (bpf_peers_present((_ifp)->if_bpf))			\
+ 		bpf_tap((_ifp)->if_bpf, (_pkt), (_pktlen));	\
+diff -aur --unidirectional-new-file sys/net/bpfdesc.h FreeBSD-7.3/net/bpfdesc.h
+--- sys/net/bpfdesc.h	2010-04-14 08:15:44.000000000 +1000
++++ FreeBSD-7.3/net/bpfdesc.h	2010-04-14 08:19:13.000000000 +1000
+@@ -91,6 +91,9 @@
+ 	u_long		bd_fcount;	/* number of packets which matched filter */
+ 	pid_t		bd_pid;		/* PID which created descriptor */
+ 	int		bd_locked;	/* true if descriptor is locked */
++#ifdef RADCLOCK
++	int8_t	radclock_tsmode;	/* Timestamping mode for the RADclock */
++#endif /* RADCLOCK */
+ };
+ 
+ /* Values for bd_state */
+diff -aur --unidirectional-new-file sys/net/if_ethersubr.c FreeBSD-7.3/net/if_ethersubr.c
+--- sys/net/if_ethersubr.c	2010-04-14 08:15:44.000000000 +1000
++++ FreeBSD-7.3/net/if_ethersubr.c	2010-04-14 08:19:13.000000000 +1000
+@@ -37,6 +37,7 @@
+ #include "opt_mac.h"
+ #include "opt_netgraph.h"
+ #include "opt_carp.h"
++#include "opt_radclock.h"
+ 
+ #include <sys/param.h>
+ #include <sys/systm.h>
+@@ -48,6 +49,9 @@
+ #include <sys/socket.h>
+ #include <sys/sockio.h>
+ #include <sys/sysctl.h>
++#ifdef RADCLOCK
++#include <sys/time.h>
++#endif
+ 
+ #include <net/if.h>
+ #include <net/if_arp.h>
+@@ -512,6 +516,14 @@
+ 	struct ether_header *eh;
+ 	u_short etype;
+ 
++#ifdef RADCLOCK
++	vcounter_t vcount;
++	struct timeval tv;
++
++	vcount = read_vcounter();	/* Read the vcounter as early as possible */
++	microtime(&tv);
++#endif  /* RADCLOCK */
++
+ 	if ((ifp->if_flags & IFF_UP) == 0) {
+ 		m_freem(m);
+ 		return;
+@@ -576,7 +588,20 @@
+ 	/*
+ 	 * Give bpf a chance at the packet.
+ 	 */
++/* XXX TODO XXX
++ * jrid - July 22nd 2008
++ * This new ETHER_BPF_MTAP macro in 6.3 takes vlans into account.
++ * We should modify the underlying function to timestamp packets early as in
++ * our BPF_MTAP_RADCLOCK_RCV macro while supporting vlans instead of bypassing it.
++ * Just do not have time right now ... 
++ * NOTE: it's ok in the sending direction since it only delays the timestamp
++ * creation, so that is just fine like that.
++ */
++#ifdef RADCLOCK
++	BPF_MTAP_RADCLOCK_RCV(ifp, m, &tv, &vcount);
++#else
+ 	ETHER_BPF_MTAP(ifp, m);
++#endif /* RADCLOCK */
+ 
+ 	/*
+ 	 * If the CRC is still on the packet, trim it off. We do this once
+diff -aur --unidirectional-new-file sys/sys/time.h FreeBSD-7.3/sys/time.h
+--- sys/sys/time.h	2010-04-14 08:15:50.000000000 +1000
++++ FreeBSD-7.3/sys/time.h	2010-04-14 08:19:13.000000000 +1000
+@@ -297,6 +297,11 @@
+ void	getnanotime(struct timespec *tsp);
+ void	getmicrotime(struct timeval *tvp);
+ 
++/* RADCLOCK specific */
++typedef uint64_t vcounter_t;
++vcounter_t read_vcounter(void);
++/* RADCLOCK */
++
+ /* Other functions */
+ int	itimerdecr(struct itimerval *itp, int usec);
+ int	itimerfix(struct timeval *tv);
+diff -aur --unidirectional-new-file sys/sys/timepps.h FreeBSD-7.3/sys/timepps.h
+--- sys/sys/timepps.h	2010-04-14 08:15:50.000000000 +1000
++++ FreeBSD-7.3/sys/timepps.h	2010-04-14 08:19:13.000000000 +1000
+@@ -15,6 +15,8 @@
+ #ifndef _SYS_TIMEPPS_H_
+ #define _SYS_TIMEPPS_H_
+ 
++#include "opt_radclock.h"
++
+ #include <sys/ioccom.h>
+ #include <sys/time.h>
+ 
+@@ -43,12 +45,35 @@
+ 	int		current_mode;		/* current mode bits */
+ } pps_info_t;
+ 
++
++#ifdef RADCLOCK
++typedef union pps_vcounteru {
++	vcounter_t vcount;
++} pps_vcounteru_t;
++
++typedef struct {
++	pps_seq_t	assert_sequence;	/* assert event seq # */
++	pps_seq_t	clear_sequence;		/* clear event seq # */
++	pps_timeu_t	assert_tu;
++	pps_timeu_t	clear_tu;
++	int		current_mode;		/* current mode bits */
++	pps_vcounteru_t  assert_vcu;
++	pps_vcounteru_t  clear_vcu;
++} radclock_pps_info_t;
++#endif	/* RADCLOC */
++
++
+ #define assert_timestamp        assert_tu.tspec
+ #define clear_timestamp         clear_tu.tspec
+ 
+ #define assert_timestamp_ntpfp  assert_tu.ntpfp
+ #define clear_timestamp_ntpfp   clear_tu.ntpfp
+ 
++#ifdef RADCLOCK
++#define assert_vcount		assert_vcu.vcount
++#define clear_vcount		clear_vcu.vcount
++#endif 	/* RADCLOCK */
++
+ typedef struct {
+ 	int api_version;			/* API version # */
+ 	int mode;				/* mode bits */
+@@ -89,6 +114,14 @@
+ 	struct timespec	timeout;
+ };
+ 
++#ifdef RADCLOCK
++struct radclock_pps_fetch_args {
++	int tsformat;
++	radclock_pps_info_t	pps_info_buf;
++	struct timespec	timeout;
++};
++#endif	/* RADCLOCK */
++
+ struct pps_kcbind_args {
+ 	int kernel_consumer;
+ 	int edge;
+@@ -102,6 +135,9 @@
+ #define PPS_IOC_GETCAP		_IOR('1', 5, int)
+ #define PPS_IOC_FETCH		_IOWR('1', 6, struct pps_fetch_args)
+ #define PPS_IOC_KCBIND		_IOW('1', 7, struct pps_kcbind_args)
++#ifdef RADCLOCK
++#define RADCLOCK_PPS_IOC_FETCH		_IOWR('1', 8, struct radclock_pps_fetch_args)
++#endif 	/* RADCLOCK */
+ 
+ #ifdef _KERNEL
+ 
+@@ -114,6 +150,9 @@
+ 	/* State information. */
+ 	pps_params_t	ppsparam;
+ 	pps_info_t	ppsinfo;
++#ifdef RADCLOCK
++	radclock_pps_info_t	radclock_ppsinfo;
++#endif 	/* RADCLOCK */
+ 	int		kcmode;
+ 	int		ppscap;
+ 	struct timecounter *ppstc;
+@@ -183,6 +222,26 @@
+ 	return (error);
+ }
+ 
++#ifdef RADCLOCK
++static __inline int
++radclock_pps_fetch(pps_handle_t handle, const int tsformat,
++	radclock_pps_info_t *ppsinfobuf, const struct timespec *timeout)
++{
++	int error;
++	struct radclock_pps_fetch_args arg;
++
++	arg.tsformat = tsformat;
++	if (timeout == NULL) {
++		arg.timeout.tv_sec = -1;
++		arg.timeout.tv_nsec = -1;
++	} else
++		arg.timeout = *timeout;
++	error = ioctl(handle, RADCLOCK_PPS_IOC_FETCH, &arg);
++	*ppsinfobuf = arg.pps_info_buf;
++	return (error);
++}
++#endif 	/* RADCLOCK */
++
+ static __inline int
+ time_pps_kcbind(pps_handle_t handle, const int kernel_consumer,
+ 	const int edge, const int tsformat)
