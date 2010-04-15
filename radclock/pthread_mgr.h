@@ -57,10 +57,13 @@ int start_thread_NTP_SERV(struct radclock *clock_handle);
 /**
  * Threads starters init functions
  */
+void* thread_data_processing(void *c_handle);
+void* thread_trigger(void *c_handle);
 void* thread_ipc_server(void *c_handle);
-int trigger_work(void *c_handle); 
-int process_rawdata(void *c_handle);
 void* thread_ntp_server(void *c_handle);
+
+int trigger_work(struct radclock *clock_handle); 
+int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer);
 
 
 /**

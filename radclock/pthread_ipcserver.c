@@ -39,7 +39,7 @@
 #include <radclock.h>
 #include "radclock-private.h"
 #include "verbose.h"
-
+#include "sync_algo.h"
 #include "pthread_mgr.h"
 
 

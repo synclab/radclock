@@ -389,16 +389,14 @@ int insane_bidir_stamp(struct bidir_stamp* stamp, struct bidir_stamp* laststamp)
 }
 
 
- 	
+
 
 /**
  * XXX TODO: so far we suppose bidir paradigm only
  */
-int process_rawdata(void *c_handle)
+int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 {
 	JDEBUG
-
-	struct radclock *clock_handle = (struct radclock *) c_handle; 
 
 	/* Bi-directionnal stamp passed to the algo for processing */
 	struct bidir_stamp stamp;
@@ -432,7 +430,7 @@ int process_rawdata(void *c_handle)
 	((struct bidir_output*)clock_handle->algo_output)->n_stamps++;
 	
 	/* Update calibration using new stamp */ 
-	process_bidir_stamp(clock_handle, &stamp);
+	process_bidir_stamp(clock_handle, peer, &stamp);
 
 	/* Update the radclock i.e. the global data 
 	 * Done only in the case of reading from a live device and if 

@@ -28,7 +28,7 @@
 #include <errno.h>
 
 #include "../config.h"
-#include <sync_algo.h>
+#include "sync_algo.h"
 #include <radclock.h>
 #include "radclock-private.h"
 #include "fixedpoint.h"
@@ -131,6 +131,7 @@ void* thread_data_processing(void *c_handle)
 	JDEBUG
 
 	int err;
+	struct bidir_peer peer;
 
 	/* Deal with UNIX signal catching */
 	init_thread_signal_mgt();
@@ -138,6 +139,9 @@ void* thread_data_processing(void *c_handle)
 	/* Clock handle to be able to read global data */
 	struct radclock *clock_handle;
 	clock_handle = (struct radclock*) c_handle;
+
+	/* Init peer stamp counter, everything rely on this starting at 0 */
+	peer.stamp_i = 0;
 
 	while ( (clock_handle->pthread_flag_stop & PTH_DATA_PROC_STOP) != PTH_DATA_PROC_STOP )
 	{
@@ -161,7 +165,7 @@ void* thread_data_processing(void *c_handle)
 
 		/* Process rawdata until there is something to process */
 		do {
-			err = process_rawdata(clock_handle);
+			err = process_rawdata(clock_handle, &peer);
 		} while (!err); 
 
 		pthread_mutex_unlock(&clock_handle->wakeup_mutex);

@@ -40,7 +40,7 @@
 #include <radclock.h>
 #include "radclock-private.h"
 #include "verbose.h"
-
+#include "sync_algo.h"
 #include "pthread_mgr.h"
 
 #include "proto_ntp.h"
@@ -318,7 +318,7 @@ void* thread_ntp_server(void *c_handle)
 	}
 
 	/* Thread exit */
-	verbose(LOG_NOTICE, "Thread NTP server is dead.");
+	verbose(LOG_NOTICE, "Thread NTP server is terminating.");
 	pthread_exit(NULL);
 }
 

@@ -243,7 +243,12 @@ int rehash_daemon(struct radclock *clock_handle,
 	config_print(LOG_NOTICE, conf);
 
 	/* Reinit rehash flag */
-	clock_handle->unix_signal = 0;
+//	clock_handle->unix_signal = 0;
+
+	/* Push param_mask into the config so that the algo sees it, 
+	 * since only algo related thing should be remaining
+	 */
+	conf->mask = param_mask;
 
 	return 0;
 }
@@ -746,9 +751,11 @@ int main (int argc, char *argv[])
 
 	if (clock_handle->run_mode == RADCLOCK_RUN_DEAD)
 	{
+		struct bidir_peer peer;
+		peer.stamp_i = 0;
 		while (1)
 		{
-			err = process_rawdata(clock_handle);
+			err = process_rawdata(clock_handle, &peer);
 			if (err)
 				break;
 		}
@@ -786,9 +793,19 @@ int main (int argc, char *argv[])
 			 * magically transform the data into stamps and give them to the
 			 * sync algo for processing.
 			 */
-			err = start_thread_DATA_PROC(clock_handle);
-			if (err < 0)
-				return 1;
+			if ( clock_handle->unix_signal == SIGHUP )
+			{
+				/* This is not start, but HUP, the algo thread is still running
+				 * Simply clear the flag and bypass
+				 */
+				clock_handle->unix_signal = 0;
+			}
+			else
+			{
+				err = start_thread_DATA_PROC(clock_handle);
+				if (err < 0)
+					return 1;
+			}
 			
 			/* Are we serving some data to other processes and update the
 			 * clock globaldata in the kernel?
@@ -840,7 +857,13 @@ int main (int argc, char *argv[])
 			 * the threads. If we rehash, they will be restarted anyway.
 			 */
 			verbose(LOG_NOTICE, "Send killing signal to threads. Wait for stop message.");
+
 			clock_handle->pthread_flag_stop = PTH_STOP_ALL;
+			
+			/* Do not stop sync algo thread if we HUP */
+			if (clock_handle->unix_signal == SIGHUP)
+				clock_handle->pthread_flag_stop &= ~PTH_DATA_PROC_STOP;
+
 			if (clock_handle->conf->server_ntp == BOOL_ON) {
 				pthread_join(clock_handle->threads[PTH_NTP_SERV], &thread_status);
 				verbose(LOG_NOTICE, "NTP server thread is dead.");
@@ -851,25 +874,27 @@ int main (int argc, char *argv[])
 			}
 			pthread_join(clock_handle->threads[PTH_TRIGGER], &thread_status);
 			verbose(LOG_NOTICE, "Trigger thread is dead.");
-			pthread_join(clock_handle->threads[PTH_DATA_PROC], &thread_status);
-			verbose(LOG_NOTICE, "Data processing thread is dead.");
 			pthread_join(clock_handle->threads[PTH_FIXEDPOINT], &thread_status);
 			verbose(LOG_NOTICE, "Kernel fixedpoint thread is dead.");
-
-			/* Reinitialise flags */
-			clock_handle->pthread_flag_stop = 0;
-			verbose(LOG_NOTICE, "Threads are dead.");
-
-			if ( clock_handle->unix_signal == SIGHUP ) {
-				if ( rehash_daemon(clock_handle, param_mask) )
-					verbose(LOG_ERR, "SIGHUP - Failed to rehash daemon !!.");
-				clock_handle->unix_signal = 0;
-			}
-
-			/* In case we received a SIGTERM, we exit the loop. */
-			if ( clock_handle->unix_signal == SIGTERM ) {
+			
+			/* Join on TERM since algo has been told to die */
+			if (clock_handle->unix_signal != SIGHUP) 
+			{
+				pthread_join(clock_handle->threads[PTH_DATA_PROC], &thread_status);
+				verbose(LOG_NOTICE, "Data processing thread is dead.");
+				/* Reinitialise flags */
+				clock_handle->pthread_flag_stop = 0;
+				verbose(LOG_NOTICE, "Threads are dead.");
+				/* We received a SIGTERM, we exit the loop. */
 				break;
 			}
+			else
+			{
+				clock_handle->pthread_flag_stop = 0;
+				if ( rehash_daemon(clock_handle, param_mask) )
+					verbose(LOG_ERR, "SIGHUP - Failed to rehash daemon !!.");
+			}
+
 		}
 		/* End of thread while loop */
 	} /* End of run live case */

@@ -187,7 +187,7 @@ void print_out_files(struct radclock *clock_handle, struct bidir_stamp *tuple)
 		OUTPUT(clock_handle, thetahat),
 		OUTPUT(clock_handle, RTThat),
 		OUTPUT(clock_handle, RTThat_new),
-		OUTPUT(clock_handle, RTThat_sh),
+		OUTPUT(clock_handle, RTThat_shift),
 		OUTPUT(clock_handle, th_naive),
 		OUTPUT(clock_handle, minET),
 		OUTPUT(clock_handle, minET_last),

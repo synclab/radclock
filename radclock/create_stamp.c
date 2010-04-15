@@ -61,11 +61,11 @@
 #include <radclock.h>
 #include "radclock-private.h"
 
-#include "pthread_mgr.h"
 
 #include "verbose.h"
 #include "proto_ntp.h"
 #include "sync_algo.h"        /* Because need  struct bidir_stamp defn */
+#include "pthread_mgr.h"
 #include "create_stamp.h"
 #include "ntohll.h"
 

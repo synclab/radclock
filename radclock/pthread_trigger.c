@@ -322,13 +322,13 @@ int ntp_client(struct radclock * clock_handle)
 
 
 
-int trigger_work(void *c_handle)
+int trigger_work(struct radclock *clock_handle)
 {
 	JDEBUG
 
 	vcounter_t vcount;
 	int err;
-	struct radclock *clock_handle = (struct radclock *) c_handle; 
+//	struct radclock *clock_handle = (struct radclock *) c_handle; 
 
 	switch (clock_handle->conf->synchro_type)
 	{
