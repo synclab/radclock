@@ -30,7 +30,7 @@
   POSSIBILITY OF SUCH DAMAGE.
 
 ******************************************************************************/
-/*$FreeBSD: src/sys/dev/e1000/if_em.c,v 1.1.2.1.2.2 2008/11/30 04:41:25 jfv Exp $*/
+/*$FreeBSD: src/sys/dev/e1000/if_em.c,v 1.1.2.2.4.1 2010/02/10 00:26:20 kensmith Exp $*/
 
 #ifdef HAVE_KERNEL_OPTION_HEADERS
 #include "opt_device_polling.h"
@@ -283,7 +283,7 @@ static void	em_register_vlan(void *, struct ifnet *, u16);
 static void	em_unregister_vlan(void *, struct ifnet *, u16);
 #endif
 
-static int	em_xmit(struct adapter *, struct mbuf **);
+static int	em_xmit(struct adapter *, struct mbuf **, struct ifnet *);
 static void	em_smartspeed(struct adapter *);
 static int	em_82547_fifo_workaround(struct adapter *, int);
 static void	em_82547_update_fifo_head(struct adapter *, int);
@@ -1012,11 +1012,10 @@ em_start_locked(struct ifnet *ifp)
 		 *  Encapsulation can modify our pointer, and or make it
 		 *  NULL on failure.  In that event, we can't requeue.
 		 */
-// jrid - Make sure we enforce causality
-		/* Send a copy of the frame to the BPF listener */
-		ETHER_BPF_MTAP(ifp, m_head);
-
-		if (em_xmit(adapter, &m_head)) {
+// jrid
+// To be able to call BPF_MTAP from em_xmit
+//		if (em_xmit(adapter, &m_head)) {
+		if (em_xmit(adapter, &m_head, ifp)) {
 			if (m_head == NULL)
 				break;
 			ifp->if_drv_flags |= IFF_DRV_OACTIVE;
@@ -1025,6 +1024,10 @@ em_start_locked(struct ifnet *ifp)
 		}
 
 		/* Send a copy of the frame to the BPF listener */
+// jrid
+// This call after em_xmit() does not preserve causality
+// If called before em_xmit() (which can fail) takes the risk to send 2 copies of the
+// same packet. Need to move it into em_xmit()
 //		ETHER_BPF_MTAP(ifp, m_head);
 
 		/* Set timeout in case hardware has problems transmitting. */
@@ -1997,7 +2000,7 @@ em_media_change(struct ifnet *ifp)
  **********************************************************************/
 
 static int
-em_xmit(struct adapter *adapter, struct mbuf **m_headp)
+em_xmit(struct adapter *adapter, struct mbuf **m_headp, struct ifnet *ifp)
 {
 	bus_dma_segment_t	segs[EM_MAX_SCATTER];
 	bus_dmamap_t		map;
@@ -2282,6 +2285,9 @@ em_xmit(struct adapter *adapter, struct mbuf **m_headp)
 	tx_buffer = &adapter->tx_buffer_area[first];
 	tx_buffer->next_eop = last;
 
+// jrid
+// This cannot fail
+		ETHER_BPF_MTAP(ifp, m_head);
 	/*
 	 * Advance the Transmit Descriptor Tail (TDT), this tells the E1000
 	 * that this frame is available to transmit.
@@ -4221,7 +4227,8 @@ em_initialize_receive_unit(struct adapter *adapter)
 		 * as DEFAULT_ITR = 1/(MAX_INTS_PER_SEC * 256ns)
 		 */
 // jrid
-	//	E1000_WRITE_REG(&adapter->hw, E1000_ITR, DEFAULT_ITR);
+// Disable any type of interrupt throttling
+//		E1000_WRITE_REG(&adapter->hw, E1000_ITR, DEFAULT_ITR);
 		E1000_WRITE_REG(&adapter->hw, E1000_ITR, 0);
 	}
 

@@ -3,6 +3,13 @@
 ## 
 
 
+- Version 0.2.3
+	* April 2010
+	* Support for recent FreeBSD and Linux kernels
+	* Corrections and improvements in the synchronisation algo
+	* Foundations for new features to come
+
+
 - Version 0.2.2
 	* November 2009
 	* Use of POSIX Timers for accurate packet sender
