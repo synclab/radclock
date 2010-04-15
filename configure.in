@@ -147,7 +147,14 @@ case "$os" in
 	freebsd)
 		case "$osversion" in
 			# Sysctl for 6.x and 7.x kernels 
-			6* | 7*)
+			6* | 7* )
+				ext=`sysctl -n net.bpf.bpf_radclock_tsmode`
+				if test $ext ; then
+					tscexts=yes
+				fi
+				;;
+
+			8* )
 				ext=`sysctl -n net.bpf.bpf_radclock_tsmode`
 				if test $ext ; then
 					tscexts=yes
