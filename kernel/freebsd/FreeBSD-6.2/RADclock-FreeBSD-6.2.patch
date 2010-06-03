@@ -1,0 +1,1232 @@
+Support for the RADclock and cumulative virtual timecounter
+Freebsd Kernel patch: FreeBSD-6.2
+Julien Ridoux
+julien@synclab.org
+
+diff -aur --unidirectional-new-file sys/amd64/conf/RADCLOCK.amd64 FreeBSD-6.2/amd64/conf/RADCLOCK.amd64
+--- sys/amd64/conf/RADCLOCK.amd64	Thu Jan  1 10:00:00 1970
++++ FreeBSD-6.2/amd64/conf/RADCLOCK.amd64	Wed Jun  2 05:27:09 2010
+@@ -0,0 +1,15 @@
++#
++# SMP -- Generic kernel configuration file for FreeBSD/amd64 SMP
++#	 Use this for multi-processor machines
++#
++# $FreeBSD: src/sys/amd64/conf/SMP,v 1.1.6.1 2005/09/18 03:37:58 scottl Exp $
++
++include GENERIC
++
++options	SMP
++
++# enable RADclock support
++options     RADCLOCK
++
++#enable PPS management in Kernel
++#options     PPS_SYNC
+diff -aur --unidirectional-new-file sys/conf/options.amd64 FreeBSD-6.2/conf/options.amd64
+--- sys/conf/options.amd64	Thu Jun 30 09:23:16 2005
++++ FreeBSD-6.2/conf/options.amd64	Wed Jun  2 05:27:09 2010
+@@ -58,3 +58,7 @@
+ 
+ # Debugging
+ KDB_STOP_NMI		opt_kdb.h
++
++# RADclock support 
++RADCLOCK		opt_radclock.h
++
+diff -aur --unidirectional-new-file sys/conf/options.i386 FreeBSD-6.2/conf/options.i386
+--- sys/conf/options.i386	Sun Jul  3 06:06:42 2005
++++ FreeBSD-6.2/conf/options.i386	Wed Jun  2 05:27:09 2010
+@@ -163,3 +163,7 @@
+ # Debugging
+ KDB_STOP_NMI		opt_kdb.h
+ NPX_DEBUG		opt_npx.h
++
++# RADclock support 
++RADCLOCK		opt_radclock.h
++
+diff -aur --unidirectional-new-file sys/i386/conf/RADCLOCK.i386 FreeBSD-6.2/i386/conf/RADCLOCK.i386
+--- sys/i386/conf/RADCLOCK.i386	Thu Jan  1 10:00:00 1970
++++ FreeBSD-6.2/i386/conf/RADCLOCK.i386	Wed Jun  2 05:27:09 2010
+@@ -0,0 +1,18 @@
++#
++# SMP -- Generic kernel configuration file for FreeBSD/i386 SMP
++#	 Use this for multi-processor machines
++#
++# $FreeBSD: src/sys/i386/conf/SMP,v 1.5.6.1 2005/09/18 03:37:58 scottl Exp $
++
++include GENERIC
++
++ident		SMP-GENERIC
++
++# To make an SMP kernel, the next line is needed
++options 	SMP			# Symmetric MultiProcessor Kernel
++
++# enable RADCLOCK support 
++options		RADCLOCK
++
++#enable PPS management in Kernel
++#options		PPS_SYNC
+diff -aur --unidirectional-new-file sys/kern/kern_tc.c FreeBSD-6.2/kern/kern_tc.c
+--- sys/kern/kern_tc.c	Sun Mar 27 06:04:28 2005
++++ FreeBSD-6.2/kern/kern_tc.c	Wed Jun  2 05:27:09 2010
+@@ -11,6 +11,7 @@
+ __FBSDID("$FreeBSD: src/sys/kern/kern_tc.c,v 1.164 2005/03/26 20:04:28 phk Exp $");
+ 
+ #include "opt_ntp.h"
++#include "opt_radclock.h"
+ 
+ #include <sys/param.h>
+ #include <sys/kernel.h>
+@@ -53,6 +54,11 @@
+ 	int64_t			th_adjustment;
+ 	u_int64_t		th_scale;
+ 	u_int	 		th_offset_count;
++
++#ifdef RADCLOCK
++	vcounter_t		vcounter_record;
++#endif
++
+ 	struct bintime		th_offset;
+ 	struct timeval		th_microtime;
+ 	struct timespec		th_nanotime;
+@@ -61,6 +67,30 @@
+ 	struct timehands	*th_next;
+ };
+ 
++#ifdef RADCLOCK
++extern struct timehands th0;
++static struct timehands th9 = { NULL, 0, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th0};
++static struct timehands th8 = { NULL, 0, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th9};
++static struct timehands th7 = { NULL, 0, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th8};
++static struct timehands th6 = { NULL, 0, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th7};
++static struct timehands th5 = { NULL, 0, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th6};
++static struct timehands th4 = { NULL, 0, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th5};
++static struct timehands th3 = { NULL, 0, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th4};
++static struct timehands th2 = { NULL, 0, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th3};
++static struct timehands th1 = { NULL, 0, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th2};
++static struct timehands th0 = {
++	&dummy_timecounter,
++	0,
++	(uint64_t)-1 / 1000000,
++	0,
++	0,
++	{1, 0},
++	{0, 0},
++	{0, 0},
++	1,
++	&th1
++};
++#else
+ extern struct timehands th0;
+ static struct timehands th9 = { NULL, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th0};
+ static struct timehands th8 = { NULL, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th9};
+@@ -82,6 +112,7 @@
+ 	1,
+ 	&th1
+ };
++#endif	/* RADCLOCK */
+ 
+ static struct timehands *volatile timehands = &th0;
+ struct timecounter *timecounter = &dummy_timecounter;
+@@ -151,6 +182,24 @@
+  * the comment in <sys/time.h> for a description of these 12 functions.
+  */
+ 
++#ifdef RADCLOCK
++vcounter_t
++read_vcounter(void)
++{
++	struct timehands *th;
++	u_int gen, delta;
++	vcounter_t vcount;
++	do{
++		th = timehands;
++		gen = th->th_generation;
++		delta = tc_delta(th);
++		vcount = th->vcounter_record;
++	} while ( gen == 0 || gen != th->th_generation);
++
++	return(vcount + delta);
++}
++#endif	/* RADCLOCK */
++
+ void
+ binuptime(struct bintime *bt)
+ {
+@@ -417,6 +466,11 @@
+ 		ncount = timecounter->tc_get_timecount(timecounter);
+ 	else
+ 		ncount = 0;
++
++#ifdef RADCLOCK
++	th->vcounter_record += delta;
++#endif
++
+ 	th->th_offset_count += delta;
+ 	th->th_offset_count &= th->th_counter->tc_counter_mask;
+ 	bintime_addx(&th->th_offset, th->th_scale * delta);
+@@ -461,6 +515,9 @@
+ 	if (th->th_counter != timecounter) {
+ 		th->th_counter = timecounter;
+ 		th->th_offset_count = ncount;
++		#ifdef RADCLOCK
++		th->vcounter_record = 0;
++		#endif
+ 	}
+ 
+ 	/*-
+@@ -569,6 +626,10 @@
+ {
+ 	pps_params_t *app;
+ 	struct pps_fetch_args *fapi;
++#ifdef RADCLOCK
++	struct radclock_pps_fetch_args *radclock_fapi;
++#endif
++
+ #ifdef PPS_SYNC
+ 	struct pps_kcbind_args *kapi;
+ #endif
+@@ -602,6 +663,19 @@
+ 		pps->ppsinfo.current_mode = pps->ppsparam.mode;
+ 		fapi->pps_info_buf = pps->ppsinfo;
+ 		return (0);
++
++#ifdef RADCLOCK
++	case RADCLOCK_PPS_IOC_FETCH:
++		radclock_fapi = (struct radclock_pps_fetch_args *)data;
++		if (radclock_fapi->tsformat && radclock_fapi->tsformat != PPS_TSFMT_TSPEC)
++			return (EINVAL);
++		if (radclock_fapi->timeout.tv_sec || radclock_fapi->timeout.tv_nsec)
++			return (EOPNOTSUPP);
++		pps->ppsinfo.current_mode = pps->ppsparam.mode;
++		radclock_fapi->pps_info_buf = pps->radclock_ppsinfo;
++		return (0);
++#endif 	/* RADCLOCK */
++
+ 	case PPS_IOC_KCBIND:
+ #ifdef PPS_SYNC
+ 		kapi = (struct pps_kcbind_args *)data;
+@@ -654,6 +728,12 @@
+ 	u_int tcount, *pcount;
+ 	int foff, fhard;
+ 	pps_seq_t *pseq;
++#ifdef RADCLOCK
++	struct timespec *radclock_tsp;
++	pps_seq_t *radclock_pseq;
++	vcounter_t *vcount;
++	vcounter_t vcounter_record;
++#endif
+ 
+ 	KASSERT(pps != NULL, ("NULL pps pointer in pps_event"));
+ 	/* If the timecounter was wound up underneath us, bail out. */
+@@ -668,6 +748,11 @@
+ 		fhard = pps->kcmode & PPS_CAPTUREASSERT;
+ 		pcount = &pps->ppscount[0];
+ 		pseq = &pps->ppsinfo.assert_sequence;
++#ifdef RADCLOCK
++		vcount = &pps->radclock_ppsinfo.assert_vcount;
++		radclock_tsp = &pps->radclock_ppsinfo.assert_timestamp;
++		radclock_pseq = &pps->radclock_ppsinfo.assert_sequence;
++#endif
+ 	} else {
+ 		tsp = &pps->ppsinfo.clear_timestamp;
+ 		osp = &pps->ppsparam.clear_offset;
+@@ -675,6 +760,11 @@
+ 		fhard = pps->kcmode & PPS_CAPTURECLEAR;
+ 		pcount = &pps->ppscount[1];
+ 		pseq = &pps->ppsinfo.clear_sequence;
++#ifdef RADCLOCK
++		vcount = &pps->radclock_ppsinfo.clear_vcount;
++		radclock_tsp = &pps->radclock_ppsinfo.clear_timestamp;
++		radclock_pseq = &pps->radclock_ppsinfo.clear_sequence;
++#endif
+ 	}
+ 
+ 	/*
+@@ -691,6 +781,9 @@
+ 	/* Convert the count to a timespec. */
+ 	tcount = pps->capcount - pps->capth->th_offset_count;
+ 	tcount &= pps->capth->th_counter->tc_counter_mask;
++#ifdef RADCLOCK
++	vcounter_record = pps->capth->vcounter_record;
++#endif
+ 	bt = pps->capth->th_offset;
+ 	bintime_addx(&bt, pps->capth->th_scale * tcount);
+ 	bintime_add(&bt, &boottimebin);
+@@ -703,6 +796,11 @@
+ 	*pcount = pps->capcount;
+ 	(*pseq)++;
+ 	*tsp = ts;
++#ifdef RADCLOCK
++	(*radclock_pseq)++;
++	*radclock_tsp = ts;
++	*vcount = (vcounter_record + tcount);
++#endif
+ 
+ 	if (foff) {
+ 		timespecadd(tsp, osp);
+diff -aur --unidirectional-new-file sys/kern/radclock.c FreeBSD-6.2/kern/radclock.c
+--- sys/kern/radclock.c	Thu Jan  1 10:00:00 1970
++++ FreeBSD-6.2/kern/radclock.c	Wed Jun  2 05:27:09 2010
+@@ -0,0 +1,154 @@
++/*
++ * System calls to access the cumulative virtual timecounter
++ */
++
++#include <sys/types.h>
++#include <sys/param.h>
++#include <sys/proc.h>
++#include <sys/module.h>
++#include <sys/sysent.h>
++#include <sys/kernel.h>
++#include <sys/systm.h>
++#include <sys/time.h>
++#include <sys/sysproto.h>
++#include <sys/bus.h>
++
++
++/*
++ * First system call is get_vcounter to retrieve the current value
++ * of the cumulative vritual counter from the timecounter interface
++ */
++
++struct get_vcounter_args {
++	vcounter_t *vcount;
++};
++
++static int
++get_vcounter(struct proc *td, void *syscall_args)
++{
++	vcounter_t vcount = 0;
++	int error = 0;
++	struct get_vcounter_args *uap;
++
++	uap = (struct get_vcounter_args *) syscall_args;
++	if ( uap->vcount == NULL )
++		return -1;
++	
++	vcount = read_vcounter();
++	error = copyout(&vcount, uap->vcount, sizeof(vcounter_t));
++	
++	if ( vcount == 0 ) 
++		error = -1;
++
++	return(error);
++}
++
++
++static struct sysent get_vcounter_sysent = {
++	1,
++	(sy_call_t *) get_vcounter,
++	AU_NULL 
++};
++
++
++static int get_vcounter_offset = NO_SYSCALL;
++
++static int
++get_vcounter_load (struct module *module, int cmd, void *arg)
++{
++	int error = 0;
++	switch (cmd) {
++		case MOD_LOAD :
++			printf("get_vcounter syscall loaded at %d \n", get_vcounter_offset);
++		break;
++		case MOD_UNLOAD :
++			printf("get_vcounter syscall unloaded from %d\n", get_vcounter_offset);
++		break;
++		default :
++			error = EINVAL;
++		break;
++	}
++	return error;
++}
++
++SYSCALL_MODULE(get_vcounter, &get_vcounter_offset, &get_vcounter_sysent, get_vcounter_load, NULL);
++
++
++
++/*
++ * Second system call is get_vcounter_latency to compute the latency of
++ * the timecounter interface from within the kernel
++ *
++ * XXX: of course this makes sense ONLY if we have a stable TSC
++ * (i.e. no SMP, no power management, no frequency jumps etc.) 
++ */
++
++struct get_vcounter_latency_args {
++	vcounter_t *vcount;
++	uint64_t *vcount_lat;
++	uint64_t *tsc_lat;
++};
++
++static int
++get_vcounter_latency(struct proc *td, void *syscall_args)
++{
++	uint64_t tsc1 = 0, tsc2 = 0, tsc3 = 0, vcount_lat = 0, tsc_lat = 0;
++	vcounter_t vcount;
++	int error = 0;
++	struct get_vcounter_latency_args *uap;
++
++	uap = (struct get_vcounter_latency_args *) syscall_args;
++
++	/* One for fun and warmup */
++	tsc1 = rdtsc();
++	__asm __volatile("lfence" ::: "memory");
++	tsc1 = rdtsc();
++	__asm __volatile("lfence" ::: "memory");
++	tsc2 = rdtsc();
++	__asm __volatile("lfence" ::: "memory");
++	vcount = read_vcounter();
++	__asm __volatile("lfence" ::: "memory");
++	tsc3 = rdtsc();
++	__asm __volatile("lfence" ::: "memory");
++
++	tsc_lat = tsc2 - tsc1;
++	vcount_lat = tsc3 - tsc2;
++
++	error += copyout(&vcount, uap->vcount, sizeof(vcounter_t));
++	error += copyout(&vcount_lat, uap->vcount_lat, sizeof(uint64_t));
++	error += copyout(&tsc_lat, uap->tsc_lat, sizeof(uint64_t));
++
++	return(error);
++}
++
++
++static struct sysent get_vcounter_latency_sysent = {
++	3,
++	(sy_call_t *) get_vcounter_latency,
++	AU_NULL 
++};
++
++
++static int get_vcounter_latency_offset = NO_SYSCALL;
++
++static int
++get_vcounter_latency_load (struct module *module, int cmd, void *arg)
++{
++	int error = 0;
++	switch (cmd) {
++		case MOD_LOAD :
++			printf("get_vcounter_latency syscall loaded at %d \n", get_vcounter_latency_offset);
++		break;
++		case MOD_UNLOAD :
++			printf("get_vcounter_latency syscall unloaded from %d\n", get_vcounter_latency_offset);
++		break;
++		default :
++			error = EINVAL;
++		break;
++	}
++	return error;
++}
++
++SYSCALL_MODULE(get_vcounter_latency, &get_vcounter_latency_offset, &get_vcounter_latency_sysent, get_vcounter_latency_load, NULL);
++
++
+diff -aur --unidirectional-new-file sys/modules/Makefile FreeBSD-6.2/modules/Makefile
+--- sys/modules/Makefile	Mon Sep  4 16:14:57 2006
++++ FreeBSD-6.2/modules/Makefile	Wed Jun  2 05:27:09 2010
+@@ -3,7 +3,7 @@
+ # oldcard -- specialized use for debugging only.
+ # owi -- totally unsupported for debugging only.
+ 
+-SUBDIR=	${_3dfx} \
++SUBDIR= radclock 	${_3dfx} \
+ 	${_3dfx_linux} \
+ 	${_aac} \
+ 	accf_data \
+@@ -536,7 +536,7 @@
+ .endif
+ 
+ .if defined(MODULES_OVERRIDE) && !defined(ALL_MODULES)
+-SUBDIR=${MODULES_OVERRIDE}
++SUBDIR= radclock ${MODULES_OVERRIDE}
+ .endif
+ 
+ .for reject in ${WITHOUT_MODULES}
+diff -aur --unidirectional-new-file sys/modules/radclock/Makefile FreeBSD-6.2/modules/radclock/Makefile
+--- sys/modules/radclock/Makefile	Thu Jan  1 10:00:00 1970
++++ FreeBSD-6.2/modules/radclock/Makefile	Wed Jun  2 05:27:09 2010
+@@ -0,0 +1,15 @@
++# This make file creates the .ko module for retrieving the vitual counter through syscall.
++
++.PATH: ${.CURDIR}/../../kern
++
++KMOD    =  radclock
++SRCS    =  radclock.c
++
++SRCS+=	opt_radclock.h
++
++.if !defined(KERNBUILDDIR)
++opt_radclock.h:
++	echo "#define RADCLOCK 1" > opt_radclock.h
++.endif
++
++.include <bsd.kmod.mk>
+diff -aur --unidirectional-new-file sys/net/bpf.c FreeBSD-6.2/net/bpf.c
+--- sys/net/bpf.c	Sat Aug 19 01:58:16 2006
++++ FreeBSD-6.2/net/bpf.c	Wed Jun  2 05:27:09 2010
+@@ -99,9 +99,17 @@
+ static void	bpf_timed_out(void *);
+ static __inline void
+ 		bpf_wakeup(struct bpf_d *);
++/* RADCLOCK
++ * Replace catchpacket by our new prototype ...
++ * static void	catchpacket(struct bpf_d *, u_char *, u_int,
++ *		    u_int, void (*)(const void *, void *, size_t),
++ *		    struct timeval *);
++ */
+ static void	catchpacket(struct bpf_d *, u_char *, u_int,
+ 		    u_int, void (*)(const void *, void *, size_t),
+-		    struct timeval *);
++			struct timeval *, vcounter_t *);
++static void radclock_fill_timeval(vcounter_t vcounter, struct timeval *time);
++/* end RADCLOCK */
+ static void	reset_d(struct bpf_d *);
+ static int	 bpf_setf(struct bpf_d *, struct bpf_program *, u_long cmd);
+ static int	bpf_getdltlist(struct bpf_d *, struct bpf_dltlist *);
+@@ -127,6 +135,11 @@
+     &bpf_maxinsns, 0, "Maximum bpf program instructions");
+ SYSCTL_NODE(_net_bpf, OID_AUTO, stats, CTLFLAG_RW,
+     bpf_stats_sysctl, "bpf statistics portal");
++#ifdef RADCLOCK
++static int bpf_radclock_tsmode = RADCLOCK_TSMODE_SYSCLOCK;
++SYSCTL_INT(_net_bpf, OID_AUTO, bpf_radclock_tsmode, CTLFLAG_RW,
++	&bpf_radclock_tsmode, 0, "Default RADclock timestamping mode");
++#endif /* RADCLOCK */
+ 
+ static	d_open_t	bpfopen;
+ static	d_close_t	bpfclose;
+@@ -152,6 +165,14 @@
+ static struct filterops bpfread_filtops =
+ 	{ 1, NULL, filt_bpfdetach, filt_bpfread };
+ 
++#ifdef RADCLOCK
++/* Global data structure containing clock calibration data 
++ * rough guess of 1Ghz beats zero 
++ */ 
++static struct radclock_data radclock = {1e-9,0,0,0,0,0,0,0,0};
++static struct radclock_fixedpoint radclock_fp = {0,0,0,0,0,0};
++#endif /* RADCLOCK */
++
+ static int
+ bpf_movein(uio, linktype, mtu, mp, sockp, wfilter)
+ 	struct uio *uio;
+@@ -400,6 +421,11 @@
+ 	callout_init(&d->bd_callout, NET_CALLOUT_MPSAFE);
+ 	knlist_init(&d->bd_sel.si_note, &d->bd_mtx, NULL, NULL, NULL);
+ 
++#ifdef RADCLOCK
++	/* Timestamping mode for this device, default is use SYSCLOCK */
++	d->radclock_tsmode = bpf_radclock_tsmode;
++#endif /* RADCLOCK */
++
+ 	return (0);
+ }
+ 
+@@ -1003,6 +1029,49 @@
+ 	case BIOCGRSIG:
+ 		*(u_int *)addr = d->bd_sig;
+ 		break;
++
++#ifdef RADCLOCK
++	/* Set RADclock data */
++	case BIOCSRADCLOCKDATA:
++		{
++			BPFD_LOCK(d);
++			radclock = *(struct radclock_data *)addr;
++			BPFD_UNLOCK(d);
++			break;
++		}
++	/* Get RADclock data */
++	case BIOCGRADCLOCKDATA:
++		{
++			BPFD_LOCK(d);
++			*(struct radclock_data *)addr = radclock;
++			BPFD_UNLOCK(d);
++			break;
++		}
++	/* Set RADclock timestamping mode for this device) */
++	case BIOCSRADCLOCKTSMODE:
++		{
++			BPFD_LOCK(d);
++			d->radclock_tsmode = *(int8_t *)addr;  
++			BPFD_UNLOCK(d);
++			break;
++		}
++	/* Get RADclock timestamping mode for this device) */
++	case BIOCGRADCLOCKTSMODE:
++		{
++			BPFD_LOCK(d);
++			*(int8_t *)addr = d->radclock_tsmode;
++			BPFD_UNLOCK(d);
++			break;
++		}
++	/* Set RADclock fixedpoint data */
++	case BIOCSRADCLOCKFIXED:
++		{
++			BPFD_LOCK(d);
++			radclock_fp = *(struct radclock_fixedpoint *)addr;
++			BPFD_UNLOCK(d);
++			break;
++		}
++#endif /* RADCLOCK */
+ 	}
+ 	return (error);
+ }
+@@ -1243,6 +1312,9 @@
+ 	u_int slen;
+ 	int gottime;
+ 	struct timeval tv;
++#ifdef RADCLOCK
++	vcounter_t vcount;
++#endif
+ 
+ 	/*
+ 	 * Lockless read to avoid cost of locking the interface if there are
+@@ -1261,12 +1333,19 @@
+ 			d->bd_fcount++;
+ 			if (!gottime) {
+ 				microtime(&tv);
++#ifdef RADCLOCK
++				vcount = read_vcounter();
++#endif
+ 				gottime = 1;
+ 			}
+ #ifdef MAC
+ 			if (mac_check_bpfdesc_receive(d, bp->bif_ifp) == 0)
+ #endif
+-				catchpacket(d, pkt, pktlen, slen, bcopy, &tv);
++#ifdef RADCLOCK
++				catchpacket(d, pkt, pktlen, slen, bcopy, &tv, &vcount);
++#else
++				catchpacket(d, pkt, pktlen, slen, bcopy, &tv, NULL);
++#endif
+ 		}
+ 		BPFD_UNLOCK(d);
+ 	}
+@@ -1313,6 +1392,10 @@
+ 	int gottime;
+ 	struct timeval tv;
+ 
++#ifdef RADCLOCK
++	vcounter_t vcount;
++#endif
++
+ 	gottime = 0;
+ 
+ 	/*
+@@ -1335,13 +1418,23 @@
+ 			d->bd_fcount++;
+ 			if (!gottime) {
+ 				microtime(&tv);
++
++#ifdef RADCLOCK
++				vcount = read_vcounter();
++#endif
+ 				gottime = 1;
+ 			}
+ #ifdef MAC
+ 			if (mac_check_bpfdesc_receive(d, bp->bif_ifp) == 0)
+ #endif
++
++#ifdef RADCLOCK
++				catchpacket(d, (u_char *)m, pktlen, slen,
++				    bpf_mcopy, &tv, &vcount);
++#else
+ 				catchpacket(d, (u_char *)m, pktlen, slen,
+-				    bpf_mcopy, &tv);
++				    bpf_mcopy, &tv, NULL);
++#endif 	/* RADCLOCK */
+ 		}
+ 		BPFD_UNLOCK(d);
+ 	}
+@@ -1365,6 +1458,10 @@
+ 	int gottime;
+ 	struct timeval tv;
+ 
++#ifdef RADCLOCK
++	vcounter_t vcount;
++#endif 	/* RADCLOCK */
++
+ 	gottime = 0;
+ 
+ 	/*
+@@ -1396,19 +1493,162 @@
+ 			d->bd_fcount++;
+ 			if (!gottime) {
+ 				microtime(&tv);
++
++#ifdef RADCLOCK
++				vcount = read_vcounter();
++#endif 	/* RADCLOCK */
+ 				gottime = 1;
+ 			}
+ #ifdef MAC
+ 			if (mac_check_bpfdesc_receive(d, bp->bif_ifp) == 0)
+ #endif
++
++#ifdef RADCLOCK
++				catchpacket(d, (u_char *)&mb, pktlen, slen,
++				    bpf_mcopy, &tv, &vcount);
++#else
+ 				catchpacket(d, (u_char *)&mb, pktlen, slen,
+-				    bpf_mcopy, &tv);
++				    bpf_mcopy, &tv, NULL);
++#endif	/* RADCLOCK */
+ 		}
+ 		BPFD_UNLOCK(d);
+ 	}
+ 	BPFIF_UNLOCK(bp);
+ }
+ 
++
++#ifdef RADCLOCK
++/*
++ * Incoming linkage from device drivers, when packet is in an mbuf chain.
++ * RADCLOCK version
++ */
++void
++bpf_mtap_radclock_rcv(struct bpf_if *bp, struct mbuf *m, struct timeval *tv, vcounter_t *vcount)
++{
++	struct bpf_d *d;
++	u_int pktlen, slen;
++	int gottime;
++	/* RADCLOCK: memory allocated before on the receiving side */
++	/*	struct timeval tv; */
++
++	gottime = 0;
++
++	/*
++	 * Lockless read to avoid cost of locking the interface if there are
++	 * no descriptors attached.
++	 */
++	if (LIST_EMPTY(&bp->bif_dlist))
++		return;
++
++	pktlen = m_length(m, NULL);
++
++	BPFIF_LOCK(bp);
++	LIST_FOREACH(d, &bp->bif_dlist, bd_next) {
++		if (!d->bd_seesent && (m->m_pkthdr.rcvif == NULL))
++			continue;
++		BPFD_LOCK(d);
++		++d->bd_rcount;
++
++		slen = bpf_filter(d->bd_rfilter, (u_char *)m, pktlen, 0);
++		if (slen != 0) {
++			d->bd_fcount++;
++
++			/* RADCLOCK
++			 * If SYSCLOCK mode, no reason for us to improve microtime()
++			 */
++			switch (d->radclock_tsmode) { 
++				case RADCLOCK_TSMODE_SYSCLOCK:
++				case RADCLOCK_TSMODE_RADCLOCK:
++					gottime = 0;
++					break;
++				case RADCLOCK_TSMODE_FAIRCOMPARE:
++					gottime = 1;
++					break;
++				default:
++					panic("bpf_mtap_radclock_rcv - Unknown RADclock timestamping mode");
++			}
++
++			if (!gottime) {
++				/* RADCLOCK
++				 * microtime(&tv);
++				 */
++				microtime(tv);
++				gottime = 1;
++			}
++#ifdef MAC
++			if (mac_check_bpfdesc_receive(d, bp->bif_ifp) == 0)
++#endif
++				/* RADCLOCK
++				 * Passes tval and tc directly to catchpacket() on receiving 
++				 */
++				catchpacket(d, (u_char *)m, pktlen, slen,
++				    bpf_mcopy, tv, vcount);
++		}
++		BPFD_UNLOCK(d);
++	}
++	BPFIF_UNLOCK(bp);
++}
++#endif /* RADCLOCK */
++
++
++#undef	BPF_CHECK_DIRECTION
++
++
++#ifdef RADCLOCK
++static void 
++radclock_fill_timeval(vcounter_t vcounter, struct timeval *time)
++{
++	vcounter_t countdiff;
++	struct timeval tval;
++	uint64_t time_f;
++	uint64_t frac;
++
++	/* Synchronization algorithm (userland) should update the fixed point data
++	 * often enough to make sure the timeval does not overflow. If no sync algo
++	 * updates the data, we loose precision, but in that case, nobody is tracking
++	 * the clock drift anyway ... so send warning and stop worrying.
++	 */
++
++	/* XXX: So far we are called from catchpacket() only, that ia called from
++	 * one of the *tap functions, each of them holding the BPFD_LOCK(bd) lock.
++	 * ioctl ops are conditioned by the same lock, ensuring the consistency of
++	 * the fixedpoint data. If we move away from the BPF code (and we should),
++	 * we should lock in here.
++	 */
++
++	countdiff = vcounter - radclock_fp.vcount;
++	if (countdiff & ~((1ll << (radclock_fp.countdiff_maxbits +1)) -1))
++		printf("RADclock: warning stamp may overflow timeval at %llu!\n",
++				(long long unsigned) vcounter);
++
++	/* Add the counter delta in second to the recorded fixed point time */
++	time_f 	= radclock_fp.time_int
++			  + ((radclock_fp.phat_int * countdiff) >> (radclock_fp.phat_shift - radclock_fp.time_shift)) ;
++
++	tval.tv_sec = time_f >> radclock_fp.time_shift;
++
++	frac = (time_f - ((uint64_t)tval.tv_sec << radclock_fp.time_shift));
++	tval.tv_usec = (frac * 1000000LL)  >> radclock_fp.time_shift;
++	/* tv.tv_usec truncates at the nano-second digit, so check for next digit rounding */
++	if ( ((frac * 10000000LL) >> radclock_fp.time_shift) >= (tval.tv_usec * 10LL + 5) )
++	{
++		tval.tv_usec++;
++	}
++
++	/* Push the built timeval */
++	*time = tval;
++	
++	/* XXX: If not called with BPFD_LOCK(bd), then should release the fixedpoint data
++	 * lock in here
++	 */
++}
++#else 	/* RADCLOCK */
++static void radclock_fill_timeval(vcounter_t vcounter, struct timeval *tval)
++{
++}
++#endif	/* RADCLOCK */
++
++
+ /*
+  * Move the packet data from interface memory (pkt) into the
+  * store buffer.  "cpfn" is the routine called to do the actual data
+@@ -1416,13 +1656,14 @@
+  * bpf_mcopy is passed in to copy mbuf chains.  In the latter case,
+  * pkt is really an mbuf.
+  */
++/* RADCLOCK
+ static void
+-catchpacket(d, pkt, pktlen, snaplen, cpfn, tv)
+-	struct bpf_d *d;
+-	u_char *pkt;
+-	u_int pktlen, snaplen;
+-	void (*cpfn)(const void *, void *, size_t);
+-	struct timeval *tv;
++catchpacket(struct bpf_d *d, u_char *pkt, u_int pktlen, u_int snaplen,
++    void (*cpfn)(const void *, void *, size_t), struct timeval *tv)
++*/
++static void
++catchpacket(struct bpf_d *d, u_char *pkt, u_int pktlen, u_int snaplen,
++	void (*cpfn)(const void *, void *, size_t), struct timeval *tv, vcounter_t *vcount)
+ {
+ 	struct bpf_hdr *hp;
+ 	int totlen, curlen;
+@@ -1474,7 +1715,47 @@
+ 	 * Append the bpf header.
+ 	 */
+ 	hp = (struct bpf_hdr *)(d->bd_sbuf + curlen);
+-	hp->bh_tstamp = *tv;
++
++	/* RADCLOCK */
++	if (vcount == NULL) {
++		/* We have been called by a non-RADCLOCK function so
++		 * default to normal behaviour. Note: receiving side will 
++		 * never passes in here because of BPF_MTAP_RADCLOCK_RCV().
++		 */
++		hp->bh_tstamp = *tv;
++		hp->vcount_stamp = 0;
++	}
++	else {
++		/* We have been called with valid tv and tc values
++		 * from a RADCLOCK aware function
++		 */
++		hp->vcount_stamp = *vcount;  // In all cases, store the vcount read previously
++		switch (d->radclock_tsmode) { 
++			case RADCLOCK_TSMODE_SYSCLOCK:
++				/* Return SYSCLOCK timeval as normal.
++				 * Note: any incoming packet of non-RADCLOCK application
++				 * should be seen here (tcpdump for example) since default.
++				 */
++				hp->bh_tstamp = *tv;
++				break;
++			case RADCLOCK_TSMODE_RADCLOCK:
++				/* Return timeval based on RADCLOCK clock.
++				 * Use fixed point arithmetic
++				 */ 
++				radclock_fill_timeval( *vcount, &(hp->bh_tstamp) );
++				break;
++			case RADCLOCK_TSMODE_FAIRCOMPARE:
++				/* Copy the timeval read back to back to the vcounter earlier, there
++				 * isn't much difference with NORMAL mode anymore except in the
++				 * receive direction
++				 */
++				hp->bh_tstamp = *tv;
++				break;
++			default:
++				panic("Unknown RADclock timestamping mode");
++		}
++	} /* end of RADCLOCK modification */
++
+ 	hp->bh_datalen = pktlen;
+ 	hp->bh_hdrlen = hdrlen;
+ 	/*
+diff -aur --unidirectional-new-file sys/net/bpf.h FreeBSD-6.2/net/bpf.h
+--- sys/net/bpf.h	Mon Oct 16 10:47:36 2006
++++ FreeBSD-6.2/net/bpf.h	Wed Jun  2 05:27:09 2010
+@@ -37,9 +37,57 @@
+  * $FreeBSD: src/sys/net/bpf.h,v 1.39.2.2 2006/10/16 00:47:36 sam Exp $
+  */
+ 
++
++#include "opt_radclock.h" 
++
+ #ifndef _NET_BPF_H_
+ #define _NET_BPF_H_
+ 
++
++#ifdef RADCLOCK
++/* RADclock synchronisation structure.
++ * TODO: this should not be defined in here and not stored on the BPF device
++ * but historically, we use the BPF device to set/get timestamping modes and
++ * RADclock data
++ */
++
++#include <sys/time.h>
++
++struct radclock_data {
++	double 		phat;
++	double 		phat_err;
++	double 		phat_local;
++	double 		phat_local_err;
++	long double	ca;
++	double 		ca_err;
++	uint32_t	status;
++	vcounter_t	last_changed;
++	vcounter_t	valid_till;
++};
++
++struct radclock_fixedpoint
++{
++	/* phat as an int shifted phat_shift to the left */
++	uint64_t phat_int;
++	/* Record of last time update from synchronization algorithm as an int */
++	uint64_t time_int;
++	/* The counter value to convert in seconds */
++	vcounter_t vcount;
++	/* the shift amount for phat_int */
++	uint8_t phat_shift;
++	/* the shift amount for time_int */
++	uint8_t time_shift;
++	/* Warn if stamp is over this many bits */
++	uint8_t countdiff_maxbits;
++};
++
++/* RADclock timestamping modes */
++#define RADCLOCK_TSMODE_SYSCLOCK		0x0001  /* return SW timeval (normal behavior) and raw vcounter */
++#define RADCLOCK_TSMODE_RADCLOCK		0x0002  /* return timeval based on RADclock and raw vcounter */
++#define RADCLOCK_TSMODE_FAIRCOMPARE 	0x0003  /* return SW timeval and raw vcounter read back to back */
++#endif /* RADCLOCK */
++
++
+ /* BSD style release date */
+ #define	BPF_RELEASE 199606
+ 
+@@ -116,6 +164,42 @@
+ #define	BIOCLOCK	_IO('B', 122)
+ #define	BIOCSETWF	_IOW('B',123, struct bpf_program)
+ 
++#ifdef RADCLOCK
++#define BIOCSRADCLOCKDATA	_IOW('B',124, struct radclock_data)  /* Set RADclock data */
++#define BIOCGRADCLOCKDATA	_IOR('B',125, struct radclock_data)  /* Get RADclock data */
++#define BIOCSRADCLOCKTSMODE	_IOW('B',126, int8_t) /* Set timestamping mode for this device) */
++#define BIOCGRADCLOCKTSMODE	_IOR('B',127, int8_t) /* Get timestamping  mode for this device */
++#define BIOCSRADCLOCKFIXED	_IOW('B',128, struct radclock_fixedpoint)  /* Set RADclock fixedpoint data */
++#endif /* RADCLOCK */
++
++#ifdef RADCLOCK
++/*
++ * Structure prepended to each packet.
++ * For the RADclock, need to embed the raw vcounter value with 
++ * each packet
++ */
++struct bpf_hdr {
++	struct timeval	bh_tstamp;	/* time stamp */
++	bpf_u_int32	bh_caplen;	/* length of captured portion */
++	bpf_u_int32	bh_datalen;	/* original length of packet */
++	u_short		bh_hdrlen;	/* length of bpf header (this struct
++					   plus alignment padding) */
++	u_short		padding;		/* padding to align the fields */
++	vcounter_t	vcount_stamp;	/* raw virtual timecounter timestamp for this packet */
++};
++/*
++ * Because the structure above is not a multiple of 4 bytes, some compilers
++ * will insist on inserting padding; hence, sizeof(struct bpf_hdr) won't work.
++ * Only the kernel needs to know about it; applications use bh_hdrlen.
++ * The value of bpf_if->bif_hdrlen should then be ok, when set by bpfattach2
++ * Force the value to avoid problems with padding. 
++ */
++#ifdef _KERNEL
++#define	SIZEOF_BPF_HDR	(sizeof(struct bpf_hdr) <= 28 ? 28 : \
++    sizeof(struct bpf_hdr))
++#endif
++
++#else   /* No RADCLOCK */
+ /*
+  * Structure prepended to each packet.
+  */
+@@ -136,6 +220,10 @@
+     sizeof(struct bpf_hdr))
+ #endif
+ 
++#endif /* RADCLOCK */
++
++
++
+ /*
+  * Data-link level type codes.
+  */
+@@ -619,6 +707,9 @@
+ int	 bpf_validate(const struct bpf_insn *, int);
+ void	 bpf_tap(struct bpf_if *, u_char *, u_int);
+ void	 bpf_mtap(struct bpf_if *, struct mbuf *);
++#ifdef RADCLOCK
++void	 bpf_mtap_radclock_rcv(struct bpf_if *, struct mbuf *, struct timeval *, uint64_t *);
++#endif /* RADCLOCK */
+ void	 bpf_mtap2(struct bpf_if *, void *, u_int, struct mbuf *);
+ void	 bpfattach(struct ifnet *, u_int, u_int);
+ void	 bpfattach2(struct ifnet *, u_int, u_int, struct bpf_if **);
+@@ -626,6 +717,21 @@
+ 
+ void	 bpfilterattach(int);
+ u_int	 bpf_filter(const struct bpf_insn *, u_char *, u_int, u_int);
++
++#ifdef RADCLOCK
++/* The receiving direction is common to all NIC drivers.
++ * This macro is called from ether_input() in if_ethersubr.c
++ * This macro is needed because we create the timestamps in ether_input()
++ * and the tap function prototype is then different.
++ * In the sending direction, the function prototype is the same.
++ */
++#define	BPF_MTAP_RADCLOCK_RCV(_ifp,_m,tv,vcount) do {	\
++	if ((_ifp)->if_bpf) {					\
++		M_ASSERTVALID(_m);				 				\
++		bpf_mtap_radclock_rcv((_ifp)->if_bpf, (_m), tv, vcount);	\
++	}	\
++} while (0)
++#endif    /* RADCLOCK */
+ 
+ #define	BPF_TAP(_ifp,_pkt,_pktlen) do {				\
+ 	if ((_ifp)->if_bpf)					\
+diff -aur --unidirectional-new-file sys/net/bpfdesc.h FreeBSD-6.2/net/bpfdesc.h
+--- sys/net/bpfdesc.h	Fri Sep 30 09:48:04 2005
++++ FreeBSD-6.2/net/bpfdesc.h	Wed Jun  2 05:27:09 2010
+@@ -97,6 +97,9 @@
+ 	pid_t		bd_pid;		/* PID which created descriptor */
+ 	char		bd_pcomm[MAXCOMLEN + 1];
+ 	int		bd_locked;	/* true if descriptor is locked */
++#ifdef RADCLOCK
++	int8_t	radclock_tsmode;	/* Timestamping mode for the RADclock */
++#endif /* RADCLOCK */
+ };
+ 
+ /* Values for bd_state */
+diff -aur --unidirectional-new-file sys/net/if_ethersubr.c FreeBSD-6.2/net/if_ethersubr.c
+--- sys/net/if_ethersubr.c	Mon Aug 28 12:54:14 2006
++++ FreeBSD-6.2/net/if_ethersubr.c	Wed Jun  2 05:27:09 2010
+@@ -38,6 +38,7 @@
+ #include "opt_mac.h"
+ #include "opt_netgraph.h"
+ #include "opt_carp.h"
++#include "opt_radclock.h"
+ 
+ #include <sys/param.h>
+ #include <sys/systm.h>
+@@ -50,6 +51,9 @@
+ #include <sys/socket.h>
+ #include <sys/sockio.h>
+ #include <sys/sysctl.h>
++#ifdef RADCLOCK
++#include <sys/time.h>
++#endif
+ 
+ #include <net/if.h>
+ #include <net/if_arp.h>
+@@ -515,6 +519,25 @@
+ 	struct ether_header *eh;
+ 	u_short etype;
+ 
++#ifdef RADCLOCK
++	vcounter_t vcount;
++	struct timeval tv;
++
++	vcount = read_vcounter();	/* Read the vcounter as early as possible */
++	microtime(&tv);
++#endif  /* RADCLOCK */
++
++	if ((ifp->if_flags & IFF_UP) == 0) {
++		m_freem(m);
++		return;
++	}
++#ifdef DIAGNOSTIC
++	if ((ifp->if_drv_flags & IFF_DRV_RUNNING) == 0) {
++		if_printf(ifp, "discard frame at !IFF_DRV_RUNNING\n");
++		m_freem(m);
++		return;
++	}
++#endif
+ 	/*
+ 	 * Do consistency checks to verify assumptions
+ 	 * made by code past this point.
+@@ -571,7 +594,11 @@
+ 	/*
+ 	 * Give bpf a chance at the packet.
+ 	 */
++#ifdef RADCLOCK
++	BPF_MTAP_RADCLOCK_RCV(ifp, m, &tv, &vcount);
++#else
+ 	BPF_MTAP(ifp, m);
++#endif /* RADCLOCK */
+ 
+ 	/* If the CRC is still on the packet, trim it off. */
+ 	if (m->m_flags & M_HASFCS) {
+diff -aur --unidirectional-new-file sys/sys/time.h FreeBSD-6.2/sys/time.h
+--- sys/sys/time.h	Sat Apr  2 22:33:27 2005
++++ FreeBSD-6.2/sys/time.h	Wed Jun  2 05:27:09 2010
+@@ -288,6 +288,11 @@
+ void	getnanotime(struct timespec *tsp);
+ void	getmicrotime(struct timeval *tvp);
+ 
++/* RADCLOCK specific */
++typedef uint64_t vcounter_t;
++vcounter_t read_vcounter(void);
++/* RADCLOCK */
++
+ /* Other functions */
+ int	itimerdecr(struct itimerval *itp, int usec);
+ int	itimerfix(struct timeval *tv);
+diff -aur --unidirectional-new-file sys/sys/timepps.h FreeBSD-6.2/sys/timepps.h
+--- sys/sys/timepps.h	Fri Jan  7 13:29:24 2005
++++ FreeBSD-6.2/sys/timepps.h	Wed Jun  2 05:27:09 2010
+@@ -15,6 +15,8 @@
+ #ifndef _SYS_TIMEPPS_H_
+ #define _SYS_TIMEPPS_H_
+ 
++#include "opt_radclock.h"
++
+ #include <sys/ioccom.h>
+ #include <sys/time.h>
+ 
+@@ -43,12 +45,35 @@
+ 	int		current_mode;		/* current mode bits */
+ } pps_info_t;
+ 
++
++#ifdef RADCLOCK
++typedef union pps_vcounteru {
++	vcounter_t vcount;
++} pps_vcounteru_t;
++
++typedef struct {
++	pps_seq_t	assert_sequence;	/* assert event seq # */
++	pps_seq_t	clear_sequence;		/* clear event seq # */
++	pps_timeu_t	assert_tu;
++	pps_timeu_t	clear_tu;
++	int		current_mode;		/* current mode bits */
++	pps_vcounteru_t  assert_vcu;
++	pps_vcounteru_t  clear_vcu;
++} radclock_pps_info_t;
++#endif	/* RADCLOC */
++
++
+ #define assert_timestamp        assert_tu.tspec
+ #define clear_timestamp         clear_tu.tspec
+ 
+ #define assert_timestamp_ntpfp  assert_tu.ntpfp
+ #define clear_timestamp_ntpfp   clear_tu.ntpfp
+ 
++#ifdef RADCLOCK
++#define assert_vcount		assert_vcu.vcount
++#define clear_vcount		clear_vcu.vcount
++#endif 	/* RADCLOCK */
++
+ typedef struct {
+ 	int api_version;			/* API version # */
+ 	int mode;				/* mode bits */
+@@ -89,6 +114,14 @@
+ 	struct timespec	timeout;
+ };
+ 
++#ifdef RADCLOCK
++struct radclock_pps_fetch_args {
++	int tsformat;
++	radclock_pps_info_t	pps_info_buf;
++	struct timespec	timeout;
++};
++#endif	/* RADCLOCK */
++
+ struct pps_kcbind_args {
+ 	int kernel_consumer;
+ 	int edge;
+@@ -102,6 +135,9 @@
+ #define PPS_IOC_GETCAP		_IOR('1', 5, int)
+ #define PPS_IOC_FETCH		_IOWR('1', 6, struct pps_fetch_args)
+ #define PPS_IOC_KCBIND		_IOW('1', 7, struct pps_kcbind_args)
++#ifdef RADCLOCK
++#define RADCLOCK_PPS_IOC_FETCH		_IOWR('1', 8, struct radclock_pps_fetch_args)
++#endif 	/* RADCLOCK */
+ 
+ #ifdef _KERNEL
+ 
+@@ -114,6 +150,9 @@
+ 	/* State information. */
+ 	pps_params_t	ppsparam;
+ 	pps_info_t	ppsinfo;
++#ifdef RADCLOCK
++	radclock_pps_info_t	radclock_ppsinfo;
++#endif 	/* RADCLOCK */
+ 	int		kcmode;
+ 	int		ppscap;
+ 	struct timecounter *ppstc;
+@@ -182,6 +221,26 @@
+ 	*ppsinfobuf = arg.pps_info_buf;
+ 	return (error);
+ }
++
++#ifdef RADCLOCK
++static __inline int
++radclock_pps_fetch(pps_handle_t handle, const int tsformat,
++	radclock_pps_info_t *ppsinfobuf, const struct timespec *timeout)
++{
++	int error;
++	struct radclock_pps_fetch_args arg;
++
++	arg.tsformat = tsformat;
++	if (timeout == NULL) {
++		arg.timeout.tv_sec = -1;
++		arg.timeout.tv_nsec = -1;
++	} else
++		arg.timeout = *timeout;
++	error = ioctl(handle, RADCLOCK_PPS_IOC_FETCH, &arg);
++	*ppsinfobuf = arg.pps_info_buf;
++	return (error);
++}
++#endif 	/* RADCLOCK */
+ 
+ static __inline int
+ time_pps_kcbind(pps_handle_t handle, const int kernel_consumer,
