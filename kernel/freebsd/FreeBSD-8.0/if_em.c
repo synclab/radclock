@@ -291,7 +291,10 @@ static void	em_register_vlan(void *, struct ifnet *, u16);
 static void	em_unregister_vlan(void *, struct ifnet *, u16);
 static void	em_setup_vlan_hw_support(struct adapter *);
 #endif
-static int	em_xmit(struct adapter *, struct mbuf **);
+
+// jrid
+//static int	em_xmit(struct adapter *, struct mbuf **);
+static int	em_xmit(struct adapter *, struct mbuf **, struct ifnet *);
 static void	em_smartspeed(struct adapter *);
 static int	em_82547_fifo_workaround(struct adapter *, int);
 static void	em_82547_update_fifo_head(struct adapter *, int);
@@ -1034,7 +1037,9 @@ em_mq_start_locked(struct ifnet *ifp, struct mbuf *m)
 		return (error);
 	} else if (drbr_empty(ifp, adapter->br) &&
 	    (adapter->num_tx_desc_avail > EM_TX_OP_THRESHOLD)) {
-		if ((error = em_xmit(adapter, &m)) != 0) {
+// jrid
+//		if ((error = em_xmit(adapter, &m)) != 0) {
+		if ((error = em_xmit(adapter, &m, ifp)) != 0) {
 			if (m != NULL)
 				error = drbr_enqueue(ifp, adapter->br, m);
 			return (error);
@@ -1048,7 +1053,8 @@ em_mq_start_locked(struct ifnet *ifp, struct mbuf *m)
 			** Send a copy of the frame to the BPF
 			** listener and set the watchdog on.
 			*/
-			ETHER_BPF_MTAP(ifp, m);
+// jrid
+//			ETHER_BPF_MTAP(ifp, m);
 			adapter->watchdog_timer = EM_TX_TIMEOUT;
 		}
 	} else if ((error = drbr_enqueue(ifp, adapter->br, m)) != 0)
@@ -1064,13 +1070,16 @@ process:
                 next = drbr_dequeue(ifp, adapter->br);
                 if (next == NULL)
                         break;
-                if ((error = em_xmit(adapter, &next)) != 0) {
+// jrid
+//                if ((error = em_xmit(adapter, &next)) != 0) {
+                if ((error = em_xmit(adapter, &next, ifp)) != 0) {
 			if (next != NULL)
 				error = drbr_enqueue(ifp, adapter->br, next);
                         break;
 		}
 		drbr_stats_update(ifp, next->m_pkthdr.len, next->m_flags);
-                ETHER_BPF_MTAP(ifp, next);
+// jrid
+//                ETHER_BPF_MTAP(ifp, next);
                 /* Set the watchdog */
                 adapter->watchdog_timer = EM_TX_TIMEOUT;
         }
@@ -2071,8 +2080,10 @@ em_media_change(struct ifnet *ifp)
  *  return 0 on success, positive on failure
  **********************************************************************/
 
+// jrid
+//em_xmit(struct adapter *adapter, struct mbuf **m_headp)
 static int
-em_xmit(struct adapter *adapter, struct mbuf **m_headp)
+em_xmit(struct adapter *adapter, struct mbuf **m_headp, struct ifnet *ifp)
 {
 	bus_dma_segment_t	segs[EM_MAX_SCATTER];
 	bus_dmamap_t		map;

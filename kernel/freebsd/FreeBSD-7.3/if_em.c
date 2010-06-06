@@ -283,6 +283,8 @@ static void	em_register_vlan(void *, struct ifnet *, u16);
 static void	em_unregister_vlan(void *, struct ifnet *, u16);
 #endif
 
+// jrid
+//static int	em_xmit(struct adapter *, struct mbuf **);
 static int	em_xmit(struct adapter *, struct mbuf **, struct ifnet *);
 static void	em_smartspeed(struct adapter *);
 static int	em_82547_fifo_workaround(struct adapter *, int);
@@ -1999,6 +2001,8 @@ em_media_change(struct ifnet *ifp)
  *  return 0 on success, positive on failure
  **********************************************************************/
 
+// jrid
+// em_xmit(struct adapter *adapter, struct mbuf **m_headp)
 static int
 em_xmit(struct adapter *adapter, struct mbuf **m_headp, struct ifnet *ifp)
 {
