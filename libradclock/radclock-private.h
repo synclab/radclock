@@ -203,7 +203,7 @@ struct radclock
 	void *stamp_source; /* Defined as void* since not part of the library */
 
 	/* Synchronisation Peers */
-	void *peer_active; 	/* Peers are of different nature (bidir, oneway) will cast */
+	void *active_peer; 	/* Peers are of different nature (bidir, oneway) will cast */
 };
 
 

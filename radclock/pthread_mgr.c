@@ -145,7 +145,7 @@ void* thread_data_processing(void *c_handle)
 	
 	// TODO XXX Need to manage peers better !!
 	/* Register active peer */
-	clock_handle->peer_active = (void*) peer;
+	clock_handle->active_peer = (void*) &peer;
 
 	while ( (clock_handle->pthread_flag_stop & PTH_DATA_PROC_STOP) != PTH_DATA_PROC_STOP )
 	{

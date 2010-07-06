@@ -140,7 +140,7 @@ int update_system_clock(struct radclock *clock_handle)
 	static vcounter_t sys_init;
 	static struct timeval sys_init_tv;
 	static int next_stamp;
-	int polling_period;
+	int poll_period;
 
 	memset(&tx, 0, sizeof(struct timex));
 

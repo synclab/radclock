@@ -960,7 +960,7 @@ int process_phat_full (struct bidir_peer* peer, struct radclock* clock_handle, s
 	if ( perr_i >= peer->Ep )
 	{
 		/* Regular statistics print out every 6 hours*/
-		if ( !(peer->stamp_i % (int)(6 * 3600 / peer.poll_period)) ) {
+		if ( !(peer->stamp_i % (int)(6 * 3600 / peer->poll_period)) ) {
 			verbose(VERB_SYNC, "i=%lu: %s", peer->stamp_i, peer->stats); 
 		}
 		return 0;
@@ -978,7 +978,7 @@ int process_phat_full (struct bidir_peer* peer, struct radclock* clock_handle, s
 	if ( (perr_ij >= peer->perr) && (perr_ij >= peer->Ep_qual) ) 
 	{
 		/* Regular statistics print out */
-		if ( !(peer->stamp_i % (int)(6 * 3600 / peer.poll_period)) ) {
+		if ( !(peer->stamp_i % (int)(6 * 3600 / peer->poll_period)) ) {
 			verbose(VERB_SYNC, "i=%lu: %s", peer->stamp_i, peer->stats); 
 		}
 		/* Note: STARAD_PERIOD_QUAL is not set on every point that fails.
@@ -1031,7 +1031,7 @@ int process_phat_full (struct bidir_peer* peer, struct radclock* clock_handle, s
 	}
 
 	/* Regular statistics print out */
-	if ( !(peer->stamp_i % (int)(6 * 3600 / peer.poll_period)) ) {
+	if ( !(peer->stamp_i % (int)(6 * 3600 / peer->poll_period)) ) {
 		verbose(VERB_SYNC, "i=%lu: %s", peer->stamp_i, peer->stats); 
 	}
 	
@@ -1640,7 +1640,7 @@ void process_thetahat_full (struct bidir_peer* peer, struct radclock* clock_hand
 		DEL_STATUS(clock_handle, STARAD_OFFSET_SANITY);
 	}
 
-	if ( !(peer->stamp_i % (int)(6 * 3600 / peer.poll_period)) ) {
+	if ( !(peer->stamp_i % (int)(6 * 3600 / peer->poll_period)) ) {
 		verbose(VERB_SYNC, "i=%lu, th_naive: %6.4lg [ms], thetahat = %6.4lg [ms], "
 				"wsum = %7.5lg, minET = %5.3lg [ms] (RTThat/2 = %5.3lf)", 
 				peer->stamp_i, 1000*th_naive, 1000*peer->thetahat, wsum,1000*minET, 1000*peer->phat*peer->RTThat/2.);
