@@ -310,7 +310,7 @@ int ntp_client(struct radclock * clock_handle)
 		}
 		else
 		{
-			verbose(LOG_WARNING, "No reply after 800ms. Socket timed out");
+			verbose(VERB_DEBUG, "No reply after 800ms. Socket timed out");
 		}
 
 		attempt--;
@@ -361,7 +361,11 @@ int trigger_work(struct radclock *clock_handle)
 	if ((vcount - GLOBAL_DATA(clock_handle)->last_changed)*GLOBAL_DATA(clock_handle)->phat > OUT_SKM / 2) 
 	{
 		/* Data is quite old */
-		ADD_STATUS(clock_handle, STARAD_STARVING);
+		if ( ! HAS_STATUS(clock_handle, STARAD_STARVING ))
+		{
+			verbose(LOG_WARNING, "Clock is starving. No valid input for a long time!!"); 
+			ADD_STATUS(clock_handle, STARAD_STARVING);
+		}
 	}
 	else
 		/* We are happy with the data */

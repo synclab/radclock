@@ -167,6 +167,9 @@ struct bidir_output
 };
 
 
+// TODO
+// Should have a generic peer structure with data common to all and union for
+// specific params
 struct bidir_peer
 {
 	/* Main index

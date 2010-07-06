@@ -200,7 +200,10 @@ struct radclock
 	void *algo_output; 	/* Defined as void* since not part of the library */
 
 	/* Stamp source */
-	void *stamp_source; 	/* Defined as void* since not part of the library */
+	void *stamp_source; /* Defined as void* since not part of the library */
+
+	/* Synchronisation Peers */
+	void *peer_active; 	/* Peers are of different nature (bidir, oneway) will cast */
 };
 
 

@@ -140,6 +140,7 @@ int update_system_clock(struct radclock *clock_handle)
 	static vcounter_t sys_init;
 	static struct timeval sys_init_tv;
 	static int next_stamp;
+	int polling_period;
 
 	memset(&tx, 0, sizeof(struct timex));
 
@@ -316,7 +317,8 @@ int update_system_clock(struct radclock *clock_handle)
 				(double)(tx.offset/KERN_RES), (double)tx.freq/(1L<<SHIFT_USEC), 
 				tx.status, (double)tx.maxerror/1e6, (double)tx.esterror/1e6 );
 
-	if (VERB_LEVEL && (!(((struct bidir_output*)clock_handle->algo_output)->n_stamps-1)%200) ) 
+	poll_period = ((struct bidir_peer*)(clock_handle->active_peer))->poll_period;
+	if (VERB_LEVEL && !(OUTPUT(clock_handle, n_stamps) % ((int)(3600*6/poll_period))) ) 
 		verbose(VERB_CONTROL, "System clock PLL adjusted (offset freq status maxerr esterr) %.09f %.2f %d %.06f %.06f",
 				(double)(tx.offset/KERN_RES), (double)tx.freq/(1L<<SHIFT_USEC), 
 				tx.status, (double)tx.maxerror/1e6, (double)tx.esterror/1e6 );
@@ -408,6 +410,7 @@ int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 	double error_bound 		= 0;
 	double error_bound_avg 	= 0;
 	double error_bound_std 	= 0;
+	int poll_period = 0;	
 
 	/* Generic call for creating the stamps depending on the type of the 
 	 * input source.
@@ -483,9 +486,13 @@ int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 	/* Write algo output to matlab file, much less urgent than previous tasks */
 	print_out_files(clock_handle, &stamp);
 	
-	/* View updated RADclock data and compare with NTP server stamps in nice format */
-	if (VERB_LEVEL &&   (((struct bidir_output*)clock_handle->algo_output)->n_stamps < 10 
-					|| !((((struct bidir_output*)clock_handle->algo_output)->n_stamps-1)%100)) ) 
+	/* View updated RADclock data and compare with NTP server stamps in nice
+	 * format. The first 10 then every 6 hours.
+	 */
+	poll_period = ((struct bidir_peer*)(clock_handle->active_peer))->poll_period;
+	if (VERB_LEVEL &&   ( (OUTPUT(clock_handle, n_stamps) < 10)
+					|| !(OUTPUT(clock_handle, n_stamps) % ((int)(3600*6/poll_period))) )) 
+//					|| !((((struct bidir_output*)clock_handle->algo_output)->n_stamps)%100)) ) 
 	{
 		radclock_vcount_to_abstime_fp(clock_handle, &(GLOBAL_DATA(clock_handle)->last_changed), &currtime);
 		radclock_get_min_RTT(clock_handle, &min_RTT);

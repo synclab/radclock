@@ -142,6 +142,10 @@ void* thread_data_processing(void *c_handle)
 
 	/* Init peer stamp counter, everything rely on this starting at 0 */
 	peer.stamp_i = 0;
+	
+	// TODO XXX Need to manage peers better !!
+	/* Register active peer */
+	clock_handle->peer_active = (void*) peer;
 
 	while ( (clock_handle->pthread_flag_stop & PTH_DATA_PROC_STOP) != PTH_DATA_PROC_STOP )
 	{
