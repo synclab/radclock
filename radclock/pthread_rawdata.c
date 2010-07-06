@@ -18,24 +18,23 @@
  */
 
 
-#include "../config.h"
 #include <string.h>
 #include <math.h>
 #include <syslog.h>
 #include <time.h>
 
+#include "../config.h"
 #include "sync_algo.h"
-#include <radclock.h>
+#include "radclock.h"
 #include "radclock-private.h"
 #include "fixedpoint.h"
 #include "verbose.h"
-#include <proto_ntp.h>
-
+#include "proto_ntp.h"
 #include "stampinput.h"
 #include "stampoutput.h"
 #include "config_mgr.h"
-
 #include "pthread_mgr.h"
+#include "jdebug.h"
 
 
 
@@ -516,6 +515,10 @@ int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 	 * parameters, with the next packets coming.
 	 */
 	clock_handle->conf->mask = UPDMASK_NOUPD;
+
+
+	JDEBUG_RUSAGE
+
 	return 0;
 }
 

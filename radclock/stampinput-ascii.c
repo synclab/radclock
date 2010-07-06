@@ -27,13 +27,16 @@
 #include <syslog.h>
 #include <string.h>
 
-#include <sync_algo.h>
-#include <config_mgr.h>
-#include <verbose.h>
-#include <create_stamp.h>
-
+#include "../config.h" 
+#include "sync_algo.h"
+#include "config_mgr.h"
+#include "verbose.h"
+#include "create_stamp.h"
 #include "stampinput.h"
 #include "stampinput_int.h"
+#include "jdebug.h"
+
+
 
 #define NTPtoUTC_OFFSET  2272060800lu  // [sec] since NTP base epoch [current UNIX + 730 days = 2 years]
 #define NTPtoUNIX_OFFSET 2208988800lu  // [sec] since NTP base epoch, currently!
@@ -83,15 +86,16 @@ static FILE* open_timestamp(char* sync_in_ascii)
 	} 
 
 	if ((ch=skip_commentblock(stamp_fd,'%'))==EOF)        
-		verbose(LOG_WARNING,"Stored ascii stamp file %s seems to be data free..",sync_in_ascii);
+		verbose(LOG_WARNING,"Stored ascii stamp file %s seems to be data free", sync_in_ascii);
 	else
-		verbose(LOG_NOTICE, "Reading from stored ascii stamp file %s",sync_in_ascii);
+		verbose(LOG_NOTICE, "Reading from stored ascii stamp file %s", sync_in_ascii);
 	return stamp_fd;
 }
 
 static int asciistamp_init(struct radclock *handle, struct stampsource *source)
 {
 	source->priv_data = (struct ascii_data *) malloc(sizeof(struct ascii_data));
+	JDEBUG_MEMORY(JDBG_MALLOC, source->priv_data);
 	if (!ASCII_DATA(source))
 	{
 		verbose(LOG_ERR, "Couldn't allocate memory");
@@ -146,6 +150,7 @@ static void asciistamp_breakloop(struct radclock *handle, struct stampsource *so
 static void asciistamp_finish(struct radclock *handle, struct stampsource *source)
 {
 	fclose(ASCII_DATA(source)->fd);
+	JDEBUG_MEMORY(JDBG_FREE, ASCII_DATA(source));
 	free(ASCII_DATA(source));
 }
 

@@ -20,17 +20,26 @@
 #include <stdlib.h>
 #include <string.h>
 #include <syslog.h>
+
+#include "../config.h"
 #include "verbose.h"
 #include "sync_history.h"
+#include "jdebug.h"
+
+
 
 int history_init(history *hist, unsigned int buffer_sz, size_t item_sz)
 {
 	hist->buffer = malloc(buffer_sz * item_sz);
+	JDEBUG_MEMORY(JDBG_MALLOC, hist->buffer);
+
 	if(hist->buffer == NULL)
 	{
 		verbose(LOG_ERR, "malloc failed allocating memory");
 		return 1;
 	}
+
+	memset(hist->buffer, 0, buffer_sz * item_sz);
 
 	hist->buffer_end 	= hist->buffer + (buffer_sz-1) * item_sz;
 	hist->buffer_sz 	= buffer_sz;
@@ -42,6 +51,7 @@ int history_init(history *hist, unsigned int buffer_sz, size_t item_sz)
 }
 
 
+// XXX TODO ... this is never called ?? Should be used in the peer delete process
 void history_free(history *hist)
 {
 	hist->buffer_end 	= NULL;
@@ -50,6 +60,7 @@ void history_free(history *hist)
 	hist->item_sz 		= 0;
 	hist->head 			= NULL;
 	hist->tail 			= NULL;
+	JDEBUG_MEMORY(JDBG_FREE, hist->buffer);
     free(hist->buffer);
 	hist->buffer		= NULL;
 }
@@ -118,6 +129,8 @@ int history_resize(history *hist, unsigned int buffer_sz, unsigned long int inde
 
 	/* Allocate a new buffer to copy the correct items. Initialised to 0 */
 	new_buffer = malloc(buffer_sz * hist->item_sz);
+	JDEBUG_MEMORY(JDBG_MALLOC, new_buffer);
+
 	if(new_buffer == NULL)
 	{
 		verbose(LOG_ERR, "malloc failed allocating memory");
@@ -158,6 +171,7 @@ int history_resize(history *hist, unsigned int buffer_sz, unsigned long int inde
 	hist->buffer_sz = buffer_sz;
 	hist->buffer_end = new_buffer + (buffer_sz-1) * hist->item_sz;
 
+	JDEBUG_MEMORY(JDBG_FREE, hist->buffer);
 	free(hist->buffer);
 	hist->buffer = new_buffer;
 	

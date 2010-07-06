@@ -37,15 +37,15 @@
 #include <math.h>
 
 
-#include <radclock.h>
+#include "../config.h"
+#include "radclock.h"
 /* The algo needs access to the global_data structure to update the user level clock */
 #include "radclock-private.h"
-
 #include "verbose.h"
-#include <sync_algo.h>
+#include "sync_algo.h"
 #include "config_mgr.h"
-
 #include "sync_history.h"
+#include "jdebug.h"
 
 
 
@@ -364,7 +364,10 @@ void init_peer( struct radclock *clock_handle, struct radclock_phyparam *phypara
 	history_add(&peer->thnaive_hist, peer->stamp_i, &th_naive);
 
 	/* Allocate memory for statistic strings */
+	// XXX TODO XXX should have a cleaon peer create / destroy mechanism
+	// XXX TODO XXX this chunk of memory is never freed ...
 	peer->stats = (char *) malloc(STAT_SZ * sizeof(char));
+	JDEBUG_MEMORY(JDBG_MALLOC, peer->stats);
 
 }
 

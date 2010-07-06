@@ -32,6 +32,7 @@
 #include "radclock.h"
 #include "radclock-private.h"
 #include "verbose.h"
+#include "jdebug.h"
 
 
 
@@ -151,6 +152,8 @@ void verbose(int facility, char* format, ...)
 	}
 
 	str = malloc(size);
+	JDEBUG_MEMORY(JDBG_MALLOC, str);
+
 	while (1) {
 		if (str == NULL) {
 			verb_panic("panic - can't alloc for verbose");
@@ -227,6 +230,7 @@ void verbose(int facility, char* format, ...)
 	}
 
 	/* To get to this point logfile and str are non-NULL!)*/
+	JDEBUG_MEMORY(JDBG_FREE, str);
 	free(str);
 	fflush(verbose_data.logfile);
 }

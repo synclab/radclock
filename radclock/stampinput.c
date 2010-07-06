@@ -25,16 +25,17 @@
 #include <stdlib.h>
 #include <string.h>
 #include <syslog.h>
-
-#include <sync_algo.h>
-#include <config_mgr.h>
-
-#include <verbose.h>
 #include <pcap.h>
-#include <create_stamp.h>
 
+#include "../config.h"
+#include "sync_algo.h"
+#include "config_mgr.h"
+#include "verbose.h"
+#include "create_stamp.h"
 #include "stampinput.h"
 #include "stampinput_int.h"
+#include "jdebug.h"
+
 
 extern struct stampsource_def ascii_source;
 extern struct stampsource_def livepcap_source;
@@ -73,6 +74,8 @@ int is_live_source(struct radclock *clock_handle)
 struct stampsource *create_source(struct radclock *handle)
 {
 	struct stampsource *src = (struct stampsource *) malloc(sizeof(struct stampsource));
+	JDEBUG_MEMORY(JDBG_MALLOC, src);
+
 	if (!src)
 		goto err_out;
 
@@ -105,6 +108,7 @@ struct stampsource *create_source(struct radclock *handle)
 	
 	return src;
 child_err:
+	JDEBUG_MEMORY(JDBG_FREE, src);
 	free(src);
 err_out:
 	return NULL;
@@ -137,6 +141,7 @@ struct timeref_stats *stampsource_get_stats(struct radclock *clock_handle, struc
 void destroy_source(struct radclock *clock_handle, struct stampsource *source)
 {
 	INPUT_OPS(source)->destroy(clock_handle, source);
+	JDEBUG_MEMORY(JDBG_FREE, source);
 	free(source);
 }
 

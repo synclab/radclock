@@ -38,8 +38,6 @@
 
 struct radclock * radclock_create(void)
 {
-	JDEBUG
-
 	struct radclock *clock = (struct radclock*) malloc(sizeof(struct radclock));
 	if (!clock) 
 		return NULL;
@@ -247,8 +245,6 @@ int set_clock_run_mode(struct radclock *handle)
 // TODO: most of this code should be taken out of the library
 int radclock_init(struct radclock *clock_handle) 
 {
-	JDEBUG
-
 	/* Few branching to depending we are: 
 	 * - (1) a client process, 
 	 * - (2) the radclock algo serving data, 

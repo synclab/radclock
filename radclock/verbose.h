@@ -23,9 +23,9 @@
 
 #include "radclock.h"
 
+
 #define DAEMON_LOG_FILE	"/var/log/radclock.log"
 #define BIN_LOG_FILE	"radclock.log"
-
 
 
 /** Here are the values we can use for the syslog. Guess that is standard values
@@ -57,5 +57,4 @@ int get_verbose_level();
 #define VERB_LEVEL get_verbose_level()
 
 
-
-#endif
+#endif  /* _VERBOSE_H */

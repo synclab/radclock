@@ -17,12 +17,10 @@
  * this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "../config.h"
 
 #include <unistd.h>
 #include <syslog.h>
 #include <string.h>
-
 #include <netdb.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -31,14 +29,15 @@
 #include <time.h>
 #include <signal.h>
 
-#include <radclock.h>
+#include "../config.h"
+#include "radclock.h"
 #include "radclock-private.h"
 #include "verbose.h"
-
 #include "sync_algo.h"
 #include "config_mgr.h"
 #include "proto_ntp.h"
 #include "pthread_mgr.h"
+#include "jdebug.h"
 
 
 #define SO_RCV_TIMEOUT 800000

@@ -26,17 +26,17 @@
 #include <stdlib.h>
 #include <string.h>
 #include <syslog.h>
-
 #include <assert.h>
 
-#include <sync_algo.h>
-#include <config_mgr.h>
-#include <verbose.h>
-#include <pcap.h>
-#include <create_stamp.h>
-
+#include "../config.h"
+#include "sync_algo.h"
+#include "config_mgr.h"
+#include "verbose.h"
+#include "pcap.h"
+#include "create_stamp.h"
 #include "stampinput.h"
 #include "stampinput_int.h"
+#include "jdebug.h"
 
 
 #define TRACEFILE_DATA(x) ((struct tracefile_data *)(x->priv_data))
@@ -92,6 +92,7 @@ static int tracefilestamp_init(struct radclock *handle, struct stampsource *sour
 
 	/* Allocate memory for the private data concerning the trace file */
 	source->priv_data = malloc(sizeof(struct tracefile_data));
+	JDEBUG_MEMORY(JDBG_MALLOC, source->priv_data);
 	if (!TRACEFILE_DATA(source)) {
 		verbose(LOG_ERR, "Error allocating memory");
 		return -1;
@@ -111,6 +112,7 @@ static int tracefilestamp_init(struct radclock *handle, struct stampsource *sour
 	TRACEFILE_DATA(source)->trace_input = pcap_open_offline(handle->conf->sync_in_pcap, errbuf);
 	if (!TRACEFILE_DATA(source)->trace_input) {
 		verbose(LOG_ERR, "Open failed on raw pcap file, pcap says: %s", errbuf);
+		JDEBUG_MEMORY(JDBG_FREE, TRACEFILE_DATA(source));
 		free(TRACEFILE_DATA(source));
 		return -1;
 	}
@@ -163,6 +165,7 @@ static void tracefilestamp_breakloop(struct radclock *handle, struct stampsource
 static void tracefilestamp_finish(struct radclock *handle, struct stampsource *source)
 {
 	pcap_close(TRACEFILE_DATA(source)->trace_input);
+	JDEBUG_MEMORY(JDBG_FREE, TRACEFILE_DATA(source));
 	free(TRACEFILE_DATA(source));
 }
 

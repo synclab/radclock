@@ -22,14 +22,14 @@
 #include <string.h>
 #include <syslog.h>
 
+#include "../config.h"
 #include "sync_algo.h"
 #include "create_stamp.h"
-#include <radclock.h>
+#include "radclock.h"
 #include "radclock-private.h"
-
-#include <verbose.h>
+#include "verbose.h"
 #include "rawdata.h"
-
+#include "jdebug.h"
 
 
 
@@ -71,7 +71,10 @@ void fill_rawdata_buffer(u_char *c_handle, const struct pcap_pkthdr *pcap_hdr, c
 
 	/* Initialise rd */
 	rd = (struct raw_data *) malloc (sizeof(struct raw_data));
+	JDEBUG_MEMORY(JDBG_MALLOC, rd);
+
 	rd->buf = (void *) malloc( pcap_hdr->caplen * sizeof(char));
+	JDEBUG_MEMORY(JDBG_MALLOC, rd->buf);
 
 	rd->read 		= 0;	/* Of course not read yet */
 	rd->type 		= RD_PACKET;
@@ -166,7 +169,9 @@ struct raw_data* free_and_cherrypick(struct radclock *clock_handle)
 			/* Kill it */
 			tofree->next = NULL;
 			tofree->prev = NULL;
+			JDEBUG_MEMORY(JDBG_FREE, tofree->buf);
 			free(tofree->buf);
+			JDEBUG_MEMORY(JDBG_FREE, tofree);
 			free(tofree);
 		}
 	}

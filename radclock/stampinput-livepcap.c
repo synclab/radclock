@@ -22,14 +22,11 @@
  * A stamp source for reading from live input
  * Also has the ability to create output
  */
-#include "../config.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <syslog.h>
-
 #include <assert.h>
-
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -38,25 +35,26 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <pcap.h>
 
-
+#include "../config.h"
 #ifdef HAVE_IFADDRS_H
 # include <ifaddrs.h>
 #else
 # error Need ifaddrs.h or to go back to using the ioctl
 #endif
 
-#include <sync_algo.h>
-#include <config_mgr.h>
-#include <verbose.h>
-#include <pcap.h>
-
-#include <create_stamp.h>
-
+#include "sync_algo.h"
+#include "config_mgr.h"
+#include "verbose.h"
+#include "create_stamp.h"
 #include "stampinput.h"
 #include "stampinput_int.h"
 #include "ntohll.h"
 #include "rawdata.h"
+#include "jdebug.h"
+
+
 
 
 /* Defines required by the Linux SLL header */
@@ -124,7 +122,8 @@ int insert_sll_header(radpcap_packet_t *packet)
 	/* Allocate what will be the new packet buffer, remember, 
 	 *  packet->size contains the pcap header and we remove the link layer 
 	 *  header */
-	tmpbuffer= malloc(sizeof(linux_sll_header_t) +packet->size -lheader_size);
+	tmpbuffer = (char*) malloc(sizeof(linux_sll_header_t) +packet->size -lheader_size);
+	JDEBUG_MEMORY(JDBG_MALLOC, tmpbuffer);
 
 	/* Copy the pcap header into the tmp buffer */
 	memcpy(tmpbuffer,packet->header, sizeof(struct pcap_pkthdr));
@@ -141,6 +140,7 @@ int insert_sll_header(radpcap_packet_t *packet)
 				get_capture_length(packet) -lheader_size);
 	
 	/* We made a copy so get rid of the former buffer */
+	JDEBUG_MEMORY(JDBG_FREE, packet->buffer);
 	free(packet->buffer);
 	
 	/* Reposition radpcap_packet fields to new values */
@@ -359,10 +359,14 @@ int get_interface(char* if_name, char* ip_addr)
 int get_address_by_name(char* addr, char* hostname) 
 {
 	struct hostent *he;
-	struct sockaddr_in* s = (struct sockaddr_in*) malloc(sizeof(struct sockaddr_in));
 	int lhost = 150;
+	struct sockaddr_in* s = (struct sockaddr_in*) malloc(sizeof(struct sockaddr_in));
+	JDEBUG_MEMORY(JDBG_MALLOC, s);
 	char *host = (char*) malloc(lhost* sizeof(char));
+	JDEBUG_MEMORY(JDBG_MALLOC, host);
 	char *domain = (char*) malloc(lhost* sizeof(char));
+	JDEBUG_MEMORY(JDBG_MALLOC, domain);
+
 	int i=0;
 	int found = 0;
 	char **p_addr = NULL;
@@ -407,13 +411,22 @@ int get_address_by_name(char* addr, char* hostname)
 	}
 	if (!found) {
 		verbose(LOG_NOTICE, "Did not find any valid address based on host name %s", hostname);
+
+		JDEBUG_MEMORY(JDBG_FREE, domain);
+		free(domain);
+		JDEBUG_MEMORY(JDBG_FREE, host);
 		free(host);
+		JDEBUG_MEMORY(JDBG_FREE, s);
 		free(s);
 		return 1;
 	}
 	strcpy(addr, inet_ntoa(s->sin_addr));
 
+	JDEBUG_MEMORY(JDBG_FREE, domain);
+	free(domain);
+	JDEBUG_MEMORY(JDBG_FREE, host);
 	free(host);
+	JDEBUG_MEMORY(JDBG_FREE, s);
 	free(s);
 	return 0;
 }
@@ -547,11 +560,13 @@ static int livepcapstamp_init(struct radclock *handle, struct stampsource *sourc
 	p_handle_traceout = pcap_open_dead(DLT_LINUX_SLL, BPF_PACKET_SIZE);
 	if (!p_handle_traceout) {
 		verbose(LOG_ERR, "Error creating pcap handle");
+		JDEBUG_MEMORY(JDBG_FREE, LIVEPCAP_DATA(source));
 		free(LIVEPCAP_DATA(source));
 		return -1;
 	}
 	
 	source->priv_data = malloc(sizeof(struct livepcap_data));
+	JDEBUG_MEMORY(JDBG_MALLOC, source->priv_data);
 	if (!LIVEPCAP_DATA(source)) {
 		verbose(LOG_ERR, "Error allocating memory");
 		return -1;
@@ -563,6 +578,7 @@ static int livepcapstamp_init(struct radclock *handle, struct stampsource *sourc
 				open_live(handle, LIVEPCAP_DATA(source)->src_ipaddr);
 	if (!LIVEPCAP_DATA(source)->live_input) {
 		verbose(LOG_ERR, "Error creating pcap handle");
+		JDEBUG_MEMORY(JDBG_FREE, LIVEPCAP_DATA(source));
 		free(LIVEPCAP_DATA(source));
 		return -1;
 	}
@@ -589,13 +605,16 @@ static int livepcapstamp_init(struct radclock *handle, struct stampsource *sourc
 		if ((out_fd = fopen(handle->conf->sync_out_pcap, "r"))) {
 			fclose(out_fd);
 			char* backup = (char*) malloc(strlen(handle->conf->sync_out_pcap)+5);
+			JDEBUG_MEMORY(JDBG_MALLOC, backup);
 			sprintf(backup, "%s.old", handle->conf->sync_out_pcap);
 			if (rename(handle->conf->sync_out_pcap, backup) < 0) {
 				verbose(LOG_ERR, "Cannot rename existing output file: %s", handle->conf->sync_out_pcap);
+				JDEBUG_MEMORY(JDBG_FREE, backup);
 				free(backup);
 				exit(EXIT_FAILURE);
 			}
 			verbose(LOG_NOTICE, "Backed up existing output file: %s", handle->conf->sync_out_pcap);
+			JDEBUG_MEMORY(JDBG_FREE, backup);
 			free(backup);
 			out_fd = NULL;
 		}
@@ -607,6 +626,7 @@ static int livepcapstamp_init(struct radclock *handle, struct stampsource *sourc
 		{
 			verbose(LOG_ERR, "Error opening raw output: %s",
 				   pcap_geterr(p_handle_traceout));
+			JDEBUG_MEMORY(JDBG_FREE, LIVEPCAP_DATA(source));
 			free(LIVEPCAP_DATA(source));
 			return -1;
 		}
@@ -682,6 +702,7 @@ static void livepcapstamp_finish(struct radclock *handle, struct stampsource *so
 	}
 	
 	pcap_close(LIVEPCAP_DATA(source)->live_input);
+	JDEBUG_MEMORY(JDBG_FREE, LIVEPCAP_DATA(source));
 	free(LIVEPCAP_DATA(source));
 }
 
@@ -718,6 +739,7 @@ static int livepcapstamp_update_filter(struct radclock *handle, struct stampsour
 pcap_err:
 	verbose(LOG_ERR, "Things went really wrong with this update on the live source");
 	pcap_close(LIVEPCAP_DATA(source)->live_input);
+	JDEBUG_MEMORY(JDBG_FREE, LIVEPCAP_DATA(source));
 	free(LIVEPCAP_DATA(source));
 err_out:
 	return -1;
@@ -737,6 +759,7 @@ static int livepcapstamp_update_dumpout(struct radclock *handle, struct stampsou
 		if (!p_handle_traceout)
 		{
 			verbose(LOG_ERR, "Error creating pcap handle");
+			JDEBUG_MEMORY(JDBG_FREE, LIVEPCAP_DATA(source));
 			free(LIVEPCAP_DATA(source));
 			return -1;
 		}
@@ -746,6 +769,7 @@ static int livepcapstamp_update_dumpout(struct radclock *handle, struct stampsou
 		{
 			verbose(LOG_ERR, "Error opening raw output: %s",
 				   pcap_geterr(p_handle_traceout));
+			JDEBUG_MEMORY(JDBG_FREE, LIVEPCAP_DATA(source));
 			free(LIVEPCAP_DATA(source));
 			return -1;
 		}

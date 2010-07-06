@@ -23,11 +23,14 @@
 #include <string.h>
 #include <syslog.h>
 #include <pcap.h>
-#include <radclock.h>
-#include <verbose.h>
-#include <sync_algo.h>
-#include <config_mgr.h>
+
+#include "../config.h"
+#include "radclock.h"
+#include "verbose.h"
+#include "sync_algo.h"
+#include "config_mgr.h"
 #include "stampoutput.h"
+#include "jdebug.h"
 
 
 
@@ -42,13 +45,18 @@ int open_output_stamp(struct radclock *clock_handle)
 	if ((clock_handle->stampout_fd = fopen(clock_handle->conf->sync_out_ascii, "r"))) {
 		fclose(clock_handle->stampout_fd);
 		char* backup = (char*) malloc(strlen(clock_handle->conf->sync_out_ascii)+5);
+		JDEBUG_MEMORY(JDBG_MALLOC, backup);
+
 		sprintf(backup, "%s.old", clock_handle->conf->sync_out_ascii);
 		if (rename(clock_handle->conf->sync_out_ascii, backup) < 0) {
 			verbose(LOG_ERR, "Cannot rename existing output file: %s", clock_handle->conf->sync_out_ascii);
+
+			JDEBUG_MEMORY(JDBG_FREE, backup);
 			free(backup);
 			exit(EXIT_FAILURE);
 		}
 		verbose(LOG_NOTICE, "Backed up existing output file: %s", clock_handle->conf->sync_out_ascii);
+		JDEBUG_MEMORY(JDBG_FREE, backup);
 		free(backup);
 		clock_handle->stampout_fd = NULL;
 	}
@@ -92,13 +100,17 @@ int open_output_matlab(struct radclock *clock_handle)
 	if ((clock_handle->matout_fd = fopen(clock_handle->conf->clock_out_ascii, "r"))) {
 		fclose(clock_handle->matout_fd);
 		char* backup = (char*) malloc(strlen(clock_handle->conf->clock_out_ascii)+5);
+		JDEBUG_MEMORY(JDBG_MALLOC, backup);
+
 		sprintf(backup, "%s.old", clock_handle->conf->clock_out_ascii);
 		if (rename(clock_handle->conf->clock_out_ascii, backup) < 0) {
 			verbose(LOG_ERR, "Cannot rename existing output file: %s", clock_handle->conf->clock_out_ascii);
+			JDEBUG_MEMORY(JDBG_FREE, backup);
 			free(backup);
 			exit(EXIT_FAILURE);
 		}
 		verbose(LOG_NOTICE, "Backed up existing output file: %s", clock_handle->conf->clock_out_ascii);
+		JDEBUG_MEMORY(JDBG_FREE, backup);
 		free(backup);
 		clock_handle->matout_fd = NULL;
 	}
@@ -149,7 +161,6 @@ void print_out_files(struct radclock *clock_handle, struct bidir_stamp *tuple)
 	int err;
 	/* A single buffer to have a single disk access, it has to be big enough */
 	char *buf;
-	buf = (char *) malloc(500 * sizeof(char));
 
 	/* long double since must hold [sec] since timescale origin, and at least
 	 * 1mus precision
@@ -171,8 +182,13 @@ void print_out_files(struct radclock *clock_handle, struct bidir_stamp *tuple)
 			verbose(LOG_ERR, "Failed to write data to timestamp file");
 	}
 	
-	if (clock_handle->matout_fd == NULL) 
+	if (clock_handle->matout_fd == NULL)
+	{
 		return;
+	}
+
+	buf = (char *) malloc(500 * sizeof(char));
+	JDEBUG_MEMORY(JDBG_MALLOC, buf);
 
 	sprintf(buf, 
 		"%22.11Lf %"VC_FMT" %"VC_FMT" %12.10lg %12.10lg %22.11Lf %12.10lf "
@@ -205,5 +221,8 @@ void print_out_files(struct radclock *clock_handle, struct bidir_stamp *tuple)
     err = fprintf(clock_handle->matout_fd, "%s", buf);
 	if ( err < 0 )
 		verbose(LOG_ERR, "Failed to write data to matlab file");
+
+	JDEBUG_MEMORY(JDBG_FREE, buf);
+	free(buf);
 }
 

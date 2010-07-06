@@ -46,8 +46,8 @@
 
 
 #include <sys/types.h>
-#include <radclock.h>
 
+#include "radclock.h"
 #include "sync_history.h"
 
 

@@ -36,7 +36,6 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 
-
 #include <net/if.h>
 #include <netinet/in_systm.h>
 #include <netinet/in.h>
@@ -50,22 +49,19 @@
 #include <time.h> 
 
 #include "../config.h"
-
-#include <radclock.h>
+#include "radclock.h"
 #include "radclock-private.h"
 #include "logger.h"
-
-#include <verbose.h>
-#include <sync_algo.h>
-#include <create_stamp.h>
-#include <config_mgr.h>
-#include <pthread_mgr.h>
-#include <rawdata.h>
-
-#include <stampinput.h>
-#include <stampoutput.h>
-#include <proto_ntp.h>
-
+#include "verbose.h"
+#include "sync_algo.h"
+#include "create_stamp.h"
+#include "config_mgr.h"
+#include "pthread_mgr.h"
+#include "rawdata.h"
+#include "stampinput.h"
+#include "stampoutput.h"
+#include "proto_ntp.h"
+#include "jdebug.h"
 
 
 /* Defines specific to the main program */
@@ -78,6 +74,11 @@
 /* RADclock handler */ 
 struct radclock *clock_handle;
 
+/* Debug */
+#ifdef WITH_JDEBUG
+long int jdbg_memuse = 0;
+struct rusage jdbg_rusage;
+#endif
 
 
 
@@ -326,6 +327,7 @@ int daemonize(char* lockfile, int *daemon_pid_fd)
 	/* Process ID, Session ID, Lock file */ 
 	pid_t pid, sid;
 	char* str = (char*) malloc(20 * sizeof(char));
+	JDEBUG_MEMORY(JDBG_MALLOC, str);
 
 	/* If already a daemon */ 
 	if( getppid() == 1 ) {
@@ -396,6 +398,8 @@ int daemonize(char* lockfile, int *daemon_pid_fd)
 	if ( sched_setscheduler(0, SCHED_FIFO, &sched) == -1 )
 		verbose(LOG_ERR, "Could not set scheduler priority");
 
+	JDEBUG_MEMORY(JDBG_FREE, str);
+	free(str);
 	return 1;
 }
 
@@ -479,9 +483,16 @@ int main (int argc, char *argv[])
 	 * daemon specific function.
 	 */
 	clock_handle->conf = (struct radclock_config *) malloc(sizeof(struct radclock_config));
+	JDEBUG_MEMORY(JDBG_MALLOC, clock_handle->conf);
+
 	clock_handle->client_data = (struct radclock_client_data*) malloc(sizeof(struct radclock_client_data));
+	JDEBUG_MEMORY(JDBG_MALLOC, clock_handle->client_data);
+
 	clock_handle->server_data = (struct radclock_ntpserver_data*) malloc(sizeof(struct radclock_ntpserver_data));
+	JDEBUG_MEMORY(JDBG_MALLOC, clock_handle->server_data);
+
 	clock_handle->algo_output = (void*) malloc(sizeof(struct bidir_output));
+	JDEBUG_MEMORY(JDBG_MALLOC, clock_handle->algo_output);
 
 	memset(clock_handle->conf, 0, sizeof(struct radclock_config));
 	memset(clock_handle->client_data, 0, sizeof(struct radclock_client_data));

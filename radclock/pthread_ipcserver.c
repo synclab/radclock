@@ -24,7 +24,6 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/un.h>
-
 #include <net/if.h>
 #include <netinet/in_systm.h>
 #include <netinet/in.h>
@@ -32,15 +31,16 @@
 #include <netinet/ip.h>
 #include <net/ethernet.h>
 #include <arpa/inet.h>
-
 #include <syslog.h>
 #include <errno.h>
 
-#include <radclock.h>
+#include "../config.h"
+#include "radclock.h"
 #include "radclock-private.h"
 #include "verbose.h"
 #include "sync_algo.h"
 #include "pthread_mgr.h"
+#include "jdebug.h"
 
 
 /* 

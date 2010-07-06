@@ -19,7 +19,7 @@
 
 INCLUDES = -I$(top_srcdir)/libradclock/ -I$(ADD_INCLS)
 
-noinst_HEADERS = ntohll.h create_stamp.h proto_ntp.h sync_algo.h config_mgr.h pthread_mgr.h verbose.h rawdata.h fixedpoint.h sync_history.h
+noinst_HEADERS = ntohll.h create_stamp.h proto_ntp.h sync_algo.h config_mgr.h pthread_mgr.h verbose.h rawdata.h fixedpoint.h sync_history.h jdebug.h
 
 
 bin_PROGRAMS = radclock

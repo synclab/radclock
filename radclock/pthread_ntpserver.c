@@ -25,7 +25,6 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/un.h>
-
 #include <net/if.h>
 #include <netinet/in_systm.h>
 #include <netinet/in.h>
@@ -33,17 +32,17 @@
 #include <netinet/ip.h>
 #include <net/ethernet.h>
 #include <arpa/inet.h>
-
 #include <syslog.h>
 #include <errno.h>
 
-#include <radclock.h>
+#include "../config.h"
+#include "radclock.h"
 #include "radclock-private.h"
 #include "verbose.h"
 #include "sync_algo.h"
 #include "pthread_mgr.h"
-
 #include "proto_ntp.h"
+#include "jdebug.h"
 
 
 
@@ -106,7 +105,10 @@ void* thread_ntp_server(void *c_handle)
 	struct ntp_pkt *pkt_out;
 	
 	pkt_in  = (char*) malloc(sizeof(char)*NTP_PKT_MAX_LEN);
+	JDEBUG_MEMORY(JDBG_MALLOC, pkt_in);
+
 	pkt_out = (struct ntp_pkt*) malloc(sizeof(struct ntp_pkt));
+	JDEBUG_MEMORY(JDBG_MALLOC, pkt_out);
 
 	/* Timestamps to send:
 	 * reftime: last time clock was updated (local time)
@@ -286,9 +288,10 @@ void* thread_ntp_server(void *c_handle)
 		pkt_out->rec.l_int = htonl(rec.tv_sec + JAN_1970);
 		pkt_out->rec.l_fra = htonl(rec.tv_usec * 4294967296.0 / 1e6);
 
-		verbose(VERB_DEBUG, "Reply to NTP client %s rdelay=%.06f rdisp= %.06f "
+		verbose(VERB_DEBUG, "Reply to NTP client %s with statum=%d rdelay=%.06f rdisp= %.06f "
 				"clockerror= %.06f diff= %"VC_FMT" Tb= %d.%06d",
 				inet_ntoa(sin_client.sin_addr),
+				pkt_out->stratum,
 				rootdelay, rootdispersion, clockerror, 
 	  			(vcount - rdata.last_changed), rec.tv_sec, rec.tv_usec ); 
 
@@ -314,11 +317,17 @@ void* thread_ntp_server(void *c_handle)
 
 		/* Someone told us to die ... sniff */
 		if ( clock_handle->ipc_mode == RADCLOCK_IPC_NONE)
-			pthread_exit(NULL);
+			break;
+			//pthread_exit(NULL);
 	}
 
 	/* Thread exit */
 	verbose(LOG_NOTICE, "Thread NTP server is terminating.");
+	JDEBUG_MEMORY(JDBG_FREE, pkt_in);
+	free(pkt_in);
+	JDEBUG_MEMORY(JDBG_FREE, pkt_out);
+	free(pkt_out);
+
 	pthread_exit(NULL);
 }
 

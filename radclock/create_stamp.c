@@ -40,11 +40,8 @@
 #include <sys/time.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
-
 #include <assert.h>
-
 #include <pcap.h>
-
 #include <net/if.h>
 #include <netinet/in_systm.h>
 #include <netinet/in.h>
@@ -52,25 +49,20 @@
 #include <netinet/ip.h>
 #include <net/ethernet.h>
 #include <arpa/inet.h>
-
 #include <string.h>
 #include <math.h>
-
 #include <syslog.h>
 
+#include "../config.h"
 #include <radclock.h>
 #include "radclock-private.h"
-
-
 #include "verbose.h"
 #include "proto_ntp.h"
 #include "sync_algo.h"        /* Because need  struct bidir_stamp defn */
 #include "pthread_mgr.h"
 #include "create_stamp.h"
 #include "ntohll.h"
-
-
-
+#include "jdebug.h"
 
 
 /* Converts fixedpt NTP timestamp structure to an easily manipulable TS in [sec] */
@@ -86,8 +78,13 @@ long double  ntpTS_to_UNIXsec(l_fp ntpTS)
 
 radpcap_packet_t* create_radpcap_packet() {
 	radpcap_packet_t *pkt = NULL;
+
 	pkt = (radpcap_packet_t*) malloc(sizeof(radpcap_packet_t));
+	JDEBUG_MEMORY(JDBG_MALLOC, pkt);
+
 	pkt->buffer 	= (void *) malloc(RADPCAP_PACKET_BUFSIZE);
+	JDEBUG_MEMORY(JDBG_MALLOC, pkt->buffer);
+
 	pkt->header 	= NULL;
 	pkt->payload 	= NULL;
 	pkt->type 		= 0;
@@ -102,8 +99,13 @@ void destroy_radpcap_packet(radpcap_packet_t *packet)
 	packet->header  = NULL;
 	packet->payload = NULL;
 	if (packet->buffer)
+	{
+		JDEBUG_MEMORY(JDBG_FREE, packet->buffer);
 		free(packet->buffer);
+	}
 	packet->buffer  = NULL;
+
+	JDEBUG_MEMORY(JDBG_FREE, packet);
 	free(packet);
 	packet = NULL;
 }
@@ -353,7 +355,7 @@ int get_bidir_stamp(struct radclock *handle,
 	memset(stamp, 0, sizeof (struct bidir_stamp));
 
 	refid_str = (char*) malloc(16 * sizeof(char));
-
+	JDEBUG_MEMORY(JDBG_MALLOC, refid_str);
 	
 
 /* search until a matching, valid client-server pair is found */
@@ -651,6 +653,7 @@ while (searching) {
 	err =0;
 
 errout:
+	JDEBUG_MEMORY(JDBG_FREE, refid_str);
 	free(refid_str);
 	destroy_radpcap_packet(packet);
 
