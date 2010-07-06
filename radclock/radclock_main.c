@@ -426,7 +426,6 @@ int main (int argc, char *argv[])
 
 	/* PID lock file for daemon */
 	int daemon_pid_fd 		= 0;
-	
 
 	/* Run mode for the algo. Default is kernel mode */
 	radclock_runmode_t run_mode = RADCLOCK_RUN_KERNEL;
@@ -437,13 +436,18 @@ int main (int argc, char *argv[])
 	/* Input source */
 	struct stampsource *stamp_source;
 
-
 	/* Misc */
 	int err;
 
 
-	/****  Register Signal handlers *************/
-	/* We use sigaction() instead of signal() to catch signals. The main reason 
+	/* turn off buffering to allow results to be seen immediately if JDEBUG*/
+	#ifdef WITH_JDEBUG
+	setvbuf(stdout, (char *)NULL, _IONBF, 0);
+	setvbuf(stderr, (char *)NULL, _IONBF, 0);
+	#endif
+
+	/* Register Signal handlers 
+	 * We use sigaction() instead of signal() to catch signals. The main reason 
 	 * concerns the SIGHUP signal. In Linux, the syscalls are restarted as soon
 	 * as the signal handler returns. This prevent pcap_breakloop() to do its job 
 	 * (see pcap man page). Using sigaction() we can overwrite the default flag to
@@ -460,14 +464,6 @@ int main (int argc, char *argv[])
 	sigaction(SIGTERM, &sig_struct, NULL); /* software termination signal (15) */
 	sigaction(SIGUSR1, &sig_struct, NULL); /* user signal 1 (30) */
 	sigaction(SIGUSR2, &sig_struct, NULL); /* user signal 2 (31) */
-
-
-
-
-	/************************ Begin Main ************************/
-	/* turn off buffering to allow results to be seen immediately*/
-	setvbuf(stdout, (char *)NULL, _IONBF, 0);
-	setvbuf(stderr, (char *)NULL, _IONBF, 0);
 
 
 	/* Create the global data handle */
