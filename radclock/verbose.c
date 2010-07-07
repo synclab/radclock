@@ -27,6 +27,7 @@
 #include <stdarg.h>
 #include <string.h>
 #include <syslog.h>
+#include <pthread.h>
 
 #include "../config.h"
 #include "radclock.h"
@@ -36,13 +37,8 @@
 
 
 
-// TODO : Implement a callback here 
-static struct verbose_data_t {
-	struct radclock *clock;
-	int is_daemon;
-	int verbose_level;
-	FILE* logfile;
-} verbose_data = { NULL, 0, 0, NULL };
+/* Global seen my main for access to mutex */
+struct verbose_data_t verbose_data;
 
 
 void set_verbose(struct radclock *clock, int is_daemon, int verbose_level) 
@@ -60,7 +56,8 @@ void unset_verbose()
 	verbose_data.clock = NULL;
 	verbose_data.verbose_level = 0;
 	verbose_data.is_daemon = 0;
-	fclose(verbose_data.logfile);
+	if ( verbose_data.logfile != NULL)
+		fclose(verbose_data.logfile);
 	verbose_data.logfile = NULL;
 }
 
@@ -71,28 +68,20 @@ int get_verbose_level()
 }
 
 
-/* Non daemon exits for now */
-static void verb_panic(char * message)
-{
-	JDEBUG
-	if ( verbose_data.is_daemon )
-		syslog(LOG_ALERT, "Verb_panic: %s", message);
-	else {
-		fprintf(stderr, "verbose Panic: %s", message);
-		exit(-1);
-	}
-}
-
-static void verbose_init()
+static void verbose_open()
 {
 	// We got the string, let's output in the log files
 	if ( verbose_data.is_daemon )
+	{
 		verbose_data.logfile = fopen(DAEMON_LOG_FILE, "a");
+		if (verbose_data.logfile == NULL)
+			syslog(LOG_ALERT, "Unable to open the log file\n");
+	}
 	else
+	{
 		verbose_data.logfile = fopen(BIN_LOG_FILE, "w");
-
-	if (verbose_data.logfile == NULL) {
-		verb_panic("Unable to open the log file\n");
+		if (verbose_data.logfile == NULL)
+			fprintf(stderr, "Unable to open the log file\n");
 	}
 }
 
@@ -111,10 +100,14 @@ void verbose(int facility, char* format, ...)
 	struct tm *t;
 	
 	int n, size = 100;
-	char  * customize;
+	char  *customize;
+
+	/* Acquire the mutex lock or block */
+	pthread_mutex_lock(&(verbose_data.vmutex));
+
 	if (verbose_data.logfile == NULL)
 	{
-		verbose_init();
+		verbose_open();
 	}
 
 	switch(facility) {
@@ -155,8 +148,12 @@ void verbose(int facility, char* format, ...)
 	JDEBUG_MEMORY(JDBG_MALLOC, str);
 
 	while (1) {
-		if (str == NULL) {
-			verb_panic("panic - can't alloc for verbose");
+		if (str == NULL) 
+		{
+			if ( verbose_data.is_daemon )
+				syslog(LOG_ALERT, "Verbose failed to allocate memory\n");
+			else
+				fprintf(stderr, "Verbose failed to allocate memory\n");
 			return;
 		}
 		/* Try to print in the allocated space. */
@@ -233,4 +230,8 @@ void verbose(int facility, char* format, ...)
 	JDEBUG_MEMORY(JDBG_FREE, str);
 	free(str);
 	fflush(verbose_data.logfile);
+
+	/* Release the mutex lock or block */
+	pthread_mutex_unlock(&(verbose_data.vmutex));
+
 }

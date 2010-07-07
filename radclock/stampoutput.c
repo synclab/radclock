@@ -159,6 +159,7 @@ void close_output_matlab(struct radclock *clock_handle)
 void print_out_files(struct radclock *clock_handle, struct bidir_stamp *tuple) 
 {
 	int err;
+	// XXX What is the reason for me to do it that way? Cannot remember.
 	/* A single buffer to have a single disk access, it has to be big enough */
 	char *buf;
 

@@ -46,7 +46,16 @@
 #define VERB_DEBUG		20	
 
 
-extern int verbose_level;
+struct verbose_data_t {
+	struct radclock *clock;
+	int is_daemon;
+	int verbose_level;
+	FILE* logfile;
+	pthread_mutex_t vmutex;
+};
+
+
+extern struct verbose_data_t verbose_data;
 
 void verbose(int facility, char* format, ...); 
 

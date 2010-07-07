@@ -74,6 +74,9 @@
 /* RADclock handler */ 
 struct radclock *clock_handle;
 
+/* Verbose data contains pthread_mutex */
+extern struct verbose_data_t verbose_data;
+
 /* Debug */
 #ifdef WITH_JDEBUG
 long int jdbg_memuse = 0;
@@ -306,6 +309,14 @@ void signal_handler(int sig)
 
 		case SIGUSR1:
 			/* user signal 1 */
+			verbose(LOG_NOTICE, "SIGUSR1 received, closing log file.");
+			if ( verbose_data.logfile != NULL)
+			{
+				pthread_mutex_lock( &(verbose_data.vmutex) );
+				fclose(verbose_data.logfile);
+				verbose_data.logfile = NULL;
+				pthread_mutex_unlock( &(verbose_data.vmutex) );
+			}
 			break;		
 
 		case SIGUSR2:
@@ -464,6 +475,14 @@ int main (int argc, char *argv[])
 	sigaction(SIGTERM, &sig_struct, NULL); /* software termination signal (15) */
 	sigaction(SIGUSR1, &sig_struct, NULL); /* user signal 1 (30) */
 	sigaction(SIGUSR2, &sig_struct, NULL); /* user signal 2 (31) */
+
+
+	/* Initialise verbose data to defaults */
+ 	verbose_data.clock = NULL;
+ 	verbose_data.is_daemon = 0;
+ 	verbose_data.verbose_level = 0;
+ 	verbose_data.logfile = NULL;
+	pthread_mutex_init(&(verbose_data.vmutex), NULL);
 
 
 	/* Create the global data handle */
@@ -716,6 +735,11 @@ int main (int argc, char *argv[])
 		return 1;
 	}
 	
+	/* Initial status words */
+	// TODO there should be more set in here
+	ADD_STATUS(clock_handle, STARAD_STARVING);
+	
+	
 	/* Clock has been init', set the pointer to the clock */
 	set_verbose(clock_handle, clock_handle->is_daemon, clock_handle->conf->verbose_level);
 	set_logger(logger_verbose_bridge);
@@ -905,7 +929,6 @@ int main (int argc, char *argv[])
 		}
 		/* End of thread while loop */
 	} /* End of run live case */
-
 
 	long int n_stamp;    
 	n_stamp = ((struct bidir_output *)clock_handle->algo_output)->n_stamps;
