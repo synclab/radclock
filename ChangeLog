@@ -3,6 +3,11 @@
 ## 
 
 
+- Version 0.2.4
+	* July 2010
+	* Bug correction 
+	* Rotating log file with newsyslog / logrotate 
+
 - Version 0.2.3
 	* April 2010
 	* Support for recent FreeBSD and Linux kernels

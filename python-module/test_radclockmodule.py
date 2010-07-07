@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-# Copyright (C) 2006-2009 Julien Ridoux <julien@synclab.org>
+# Copyright (C) 2006-2010 Julien Ridoux <julien@synclab.org>
 #
 # This file is part of the radclock program.
 # 
