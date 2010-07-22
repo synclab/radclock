@@ -783,6 +783,10 @@ int main (int argc, char *argv[])
 	if (clock_handle->run_mode == RADCLOCK_RUN_DEAD)
 	{
 		struct bidir_peer peer;
+		// TODO XXX Need to manage peers better !!
+		/* Register active peer */
+		clock_handle->active_peer = (void*) &peer;
+		
 		peer.stamp_i = 0;
 		while (1)
 		{
