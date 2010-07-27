@@ -65,6 +65,13 @@
 #include "jdebug.h"
 
 
+
+# ifndef useconds_t
+typedef __useconds_t useconds_t;
+# endif
+
+
+
 /* Converts fixedpt NTP timestamp structure to an easily manipulable TS in [sec] */
 long double  ntpTS_to_UNIXsec(l_fp ntpTS) 
 {
