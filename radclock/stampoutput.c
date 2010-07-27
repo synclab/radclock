@@ -173,11 +173,11 @@ void print_out_files(struct radclock *clock_handle, struct bidir_stamp *tuple)
 
 	/* Store generated stamp values */
 	if (clock_handle->stampout_fd != NULL) { 
-		err = fprintf(clock_handle->stampout_fd,"%"VC_FMT" %21.10Lf %21.10Lf %"VC_FMT" %d\n",
-				tuple->Ta, 
-				tuple->Tb, 
-				tuple->Te, 
-				tuple->Tf, 
+		err = fprintf(clock_handle->stampout_fd,"%"VC_FMT" %.9Lf %.9Lf %"VC_FMT" %d\n",
+				tuple->Ta,
+				tuple->Tb,
+				tuple->Te,
+				tuple->Tf,
 				tuple->sPort);
 		if ( err < 0 )
 			verbose(LOG_ERR, "Failed to write data to timestamp file");
@@ -192,9 +192,9 @@ void print_out_files(struct radclock *clock_handle, struct bidir_stamp *tuple)
 	JDEBUG_MEMORY(JDBG_MALLOC, buf);
 
 	sprintf(buf, 
-		"%22.11Lf %"VC_FMT" %"VC_FMT" %12.10lg %12.10lg %22.11Lf %12.10lf "
-		"%"VC_FMT" %"VC_FMT" %"VC_FMT" %12.9lg %12.9lg %12.9lg %22.11Lf "
-		"%22.11Lf %12.10lf %12.10lf %7.6lg %7.6lg %7.6lg %"VC_FMT" %u\n",
+		"%.9Lf %"VC_FMT" %"VC_FMT" %.10lg %.10lg %.11Lf %.10lf "
+		"%"VC_FMT" %"VC_FMT" %"VC_FMT" %.9lg %.9lg %.9lg %.11Lf "
+		"%.11Lf %.10lf %.10lf %.6lg %.6lg %.6lg %"VC_FMT" %u\n",
 		tuple->Tb,
 		tuple->Tf,
 		OUTPUT(clock_handle, RTT),
