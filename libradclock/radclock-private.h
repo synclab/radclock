@@ -115,6 +115,7 @@ struct radclock_fixedpoint
 };
 
 
+
 /* TODO: split it in 2, clock errors and peer clock tracking, recompose with
  * others for per peer algo
  */ 
@@ -135,6 +136,17 @@ struct radclock_error
 };
 
 
+/*
+ * Virtual machine environment data
+ * Mode run in, push and pull struct radclock_data
+ */
+struct radclock_vm
+{
+	int (*pull_data) (struct radclock *clock_handle);
+	int (*push_data) (struct radclock *clock_handle);
+};
+
+
 
 struct radclock 
 {
@@ -143,6 +155,9 @@ struct radclock
 
 	/* Clock error estimates */
 	struct radclock_error rad_error;
+
+	/* Virtual Machine management */
+	struct radclock_vm rad_vm;
 
 	/* System specific stuff */
 	union {
@@ -212,6 +227,8 @@ struct radclock
 #define RAD_DATA(x) (&(x->rad_data))
 #define GLOBAL_DATA(x) (&(x->rad_data))  // TODO: deprecate me ...
 #define RAD_ERROR(x) (&(x->rad_error))
+#define RAD_VM(x) (&(x->rad_vm))
+
 #define PRIV_USERDATA(x) (&(x->user_data))
 #ifdef linux
 # define PRIV_DATA(x) (&(x->linux_data))
@@ -330,5 +347,6 @@ inline int extract_vcount_stamp(
 
 int radclock_init_vcounter_syscall(struct radclock *handle);
 
+int init_virtual_machine_mode(struct radclock *clock_handle);
 
 #endif

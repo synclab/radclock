@@ -65,6 +65,10 @@ struct radclock * radclock_create(void)
 	RAD_ERROR(clock)->nerror_hwin 		= 0;
 	RAD_ERROR(clock)->cumsum_hwin 		= 0;
 	RAD_ERROR(clock)->sq_cumsum_hwin 	= 0;
+	
+	/* Virtual machine stuff */
+	RAD_VM(clock)->push_data = NULL; 
+	RAD_VM(clock)->pull_data = NULL;
 
 
 	/* Default values before calling init */
@@ -315,6 +319,7 @@ int radclock_init(struct radclock *clock_handle)
 			logger(RADLOG_ERR, "Got something really wrong, unknown IPC run mode");
 			return -1;
 	}
+
 	return 0;
 }
 

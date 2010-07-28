@@ -51,6 +51,16 @@
 #define BOOL_ON 	1
 
 
+/*
+ * Virtual Machine environmnent
+ */
+#define VM_NONE				0
+#define VM_XEN_MASTER		1
+#define VM_XEN_SLAVE		2
+#define VM_VBOX_MASTER		3
+#define VM_VBOX_SLAVE		4
+
+
 /* 
  * Default configuration values 
  */
@@ -73,6 +83,7 @@
 #define DEFAULT_SYNC_OUT_PCAP		"sync_output.pcap"
 #define DEFAULT_SYNC_OUT_ASCII		"sync_output.ascii"
 #define DEFAULT_CLOCK_OUT_ASCII		"clock_output.ascii"
+#define DEFAULT_VIRTUAL_MACHINE		VM_NONE		// Default we do not run in vm environment 
 
 
 
@@ -112,6 +123,9 @@
 #define CONFIG_SYNC_OUT_PCAP	53
 #define CONFIG_SYNC_OUT_ASCII	54
 #define CONFIG_CLOCK_OUT_ASCII	55
+/* Virtual Machine stuff */
+#define CONFIG_VIRTUAL_MACHINE	56
+
 
 
 /*
@@ -148,6 +162,8 @@
 #define UPDMASK_SYNC_OUT_PCAP	0x010000
 #define UPDMASK_SYNC_OUT_ASCII	0x020800
 #define UPDMASK_CLOCK_OUT_ASCII	0x040000
+#define UPDMASK_VIRTUAL_MACHINE	0x080000
+
 
 #define HAS_UPDATE(val,mask)	((val & mask) == mask)	
 #define SET_UPDATE(val,mask)	(val |= mask) 
@@ -170,6 +186,7 @@ struct radclock_config {
 	int 	server_ipc; 				/* Boolean */
 	int 	server_ntp;					/* Boolean */
 	int 	adjust_sysclock;			/* Boolean */
+	int 	virtual_machine;			/* Virtual Machine environment run mode */
 	double 	phat_init;					/* Initial value for phat */
 	double 	asym_host;					/* Host asymmetry estimate [sec] */
 	double	asym_net;					/* Network asymmetry estimate [sec] */ 

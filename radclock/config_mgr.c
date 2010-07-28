@@ -54,6 +54,7 @@ static struct _key keys[] = {
 	{ "ipc_server",				CONFIG_SERVER_IPC},
 	{ "ntp_server",				CONFIG_SERVER_NTP},
 	{ "adjust_system_clock",	CONFIG_ADJUST_SYSCLOCK},
+	{ "virtual_machine_mode",	CONFIG_VIRTUAL_MACHINE},
 	{ "polling_period", 		CONFIG_POLLPERIOD},
 	{ "temperature_quality", 	CONFIG_TEMPQUALITY},
 	{ "ts_limit",				CONFIG_TSLIMIT},
@@ -79,11 +80,13 @@ static struct _key keys[] = {
 
 /* Definition of the options labels
  * Order matters !
+ * TODO make this a bit more robust to bugs with enums already partly defined
  */
 static char* labels_bool[] 		= { "off", "on" };
 static char* labels_verb[] 		= { "quiet", "normal", "high" };
 static char* labels_plocal[] 	= { "off", "on", "restart" };
 static char* labels_sync[] 		= { "piggy", "ntp", "ieee1588", "pps" };
+static char* labels_vm[] 		= { "none", "xen-master", "xen-slave", "vbox-master", "vbox-slave" };
 
 
 
@@ -117,6 +120,9 @@ void config_init(struct radclock_config *conf)
 	conf->synchro_type 			= DEFAULT_SYNCHRO_TYPE;
 	conf->server_ntp 			= DEFAULT_SERVER_NTP;
 	conf->adjust_sysclock 		= DEFAULT_ADJUST_SYSCLOCK;
+	
+	/* Virtual Machine */
+	conf->virtual_machine		= DEFAULT_VIRTUAL_MACHINE;
 
 	/* Clock parameters */ 
 	conf->poll_period			= DEFAULT_NTP_POLL_PERIOD;
@@ -316,6 +322,37 @@ void write_config_file(FILE *fd, struct _key *keys, struct radclock_config *conf
 	else
 		fprintf(fd, "%s = %s\n\n", find_key_label(keys, CONFIG_ADJUST_SYSCLOCK), labels_bool[conf->adjust_sysclock]);
 
+	
+	
+	fprintf(fd, "\n\n\n");
+	fprintf(fd, "#----------------------------------------------------------------------------#\n");
+	fprintf(fd, "# Virtual Machine Environment parameters\n");
+	fprintf(fd, "#----------------------------------------------------------------------------#\n");
+	fprintf(fd, "\n");
+
+
+	/* Specify the vm mode radclock runs in */
+	fprintf(fd, "# The role of the radclock in a virtual machine environment (if any).\n"
+				"# It is usually better to give the master role to the radclock instance \n"
+				"# running in the host system, and the slave roles to the radclock running \n"
+				"# in the guest system.\n");
+	fprintf(fd, "# Possible values are:\n");
+	fprintf(fd, "#\tnone        : no virtual machine environment\n");
+	fprintf(fd, "#\txen-master  : radclock creates time for all Xen systems\n");
+	fprintf(fd, "#\txen-slave   : radclock gets its time from a Xen master\n");
+	fprintf(fd, "#\tvbox-master : radclock creates time for all Virtual Box systems\n");
+	fprintf(fd, "#\tvbox-slave  : radclock gets its time from a Virtual Box master\n");
+	if (conf == NULL)
+		fprintf(fd, "%s = %s\n\n", find_key_label(keys, CONFIG_VIRTUAL_MACHINE), labels_vm[DEFAULT_VIRTUAL_MACHINE]);
+	else
+		fprintf(fd, "%s = %s\n\n", find_key_label(keys, CONFIG_VIRTUAL_MACHINE), labels_vm[conf->virtual_machine]);
+	
+
+	fprintf(fd, "\n\n\n");
+	fprintf(fd, "#----------------------------------------------------------------------------#\n");
+	fprintf(fd, "# Environment and Tuning parameters\n");
+	fprintf(fd, "#----------------------------------------------------------------------------#\n");
+	fprintf(fd, "\n");
 	
 
 	/* Temperature */	
@@ -671,6 +708,23 @@ switch (codekey) {
 		}
 		else
 			conf->adjust_sysclock = ival;
+		break;
+
+
+	case CONFIG_VIRTUAL_MACHINE:
+		// If value specified on the command line
+		if ( HAS_UPDATE(*mask, UPDMASK_VIRTUAL_MACHINE) ) 
+			break;
+		ival = check_valid_option(value, labels_vm, 5);
+		// Indicate changed value
+		if ( conf->virtual_machine != ival )
+			SET_UPDATE(*mask, UPDMASK_VIRTUAL_MACHINE);
+		if ( ival < 0 ) {
+			verbose(LOG_WARNING, "virtual_machine_mode parameter incorrect. Fall back to default.");
+			conf->virtual_machine = DEFAULT_VIRTUAL_MACHINE;
+		}
+		else
+			conf->virtual_machine = ival;
 		break;
 
 
@@ -1134,6 +1188,7 @@ void config_print(int level, struct radclock_config *conf)
 	verbose(level, "Server IPC           : %s", labels_bool[conf->server_ipc]);
 	verbose(level, "Server NTP           : %s", labels_bool[conf->server_ntp]);
 	verbose(level, "Adjust system clock  : %s", labels_bool[conf->adjust_sysclock]);
+	verbose(level, "Virtual Machine mode : %s", labels_vm[conf->virtual_machine]);
 	verbose(level, "Polling period       : %d", conf->poll_period);
 	verbose(level, "TSLIMIT              : %.9lf", conf->phyparam.TSLIMIT);
 	verbose(level, "SKM_SCALE            : %.9lf", conf->phyparam.SKM_SCALE);

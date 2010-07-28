@@ -158,6 +158,12 @@ int rehash_daemon(struct radclock *clock_handle,
 	{
 		verbose(LOG_WARNING, "It is not possible to change the type of client synchronisation on the fly!");
 	}
+	
+	// TODO XXX TODO 	
+	if ( HAS_UPDATE(param_mask, UPDMASK_VIRTUAL_MACHINE) )
+	{
+		verbose(LOG_WARNING, "It is not possible to change the virtual machine environment on the fly!");
+	}
 	 
 	//XXX Should check we have only one input selected 	
 	if ( HAS_UPDATE(param_mask, UPDMASK_NETWORKDEV)
@@ -417,8 +423,22 @@ int daemonize(char* lockfile, int *daemon_pid_fd)
 
 
 
+/*
+ * radclock process specific init of the clock_handle
+ */
+// TODO should extract the similar ones from the library to clean up the mess
+int radclock_init_specific (struct radclock *clock_handle) 
+{
+	int err;
 
+	JDEBUG
 
+	err = init_virtual_machine_mode(clock_handle);
+	if (err < 0)
+		return -1;
+
+	return 0;
+}
 
 
 
@@ -734,7 +754,19 @@ int main (int argc, char *argv[])
 		verbose(LOG_ERR, "Could not initialise the RADclock");
 		return 1;
 	}
-	
+
+
+// XXX TODO XXX work in progress in here, should extract radclock only init from
+// the library ... 
+	if (radclock_init_specific(clock_handle))
+	{
+		verbose(LOG_ERR, "Radclock process specific init failed.");
+		return 1;
+	}
+
+
+
+
 	/* Initial status words */
 	// TODO there should be more set in here
 	ADD_STATUS(clock_handle, STARAD_STARVING);
