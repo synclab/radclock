@@ -17,6 +17,9 @@
  * this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+// Not sure where to put this at the moment or a cleaner way
+#define NOXENSUPPORT 0x01
+
 #include <stdio.h> 
 #include <stdlib.h> 
 #include <string.h> 
@@ -46,29 +49,32 @@ init_xenstore(struct radclock *clock_handle){
 	int domid;
 	unsigned count;
 
+
 	if( ( xs = xs_domain_open() ) == NULL){
-		verbose(LOG_ERR, 
-			"Could not open Xenstore Domain, Disabling Xenstore Updates");
-			return 0;
+		return NOXENSUPPORT;
 	}
-	verbose(LOG_ERR,"string: %s", xs);
-	domstring = xs_read(xs, XBT_NULL, "domid", &count);
-	domid = atoi(domstring);
-	free(domstring);
+	if(clock_handle->conf->virtual_machine == VM_XEN_MASTER){
+		domstring = xs_read(xs, XBT_NULL, "domid", &count);
+		domid = atoi(domstring);
+		free(domstring);
 
-	perms[0].id = domid;
-	perms[0].perms = XS_PERM_READ | XS_PERM_WRITE;
+		perms[0].id = domid;
+		perms[0].perms = XS_PERM_READ | XS_PERM_WRITE;
+		
+		xs_write(xs, XBT_NULL, XENSTORE_PATH,
+				&(clock_handle->rad_data), 
+				sizeof(clock_handle->rad_data));
 
-	if(!xs_set_permissions(xs, XBT_NULL, XENSTORE_PATH, perms, 1)){
-		verbose(LOG_ERR,"Could not set permissions for Xenstore");
+		if(!xs_set_permissions(xs, XBT_NULL, XENSTORE_PATH, perms, 1)){
+			verbose(LOG_ERR,"Could not set permissions for Xenstore");
+		}
 	}
-
 	xs_daemon_close(xs);
 	return 0;
 #else
 	// Really this shouldn't happen, but maybe for robustness we should explicitly
 	// change mode to none
-	return 0;
+	return NOXENSUPPORT;
 #endif
 }
 int
@@ -126,15 +132,31 @@ int init_virtual_machine_mode(struct radclock *clock_handle)
 			break;
 
 		case VM_XEN_MASTER:
-			init_xenstore(clock_handle);
+
+			if(init_xenstore(clock_handle) == NOXENSUPPORT){
+				verbose(LOG_ERR, 
+						"Could not open Xenstore, changing virtual machine mode to none");
+				clock_handle->conf->virtual_machine = VM_NONE;
+				RAD_VM(clock_handle)->push_data = &push_data_none;
+			} else {
+				RAD_VM(clock_handle)->push_data = &push_data_xen;
+			}
 			RAD_VM(clock_handle)->pull_data = &pull_data_none;
-			RAD_VM(clock_handle)->push_data = &push_data_xen;
+
 			break;
 
 		case VM_XEN_SLAVE:
-			init_xenstore(clock_handle);
-			RAD_VM(clock_handle)->pull_data = &pull_data_xen;
+
+			if(init_xenstore(clock_handle) == NOXENSUPPORT){
+				verbose(LOG_ERR, 
+						"Could not open Xenstore, changing virtual machine mode to none");
+				clock_handle->conf->virtual_machine = VM_NONE;
+				RAD_VM(clock_handle)->pull_data = &pull_data_none;
+			} else {
+				RAD_VM(clock_handle)->pull_data = &pull_data_xen;
+			}
 			RAD_VM(clock_handle)->push_data = &push_data_none;
+			
 			break;
 
 		case VM_VBOX_MASTER:
@@ -149,6 +171,3 @@ int init_virtual_machine_mode(struct radclock *clock_handle)
 	}
 	return 0;
 }
-
-
-
