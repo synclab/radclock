@@ -55,7 +55,7 @@ fi
 dnl Conditional for the testbed apps that may require these guys
 AC_CHECK_HEADER(dagapi.h, [AM_CONDITIONAL([HAVE_DAG_API], [test 1 = 1])], [AM_CONDITIONAL([HAVE_DAG_API], [test 0 = 1])])
 AC_CHECK_HEADER(sys/timepps.h, [AM_CONDITIONAL([HAVE_PPS_API], [test 1 = 1])], [AM_CONDITIONAL([HAVE_PPS_API], [test 0 = 1])])
-
+AC_CHECK_LIB(xenstore, xs_domain_open, [AM_CONDITIONAL([HAVE_XEN_API], [test 1 = 1]) AC_DEFINE([WITH_XENSTORE],[1],[Define to 1 if compiling with xenstore]) ], [AM_CONDITIONAL([HAVE_XEN_API], [test 0 = 1])])
 
 AM_CONFIG_HEADER(config.h)
 

@@ -31,7 +31,74 @@
 #include "config_mgr.h"
 #include "jdebug.h"
 
+#ifdef WITH_XENSTORE
+#include <xs.h>
+#define XENSTORE_PATH "/local/radclock"
+#endif
 
+int
+init_xenstore(struct radclock *clock_handle){
+	JDEBUG
+#ifdef WITH_XENSTORE
+	struct xs_handle *xs;
+	struct xs_permissions perms[1];
+	char *domstring;
+	int domid;
+	unsigned count;
+
+	if( ( xs = xs_domain_open() ) == NULL){
+		verbose(LOG_ERR, 
+			"Could not open Xenstore Domain, Disabling Xenstore Updates");
+			return 0;
+	}
+	verbose(LOG_ERR,"string: %s", xs);
+	domstring = xs_read(xs, XBT_NULL, "domid", &count);
+	domid = atoi(domstring);
+	free(domstring);
+
+	perms[0].id = domid;
+	perms[0].perms = XS_PERM_READ | XS_PERM_WRITE;
+
+	if(!xs_set_permissions(xs, XBT_NULL, XENSTORE_PATH, perms, 1)){
+		verbose(LOG_ERR,"Could not set permissions for Xenstore");
+	}
+
+	xs_daemon_close(xs);
+	return 0;
+#else
+	// Really this shouldn't happen, but maybe for robustness we should explicitly
+	// change mode to none
+	return 0;
+#endif
+}
+int
+push_data_xen(struct radclock *clock_handle){
+	JDEBUG
+#ifdef WITH_XENSTORE
+	struct xs_handle *xs;
+	xs_transaction_t th;
+
+	xs = xs_domain_open();
+	th = xs_transaction_start(xs);
+
+	xs_write(xs, th, XENSTORE_PATH,
+			&(clock_handle->rad_data), 
+			sizeof(clock_handle->rad_data));
+
+	xs_transaction_end(xs, th, false);
+	xs_daemon_close(xs);
+	return 0;
+#else
+	return 0;
+#endif
+}
+
+
+int pull_data_xen(struct radclock *clock_handle)
+{
+	JDEBUG
+	return 0;
+}
 
 int pull_data_none(struct radclock *clock_handle)
 {
@@ -59,9 +126,15 @@ int init_virtual_machine_mode(struct radclock *clock_handle)
 			break;
 
 		case VM_XEN_MASTER:
+			init_xenstore(clock_handle);
+			RAD_VM(clock_handle)->pull_data = &pull_data_none;
+			RAD_VM(clock_handle)->push_data = &push_data_xen;
 			break;
 
 		case VM_XEN_SLAVE:
+			init_xenstore(clock_handle);
+			RAD_VM(clock_handle)->pull_data = &pull_data_xen;
+			RAD_VM(clock_handle)->push_data = &push_data_none;
 			break;
 
 		case VM_VBOX_MASTER:

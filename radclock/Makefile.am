@@ -33,3 +33,8 @@ radclock_LDFLAGS = -static -pthread
 # We want librt for an accurate NTP packet sender
 radclock_LDADD = -lrt -lpcap -lm @LIBRADCLOCK_LIBS@ 
 
+if HAVE_XEN_API 
+radclock_LDADD += -lxenstore
+else
+radclock_LDADD +=
+endif
