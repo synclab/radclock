@@ -86,7 +86,7 @@ static char* labels_bool[] 		= { "off", "on" };
 static char* labels_verb[] 		= { "quiet", "normal", "high" };
 static char* labels_plocal[] 	= { "off", "on", "restart" };
 static char* labels_sync[] 		= { "piggy", "ntp", "ieee1588", "pps" };
-static char* labels_vm[] 		= { "none", "xen-master", "xen-slave", "vbox-master", "vbox-slave" };
+static char* labels_vm[] 		= { "none", "xen-slave", "xen-master", "vbox-slave", "vbox-master" };
 
 
 

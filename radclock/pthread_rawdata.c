@@ -440,6 +440,7 @@ int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 	 */
 	if ( (clock_handle->run_mode == RADCLOCK_RUN_KERNEL) && (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER) ) 
 	{
+		// Update any virtual machine store if configured
 		RAD_VM(clock_handle)->push_data(clock_handle);
 
 		// Use the clock we just created to update the global data

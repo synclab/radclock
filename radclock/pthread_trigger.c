@@ -72,7 +72,33 @@ int dummy_client()
 	return 0;
 }
 
-
+int virtual_client(struct radclock *clock_handle){
+	JDEBUG
+	int err;
+	int sleep_time;
+	vcounter_t vcount;
+	
+	RAD_VM(clock_handle)->pull_data(clock_handle);
+	err = radclock_get_vcounter(clock_handle, &vcount);
+	//verbose(LOG_ERR, "Updated RAD_DATA at VCOUNT: %llu", vcount);
+	
+	if(vcount < RAD_DATA(clock_handle)->valid_till){
+		if(vcount > RAD_DATA(clock_handle)->last_changed){
+			sleep_time = (RAD_DATA(clock_handle)->valid_till - vcount)*RAD_DATA(clock_handle)->phat / 1000000;
+			usleep(sleep_time);
+			//verbose(LOG_ERR, "Slept for %dus",sleep_time);
+			//verbose(LOG_ERR, "phat: %d valid till: %llu last_changed: %llu",RAD_DATA(clock_handle)->phat ,RAD_DATA(clock_handle)->valid_till, RAD_DATA(clock_handle)->last_changed);
+		} else {
+			verbose(LOG_ERR, "Virtual store data not suitable for this counter"); 
+		}
+	} else {
+		sleep_time = (RAD_DATA(clock_handle)->valid_till - RAD_DATA(clock_handle)->last_changed)*RAD_DATA(clock_handle)->phat / 10000000;
+		usleep(sleep_time); 
+		//verbose(LOG_ERR, "Slept for %dus",sleep_time);
+		//verbose(LOG_ERR, "phat: %d valid till: %llu last_changed: %llu",RAD_DATA(clock_handle)->phat ,RAD_DATA(clock_handle)->valid_till, RAD_DATA(clock_handle)->last_changed);
+	}
+	return err;
+}
 
 /* 
  * Timer handler
@@ -328,24 +354,26 @@ int trigger_work(struct radclock *clock_handle)
 	vcounter_t vcount;
 	int err;
 //	struct radclock *clock_handle = (struct radclock *) c_handle; 
+	if(VM_SLAVE(clock_handle)){
+		virtual_client(clock_handle);
+	} else {
+		switch (clock_handle->conf->synchro_type)
+		{
+			case TRIGGER_PIGGY:
+				dummy_client();
+				break;
 
-	switch (clock_handle->conf->synchro_type)
-	{
-		case TRIGGER_PIGGY:
-			dummy_client();
-			break;
+			case TRIGGER_NTP:
+				ntp_client(clock_handle);
+				break;
 
-		case TRIGGER_NTP:
-			ntp_client(clock_handle);
-			break;
-
-		case TRIGGER_1588:
-		case TRIGGER_PPS:
-		default:
-			verbose(LOG_ERR, "Trigger type not implemented");
-			break;
+			case TRIGGER_1588:
+			case TRIGGER_PPS:
+			default:
+				verbose(LOG_ERR, "Trigger type not implemented");
+				break;
+		}
 	}
-
 
 
 	/* Here we have a notion of time elapsed that is not driven by packet input,
@@ -451,22 +479,23 @@ int trigger_init(struct radclock *clock_handle)
 {
 	JDEBUG
 	int err = 0;
+	if(!VM_SLAVE(clock_handle)){
+		switch (clock_handle->conf->synchro_type)
+		{
+			case TRIGGER_PIGGY:
+				/* Nothing to do */	
+				break;
 
-	switch (clock_handle->conf->synchro_type)
-	{
-		case TRIGGER_PIGGY:
-			/* Nothing to do */	
-			break;
+			case TRIGGER_NTP:
+				err = ntp_init(clock_handle);
+				break;
 
-		case TRIGGER_NTP:
-			err = ntp_init(clock_handle);
-			break;
-
-		case TRIGGER_1588:
-		case TRIGGER_PPS:
-		default:
-			verbose(LOG_ERR, "Init Trigger type not implemented");
-			break;
+			case TRIGGER_1588:
+			case TRIGGER_PPS:
+			default:
+				verbose(LOG_ERR, "Init Trigger type not implemented");
+				break;
+		}
 	}
 	return err;
 }	

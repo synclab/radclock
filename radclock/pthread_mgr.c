@@ -36,6 +36,7 @@
 #include "stampoutput.h"
 #include "pthread_mgr.h"
 #include "jdebug.h"
+#include "config_mgr.h"
 
 
 
@@ -88,7 +89,7 @@ void* thread_trigger(void *c_handle)
 		 * processing thread hadn't be listening before (at startup for example), then
 		 * we sleep a little and probably get rescheduled.
 		 */
-		if (clock_handle->wakeup_data_ready == 1) {
+		if (clock_handle->wakeup_data_ready == 1 && !VM_SLAVE(clock_handle)) {
 			pthread_cond_signal(&clock_handle->wakeup_cond);
 			usleep(10);
 			continue;

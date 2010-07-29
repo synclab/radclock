@@ -724,7 +724,7 @@ int main (int argc, char *argv[])
 			clock_handle->conf->adjust_sysclock = BOOL_OFF;
 		}
 	}
-
+	
 	/* Diagnosis output for the configuration used */
 	config_print(LOG_NOTICE, clock_handle->conf);
 	
@@ -867,7 +867,7 @@ int main (int argc, char *argv[])
 				 */
 				clock_handle->unix_signal = 0;
 			}
-			else
+			else if(!VM_SLAVE(clock_handle))
 			{
 				err = start_thread_DATA_PROC(clock_handle);
 				if (err < 0)

@@ -54,12 +54,12 @@
 /*
  * Virtual Machine environmnent
  */
-#define VM_NONE				0
-#define VM_XEN_MASTER		1
-#define VM_XEN_SLAVE		2
-#define VM_VBOX_MASTER		3
-#define VM_VBOX_SLAVE		4
-
+#define VM_NONE				0x00 
+#define VM_XEN_SLAVE		0x01
+#define VM_XEN_MASTER		0x02
+#define VM_VBOX_SLAVE		0x03
+#define VM_VBOX_MASTER		0x04
+#define VM_SLAVE(val) ((val->conf->virtual_machine & 0x01) == 0x01)
 
 /* 
  * Default configuration values 

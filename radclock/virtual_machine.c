@@ -62,8 +62,8 @@ init_xenstore(struct radclock *clock_handle){
 		perms[0].perms = XS_PERM_READ | XS_PERM_WRITE;
 		
 		xs_write(xs, XBT_NULL, XENSTORE_PATH,
-				&(clock_handle->rad_data), 
-				sizeof(clock_handle->rad_data));
+				RAD_DATA(clock_handle), 
+				sizeof(*RAD_DATA(clock_handle)));
 
 		if(!xs_set_permissions(xs, XBT_NULL, XENSTORE_PATH, perms, 1)){
 			verbose(LOG_ERR,"Could not set permissions for Xenstore");
@@ -88,8 +88,8 @@ push_data_xen(struct radclock *clock_handle){
 	th = xs_transaction_start(xs);
 
 	xs_write(xs, th, XENSTORE_PATH,
-			&(clock_handle->rad_data), 
-			sizeof(clock_handle->rad_data));
+			RAD_DATA(clock_handle), 
+			sizeof(*RAD_DATA(clock_handle)));
 
 	xs_transaction_end(xs, th, false);
 	xs_daemon_close(xs);
@@ -135,7 +135,7 @@ int init_virtual_machine_mode(struct radclock *clock_handle)
 
 			if(init_xenstore(clock_handle) == NOXENSUPPORT){
 				verbose(LOG_ERR, 
-						"Could not open Xenstore, changing virtual machine mode to none");
+						"Could not open Xenstore as Master, changing virtual machine mode to none");
 				clock_handle->conf->virtual_machine = VM_NONE;
 				RAD_VM(clock_handle)->push_data = &push_data_none;
 			} else {
@@ -149,7 +149,7 @@ int init_virtual_machine_mode(struct radclock *clock_handle)
 
 			if(init_xenstore(clock_handle) == NOXENSUPPORT){
 				verbose(LOG_ERR, 
-						"Could not open Xenstore, changing virtual machine mode to none");
+						"Could not open Xenstore as Slave, changing virtual machine mode to none");
 				clock_handle->conf->virtual_machine = VM_NONE;
 				RAD_VM(clock_handle)->pull_data = &pull_data_none;
 			} else {
