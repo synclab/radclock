@@ -103,7 +103,26 @@ push_data_xen(struct radclock *clock_handle){
 int pull_data_xen(struct radclock *clock_handle)
 {
 	JDEBUG
+#ifdef WITH_XENSTORE
+	struct xs_handle *xs;
+	struct radclock_data *radclock_data_buf;
+	unsigned len_read;
+	
+	xs = xs_domain_open();
+
+	radclock_data_buf = xs_read(xs, XBT_NULL, XENSTORE_PATH,&len_read);
+	if(len_read != sizeof(*RAD_DATA(clock_handle))){
+		verbose(LOG_ERR,"Data read from Xenstore not same length as RADclock data");
+	} else {
+		*RAD_DATA(clock_handle) = *radclock_data_buf;
+		verbose(LOG_ERR,"READ DATA FROM XENSTORE");
+	}
+
+	xs_daemon_close(xs);
 	return 0;
+#else
+	return 0;
+#endif
 }
 
 int pull_data_none(struct radclock *clock_handle)

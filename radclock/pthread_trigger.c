@@ -75,27 +75,22 @@ int dummy_client()
 int virtual_client(struct radclock *clock_handle){
 	JDEBUG
 	int err;
-	int sleep_time;
+	long double sleep_time;
 	vcounter_t vcount;
 	
 	RAD_VM(clock_handle)->pull_data(clock_handle);
 	err = radclock_get_vcounter(clock_handle, &vcount);
-	//verbose(LOG_ERR, "Updated RAD_DATA at VCOUNT: %llu", vcount);
 	
 	if(vcount < RAD_DATA(clock_handle)->valid_till){
 		if(vcount > RAD_DATA(clock_handle)->last_changed){
-			sleep_time = (RAD_DATA(clock_handle)->valid_till - vcount)*RAD_DATA(clock_handle)->phat / 1000000;
+		    sleep_time = ((long double) RAD_DATA(clock_handle)->valid_till - (long double) vcount ) * (long double) RAD_DATA(clock_handle)->phat / 1000000;
 			usleep(sleep_time);
-			//verbose(LOG_ERR, "Slept for %dus",sleep_time);
-			//verbose(LOG_ERR, "phat: %d valid till: %llu last_changed: %llu",RAD_DATA(clock_handle)->phat ,RAD_DATA(clock_handle)->valid_till, RAD_DATA(clock_handle)->last_changed);
 		} else {
 			verbose(LOG_ERR, "Virtual store data not suitable for this counter"); 
 		}
 	} else {
-		sleep_time = (RAD_DATA(clock_handle)->valid_till - RAD_DATA(clock_handle)->last_changed)*RAD_DATA(clock_handle)->phat / 10000000;
+		sleep_time = ((long double) RAD_DATA(clock_handle)->valid_till - (long double) RAD_DATA(clock_handle)->last_changed)* (long double) RAD_DATA(clock_handle)->phat / 10000000;
 		usleep(sleep_time); 
-		//verbose(LOG_ERR, "Slept for %dus",sleep_time);
-		//verbose(LOG_ERR, "phat: %d valid till: %llu last_changed: %llu",RAD_DATA(clock_handle)->phat ,RAD_DATA(clock_handle)->valid_till, RAD_DATA(clock_handle)->last_changed);
 	}
 	return err;
 }
