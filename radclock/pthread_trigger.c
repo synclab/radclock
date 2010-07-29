@@ -75,22 +75,24 @@ int dummy_client()
 int virtual_client(struct radclock *clock_handle){
 	JDEBUG
 	int err;
-	long double sleep_time;
-	vcounter_t vcount;
+	useconds_t sleep_time;
+	vcounter_t vcount, delta;
 	
 	RAD_VM(clock_handle)->pull_data(clock_handle);
 	err = radclock_get_vcounter(clock_handle, &vcount);
 	
 	if(vcount < RAD_DATA(clock_handle)->valid_till){
 		if(vcount > RAD_DATA(clock_handle)->last_changed){
-		    sleep_time = ((long double) RAD_DATA(clock_handle)->valid_till - (long double) vcount ) * (long double) RAD_DATA(clock_handle)->phat / 1000000;
+		    delta = RAD_DATA(clock_handle)->valid_till - vcount;
+			sleep_time = delta * RAD_DATA(clock_handle)->phat * 1000000;
 			usleep(sleep_time);
 		} else {
 			verbose(LOG_ERR, "Virtual store data not suitable for this counter"); 
 		}
-	} else {
-		sleep_time = ((long double) RAD_DATA(clock_handle)->valid_till - (long double) RAD_DATA(clock_handle)->last_changed)* (long double) RAD_DATA(clock_handle)->phat / 10000000;
-		usleep(sleep_time); 
+	} else { /* We've gone over the valid till point, just keep checking at poll/100 until we are successful */
+		delta = RAD_DATA(clock_handle)->valid_till - RAD_DATA(clock_handle)->last_changed;
+		sleep_time = delta * RAD_DATA(clock_handle)->phat * 1000000 / 100;
+		usleep(sleep_time);
 	}
 	return err;
 }

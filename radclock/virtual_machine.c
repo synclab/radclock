@@ -111,12 +111,13 @@ int pull_data_xen(struct radclock *clock_handle)
 	xs = xs_domain_open();
 
 	radclock_data_buf = xs_read(xs, XBT_NULL, XENSTORE_PATH,&len_read);
-	if(len_read != sizeof(*RAD_DATA(clock_handle))){
+	if(len_read != sizeof(struct radclock_data)){
 		verbose(LOG_ERR,"Data read from Xenstore not same length as RADclock data");
 	} else {
-		*RAD_DATA(clock_handle) = *radclock_data_buf;
-		verbose(LOG_ERR,"READ DATA FROM XENSTORE");
+		memcpy(RAD_DATA(clock_handle), radclock_data_buf, sizeof(*RAD_DATA(clock_handle)));
+		verbose(LOG_NOTICE,"Replaced RAD_DATA with Xenstore");
 	}
+	free(radclock_data_buf);
 
 	xs_daemon_close(xs);
 	return 0;
