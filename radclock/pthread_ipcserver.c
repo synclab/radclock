@@ -162,6 +162,9 @@ void* thread_ipc_server(void *c_handle)
 				 * of store retrieves to a maximum rate of poll / 100 */
 				if(VM_SLAVE(clock_handle)){
 					radclock_get_vcounter(clock_handle, &vcount);
+					if(local_valid_till < RAD_DATA(clock_handle)->valid_till){
+						local_valid_till = RAD_DATA(clock_handle)->valid_till;
+					}
 					if(vcount > local_valid_till){
 						RAD_VM(clock_handle)->pull_data(clock_handle);
 						if(RAD_DATA(clock_handle)->valid_till > local_valid_till){
