@@ -169,7 +169,6 @@ void* thread_ipc_server(void *c_handle)
 						} else {
 							local_valid_till += (RAD_DATA(clock_handle)->valid_till - RAD_DATA(clock_handle)->last_changed) / 100;
 						}
-						verbose(LOG_ERR,"Updated RADclock data, local_valid_till: %llu, valid_till %llu, vcount %llu", local_valid_till, RAD_DATA(clock_handle)->valid_till, vcount);
 					}
 				}
 
