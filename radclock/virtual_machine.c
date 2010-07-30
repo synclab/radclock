@@ -83,6 +83,10 @@ push_data_xen(struct radclock *clock_handle){
 #ifdef WITH_XENSTORE
 	struct xs_handle *xs;
 	xs_transaction_t th;
+#if 1==0
+	vcounter_t vcount;
+	long unsigned gap;
+#endif
 
 	xs = xs_domain_open();
 	th = xs_transaction_start(xs);
@@ -90,6 +94,11 @@ push_data_xen(struct radclock *clock_handle){
 	xs_write(xs, th, XENSTORE_PATH,
 			RAD_DATA(clock_handle), 
 			sizeof(*RAD_DATA(clock_handle)));
+#if 1==0
+			radclock_get_vcounter(clock_handle, &vcount);
+			gap = (vcount - RAD_DATA(clock_handle)->last_changed) * RAD_DATA(clock_handle)->phat * 1000000;
+			verbose(LOG_ERR, "Update happened %lu microseconds ago", gap);
+#endif
 
 	xs_transaction_end(xs, th, false);
 	xs_daemon_close(xs);
@@ -107,15 +116,25 @@ int pull_data_xen(struct radclock *clock_handle)
 	struct xs_handle *xs;
 	struct radclock_data *radclock_data_buf;
 	unsigned len_read;
-	
+#if 1==0
+	vcounter_t vcount;
+	long unsigned gap;
+#endif
 	xs = xs_domain_open();
 
 	radclock_data_buf = xs_read(xs, XBT_NULL, XENSTORE_PATH,&len_read);
 	if(len_read != sizeof(struct radclock_data)){
 		verbose(LOG_ERR,"Data read from Xenstore not same length as RADclock data");
 	} else {
+		if(RAD_DATA(clock_handle)->last_changed != radclock_data_buf->last_changed){
+			verbose(LOG_NOTICE, "Xenstore updated RADclock data");
+#if 1==0
+			radclock_get_vcounter(clock_handle, &vcount);
+			gap = (vcount - RAD_DATA(clock_handle)->last_changed) * RAD_DATA(clock_handle)->phat * 1000000;
+			verbose(LOG_ERR, "Update happened %lu microseconds ago", gap);
+#endif
+	}
 		memcpy(RAD_DATA(clock_handle), radclock_data_buf, sizeof(*RAD_DATA(clock_handle)));
-		verbose(LOG_NOTICE,"Replaced RAD_DATA with Xenstore");
 	}
 	free(radclock_data_buf);
 

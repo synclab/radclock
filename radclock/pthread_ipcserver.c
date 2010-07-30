@@ -161,15 +161,13 @@ void* thread_ipc_server(void *c_handle)
 				 * till + poll / 100. This should hopefully regulate the number
 				 * of store retrieves to a maximum rate of poll / 100 */
 				if(VM_SLAVE(clock_handle)){
-					radclock_get_vcounter(clock_handle, &vcount);
 					if(local_valid_till < RAD_DATA(clock_handle)->valid_till){
 						local_valid_till = RAD_DATA(clock_handle)->valid_till;
 					}
+					radclock_get_vcounter(clock_handle, &vcount);
 					if(vcount > local_valid_till){
 						RAD_VM(clock_handle)->pull_data(clock_handle);
-						if(RAD_DATA(clock_handle)->valid_till > local_valid_till){
-							local_valid_till = RAD_DATA(clock_handle)->valid_till;
-						} else {
+						if(RAD_DATA(clock_handle)->valid_till < local_valid_till){
 							local_valid_till += (RAD_DATA(clock_handle)->valid_till - RAD_DATA(clock_handle)->last_changed) / 100;
 						}
 					}
