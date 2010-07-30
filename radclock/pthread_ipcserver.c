@@ -41,6 +41,7 @@
 #include "sync_algo.h"
 #include "pthread_mgr.h"
 #include "jdebug.h"
+#include "config_mgr.h"
 
 
 /* 
@@ -55,6 +56,9 @@ void* thread_ipc_server(void *c_handle)
 	/* Clock handle to be able to read global data */
 	struct radclock *clock_handle;
 	clock_handle = (struct radclock*) c_handle;
+	
+	/* Local valid till, vcount, to regulate virtual store updates */
+	vcounter_t local_valid_till, vcount;
 
 	/* Exchanged messages */
 	struct ipc_request request;
@@ -117,6 +121,11 @@ void* thread_ipc_server(void *c_handle)
 	verbose(LOG_NOTICE, "IPC thread initialised.");
 	len = sizeof(sun_client);
 
+	/* Do an initial update of the RADclock data, set local to valid till */
+	if(VM_SLAVE(clock_handle)){
+		RAD_VM(clock_handle)->pull_data(clock_handle);
+		local_valid_till = RAD_DATA(clock_handle)->valid_till;
+	}
 
 	while ( (clock_handle->pthread_flag_stop & PTH_IPC_SERV_STOP) != PTH_IPC_SERV_STOP )
 	{
@@ -145,6 +154,25 @@ void* thread_ipc_server(void *c_handle)
 		pthread_mutex_lock(&clock_handle->globaldata_mutex);
 		switch (request.request_type) {
 			case IPC_REQ_RAD_DATA:
+
+				/* If we are a Virtual slave, get a vcount, to see if we need to
+				 * update our RADclock data. Set the next local valid till as the
+				 * maximum of the RADclock data valid till and the local valid
+				 * till + poll / 100. This should hopefully regulate the number
+				 * of store retrieves to a maximum rate of poll / 100 */
+				if(VM_SLAVE(clock_handle)){
+					radclock_get_vcounter(clock_handle, &vcount);
+					if(vcount > local_valid_till){
+						RAD_VM(clock_handle)->pull_data(clock_handle);
+						if(RAD_DATA(clock_handle)->valid_till > local_valid_till){
+							local_valid_till = RAD_DATA(clock_handle)->valid_till;
+						} else {
+							local_valid_till += (RAD_DATA(clock_handle)->valid_till - RAD_DATA(clock_handle)->last_changed) / 100;
+						}
+						verbose(LOG_ERR,"Updated RADclock data, local_valid_till: %llu, valid_till %llu, vcount %llu", local_valid_till, RAD_DATA(clock_handle)->valid_till, vcount);
+					}
+				}
+
 				reply.reply_type 	= IPC_REQ_RAD_DATA;
 				reply.rad_data 		= *(RAD_DATA(clock_handle)); 
 				break;
