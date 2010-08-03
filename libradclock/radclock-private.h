@@ -183,6 +183,9 @@ struct radclock
 	
 	/* Protol related stuff (NTP, 1588, ...) */
 	struct radclock_ntpserver_data *server_data;
+	
+	/* IPC request bound */
+	int ipc_requests;
 
 	/* Pcap handler for the RADclock only */
 	pcap_t *pcap_handle;

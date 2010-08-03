@@ -272,6 +272,7 @@ int radclock_init(struct radclock *clock_handle)
 	{
 		/* If we are a client we only need to connect to the server socket */
 		case RADCLOCK_IPC_CLIENT:
+			clock_handle->ipc_requests = 0;
 			err = radclock_IPC_client_connect(clock_handle);
 			if ( err )
 				return -1;
@@ -427,6 +428,7 @@ int radclock_check_outdated(struct radclock* handle)
 	int err;
 	vcounter_t vcount;
 	vcounter_t valid_till;
+	vcounter_t last_changed;
 	radclock_autoupdate_t update_mode;
 
 	/* If we are the RADclock daemon, all this is useless and should actually
@@ -443,6 +445,7 @@ int radclock_check_outdated(struct radclock* handle)
 	if ( err )  { return 1; }
 
 	valid_till = RAD_DATA(handle)->valid_till;
+	last_changed = RAD_DATA(handle)->last_changed;
 	
 	// Check if we need to read the clock parameters from the kernel	
 	switch (update_mode) {
@@ -450,8 +453,15 @@ int radclock_check_outdated(struct radclock* handle)
 		case RADCLOCK_UPDATE_AUTO:
 			if ( err )  { return 1; }
 			err = radclock_get_vcounter(handle, &vcount);
-			if ( vcount < valid_till )
-				break;
+			/* Make sure we are within a valid window */
+			if ( vcount < valid_till && vcount > last_changed ){
+				/* Make sure our data doesn't get too stale in case of 
+				 * underlying counter change */
+				if(handle->ipc_requests < 10){
+					handle->ipc_requests++;
+					break;
+				}
+			}
 			// else: Too old data, fall back in RADCLOCK_UPDATE_ALWAYS
 
 		case RADCLOCK_UPDATE_ALWAYS:
@@ -460,6 +470,7 @@ int radclock_check_outdated(struct radclock* handle)
 			if ( err < 0 )  { return 1; }
 			err = radclock_read_IPCclock(handle, IPC_REQ_RAD_ERROR);
 			if ( err < 0 )  { return 1; }
+			handle->ipc_requests = 0;
 			break;
 
 		case RADCLOCK_UPDATE_NEVER:
