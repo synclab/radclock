@@ -155,18 +155,20 @@ void* thread_ipc_server(void *c_handle)
 		switch (request.request_type) {
 			case IPC_REQ_RAD_DATA:
 
-				/* If we are a Virtual slave, get a vcount, to see if we need to
-				 * update our RADclock data. Set the next local valid till as the
-				 * maximum of the RADclock data valid till and the local valid
-				 * till + poll / 100. This should hopefully regulate the number
-				 * of store retrieves to a maximum rate of poll / 100 */
 				if(VM_SLAVE(clock_handle)){
+					
+					/* If our local_valid_till is older than the global one, align valid_till's
+					 * Having this as a first check allows for something else updating the RADclock data */
 					if(local_valid_till < RAD_DATA(clock_handle)->valid_till){
 						local_valid_till = RAD_DATA(clock_handle)->valid_till;
 					}
+					
+					/* If the local_valid_till has expired, get new virtual data */
 					radclock_get_vcounter(clock_handle, &vcount);
 					if(vcount > local_valid_till){
 						RAD_VM(clock_handle)->pull_data(clock_handle);
+						
+						/* If despite the update, the valid_till is still stale, increment our local_valid_till */
 						if(RAD_DATA(clock_handle)->valid_till < local_valid_till){
 							local_valid_till += (RAD_DATA(clock_handle)->valid_till - RAD_DATA(clock_handle)->last_changed) / 100;
 						}

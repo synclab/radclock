@@ -83,16 +83,16 @@ int virtual_client(struct radclock *clock_handle){
 	
 	if(vcount < RAD_DATA(clock_handle)->valid_till){
 		if(vcount > RAD_DATA(clock_handle)->last_changed){
-		    delta = RAD_DATA(clock_handle)->valid_till - vcount;
+		    delta = RAD_DATA(clock_handle)->valid_till - vcount; // Calculate amount of time to sleep untill next valid_till
 			sleep_time = delta * RAD_DATA(clock_handle)->phat * 1000000;
 			usleep(sleep_time);
 		} else {
 			verbose(LOG_ERR, "Virtual store data not suitable for this counter"); 
 		}
-	} else { /* We've gone over the valid till point, just keep checking at poll/100 until we are successful */
-		delta = RAD_DATA(clock_handle)->valid_till - RAD_DATA(clock_handle)->last_changed;
-		sleep_time = delta * RAD_DATA(clock_handle)->phat * 1000000 / 100;
-		usleep(sleep_time);
+	} else { /* We've gone over the valid till point, just keep checking at every 500000us until we are successful */
+	//	delta = RAD_DATA(clock_handle)->valid_till - RAD_DATA(clock_handle)->last_changed; /* Poll period */
+	//	sleep_time = delta * RAD_DATA(clock_handle)->phat * 1000000 / 100; /* Poll period / 100 */
+		usleep(500000);
 	}
 	return err;
 }

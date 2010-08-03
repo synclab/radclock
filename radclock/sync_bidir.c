@@ -2034,7 +2034,10 @@ output_results:
 	 * send this value far in the future. Wait for i > 1
 	 */
 	if ( peer->stamp_i > 1 ) 
-		RAD_DATA(clock_handle)->valid_till	= stamp->Tf + ((peer->poll_period -1.5) / peer->phat);
+		/* TODO: XXX Previously valid till was offset by 1.5s to allow for NTP's
+		 * varying poll period when in piggy back mode
+		 * RAD_DATA(clock_handle)->valid_till	= stamp->Tf + ((peer->poll_period -1.5) / peer->phat); */
+		RAD_DATA(clock_handle)->valid_till	= stamp->Tf + ((peer->poll_period) / peer->phat);
 
 
 	/* Clock error estimates.
