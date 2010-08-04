@@ -69,7 +69,7 @@ init_xenstore(struct radclock *clock_handle){
 			verbose(LOG_ERR,"Could not set permissions for Xenstore");
 		}
 	}
-	xs_daemon_close(xs);
+	RAD_VM(clock_handle)->store_handle = (void *) xs;
 	return 0;
 #else
 	// Really this shouldn't happen, but maybe for robustness we should explicitly
@@ -87,11 +87,12 @@ push_data_xen(struct radclock *clock_handle){
 	vcounter_t vcount;
 	long unsigned gap;
 #endif
+	xs = (struct xs_handle *) RAD_VM(clock_handle)->store_handle;
+	/* xs_transaction_start is no longer needed, as we are only updating 1 entry
+	 * in the xenstore, it is used to make multiple store writes atomic 
+	th = xs_transaction_start(xs); */
 
-	xs = xs_domain_open();
-	th = xs_transaction_start(xs);
-
-	xs_write(xs, th, XENSTORE_PATH,
+	xs_write(xs, XBT_NULL, XENSTORE_PATH,
 			RAD_DATA(clock_handle), 
 			sizeof(*RAD_DATA(clock_handle)));
 #if 1==0
@@ -99,9 +100,8 @@ push_data_xen(struct radclock *clock_handle){
 			gap = (vcount - RAD_DATA(clock_handle)->last_changed) * RAD_DATA(clock_handle)->phat * 1000000;
 			verbose(LOG_ERR, "Update happened %lu microseconds ago", gap);
 #endif
-
-	xs_transaction_end(xs, th, false);
-	xs_daemon_close(xs);
+	/* 
+	xs_transaction_end(xs, th, false); */
 	return 0;
 #else
 	return 0;
@@ -120,8 +120,7 @@ int pull_data_xen(struct radclock *clock_handle)
 	vcounter_t vcount;
 	long unsigned gap;
 #endif
-	xs = xs_domain_open();
-
+	xs = (struct xs_handle *) RAD_VM(clock_handle)->store_handle;
 	radclock_data_buf = xs_read(xs, XBT_NULL, XENSTORE_PATH,&len_read);
 	if(len_read != sizeof(struct radclock_data)){
 		verbose(LOG_ERR,"Data read from Xenstore not same length as RADclock data");
@@ -138,7 +137,6 @@ int pull_data_xen(struct radclock *clock_handle)
 	}
 	free(radclock_data_buf);
 
-	xs_daemon_close(xs);
 	return 0;
 #else
 	return 0;
