@@ -438,7 +438,7 @@ int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 	 * Done only in the case of reading from a live device and if 
 	 * the update flag is on.
 	 */
-	if ( (clock_handle->run_mode == RADCLOCK_RUN_KERNEL) && (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER) ) 
+	if ( (clock_handle->run_mode == RADCLOCK_SYNC_LIVE) && (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER) ) 
 	{
 		// Update any virtual machine store if configured
 		RAD_VM(clock_handle)->push_data(clock_handle);
@@ -471,7 +471,7 @@ int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 	 * have preocessed a new stamp. Locking is handled by the kernel so we should
 	 * not have concurrency issue with the two threads updating the data
 	 */ 	
-	if ( (clock_handle->run_mode != RADCLOCK_RUN_DEAD) && (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER) ) {
+	if ( (clock_handle->run_mode == RADCLOCK_SYNC_LIVE) && (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER) ) {
 		update_kernel_fixed(clock_handle);
 		verbose(VERB_DEBUG, "Sync thread updated fixed point data to kernel.");
 	}
@@ -479,7 +479,7 @@ int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 	/* Adjust the system clock, we only pass in here if we are not piggybacking
 	 * on ntp daemon.
 	 */
-  	if ( (clock_handle->run_mode == RADCLOCK_RUN_KERNEL) && (clock_handle->conf->adjust_sysclock == BOOL_ON) )
+  	if ( (clock_handle->run_mode == RADCLOCK_SYNC_LIVE) && (clock_handle->conf->adjust_sysclock == BOOL_ON) )
 	{
 		// TODO: catch errors
 		update_system_clock(clock_handle);	

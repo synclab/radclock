@@ -85,7 +85,7 @@ static struct _key keys[] = {
 static char* labels_bool[] 		= { "off", "on" };
 static char* labels_verb[] 		= { "quiet", "normal", "high" };
 static char* labels_plocal[] 	= { "off", "on", "restart" };
-static char* labels_sync[] 		= { "piggy", "ntp", "ieee1588", "pps" };
+static char* labels_sync[] 		= { "spy", "piggy", "ntp", "ieee1588", "pps" };
 static char* labels_vm[] 		= { "none", "xen-slave", "xen-master", "vbox-slave", "vbox-master" };
 
 
@@ -239,6 +239,7 @@ void write_config_file(FILE *fd, struct _key *keys, struct radclock_config *conf
 				"# Note that piggybacking requires an ntp daemon running and is then\n"
 				"# incompatible with the RADclock serving clients over the network or \n"
 				"# adjusting the system clock. Piggybacking disables these functions.\n");
+	fprintf(fd, "#\tspy     : Experimental, spy on sysclock\n");
 	fprintf(fd, "#\tpiggy   : piggybacking on running ntp daemon\n");
 	fprintf(fd, "#\tntp     : RADclock uses NTP protocol\n");
 	fprintf(fd, "#\tieee1588: RADclock uses IEEE 1588 protocol - NOT IMPLEMENTED YET\n");
@@ -664,7 +665,7 @@ switch (codekey) {
 		// If value specified on the command line
 		if ( HAS_UPDATE(*mask, UPDMASK_SYNCHRO_TYPE) ) 
 			break;
-		ival = check_valid_option(value, labels_sync, 4);
+		ival = check_valid_option(value, labels_sync, 5);
 		// Indicate changed value
 		if ( conf->synchro_type != ival )
 			SET_UPDATE(*mask, UPDMASK_SYNCHRO_TYPE);

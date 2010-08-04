@@ -49,10 +49,10 @@
  */
 
 
-radclock_runmode_t radclock_detect_support(void) 
+int found_ffwd_kernel(void) 
 {
-	logger(RADLOG_WARNING, "Kernel support not compiled.");
-	return RADCLOCK_RUN_NOTSET;
+	logger(RADLOG_WARNING, "Feed-Forward Kernel support not compiled.");
+	return 0;
 }
 
 int radclock_init_vcounter_syscall(struct radclock *handle)
@@ -62,7 +62,7 @@ int radclock_init_vcounter_syscall(struct radclock *handle)
 	return 0;
 }
 
-int radclock_init_kernelclock(struct radclock *handle)
+int radclock_init_kernel_support(struct radclock *handle)
 {
 	return -ENOENT;
 }

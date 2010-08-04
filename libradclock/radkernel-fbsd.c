@@ -88,40 +88,24 @@ struct vcount_bpf_hdr
 
 
 
-radclock_runmode_t radclock_detect_support(void) 
+int found_ffwd_kernel(void) 
 {
 	int ret;
 	int	tsmode;
-	char osrelease[32];
-	const char* ctl_osrelease = "kern.osrelease";
-	const char* ctl_tsmode_5 = "debug.bpf_tsmode";
-	const char* ctl_tsmode_6 = "net.bpf.bpf_radclock_tsmode";
 	size_t size_ctl;
 
-	size_ctl = sizeof(osrelease);
-	ret = sysctlbyname(ctl_osrelease, &osrelease, &size_ctl, NULL, 0);
-	if (ret == -1) {
-		logger(RADLOG_NOTICE, "Kernel release number NOT detected");
-		return RADCLOCK_RUN_NOTSET;
-	}
-	
 	size_ctl = sizeof(tsmode);
-	if (strncmp(osrelease, "5", 1) == 0) {
-		/* FreeBSD 5.x */
-		ret = sysctlbyname(ctl_tsmode_5, &tsmode, &size_ctl, NULL, 0);
-	}
-	else {
-		/* FreeBSD 6.x and above */
-		ret = sysctlbyname(ctl_tsmode_6, &tsmode, &size_ctl, NULL, 0);
-	}	
+	ret = sysctlbyname("net.bpf.bpf_radclock_tsmode", &tsmode, &size_ctl, NULL, 0);
 
-	if (ret == -1) {
-		logger(RADLOG_NOTICE, "Kernel support NOT detected");
-		return RADCLOCK_RUN_NOTSET;
+	if (ret == -1) 
+	{
+		logger(RADLOG_NOTICE, "No Feed-Forward kernel support detected");
+		return 0;
 	}
-	else {
-		logger(RADLOG_NOTICE, "Kernel support detected");
-		return RADCLOCK_RUN_KERNEL;
+	else
+	{
+		logger(RADLOG_NOTICE, "Feed-Forward kernel support detected");
+		return 1;
 	}
 }
 
@@ -156,12 +140,11 @@ int radclock_init_vcounter_syscall(struct radclock *handle)
 }
 
 
-int radclock_init_kernelclock(struct radclock *handle)
+int radclock_init_kernel_support(struct radclock *handle)
 {
 	int fd;
 	int devnum;
 	char fname[30];
-	radclock_autoupdate_t automode;
 
 	for (devnum=0; devnum <255; devnum++)
 	{
@@ -178,10 +161,7 @@ done:
 	{
 		PRIV_DATA(handle)->dev_fd =  fd;
 
-		// Init mode for clock autoupdate
-		automode = RADCLOCK_UPDATE_AUTO;
-		radclock_set_autoupdate(handle, &automode);
-
+		logger(RADLOG_NOTICE, "Feed-Forward Kernel initialised");
 		return 0;
 	}
 }

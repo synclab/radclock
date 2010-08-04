@@ -37,12 +37,13 @@
 
 
 /*
- * Trigger / Protocol configuration
+ * Trigger / Sync Protocol configuration
  */
-#define TRIGGER_PIGGY 	0
-#define TRIGGER_NTP		1
-#define TRIGGER_1588	2
-#define TRIGGER_PPS		3
+#define SYNCTYPE_SPY 	0
+#define SYNCTYPE_PIGGY 	1
+#define SYNCTYPE_NTP	2
+#define SYNCTYPE_1588	3
+#define SYNCTYPE_PPS	4
 
 /*
  * Server Protocol configuration
@@ -66,15 +67,15 @@
  */
 #define DEFAULT_RADCLOCK_VERSION	"0"
 #define DEFAULT_VERBOSE				1
-#define DEFAULT_SYNCHRO_TYPE		TRIGGER_NTP		// Protocol used 
-#define DEFAULT_SERVER_IPC			BOOL_ON		// Update the clock 
-#define DEFAULT_SERVER_NTP			BOOL_ON		// Default we start a NTP server 
-#define DEFAULT_ADJUST_SYSCLOCK		BOOL_ON		// Default we adjust the system clock 
-#define DEFAULT_NTP_POLL_PERIOD 	16			// 16 NTP pkts every [sec]
-#define DEFAULT_START_PLOCAL		1			// 1 Using plocal algo
+#define DEFAULT_SYNCHRO_TYPE		SYNCTYPE_NTP	// Protocol used 
+#define DEFAULT_SERVER_IPC			BOOL_ON			// Update the clock 
+#define DEFAULT_SERVER_NTP			BOOL_ON			// Default we start a NTP server 
+#define DEFAULT_ADJUST_SYSCLOCK		BOOL_ON			// Default we adjust the system clock 
+#define DEFAULT_NTP_POLL_PERIOD 	16				// 16 NTP pkts every [sec]
+#define DEFAULT_START_PLOCAL		1				// 1 Using plocal algo
 #define DEFAULT_PHAT_INIT			1.e-9
-#define DEFAULT_ASYM_HOST			0.0			// 0 micro-sconds
-#define DEFAULT_ASYM_NET			0.0			// 0 micro-seconds 
+#define DEFAULT_ASYM_HOST			0.0				// 0 micro-sconds
+#define DEFAULT_ASYM_NET			0.0				// 0 micro-seconds 
 #define DEFAULT_HOSTNAME			"numbat.cubinlab.ee.unimelb.edu.au"
 #define DEFAULT_TIME_SERVER			"ntp.cubinlab.ee.unimelb.edu.au"
 #define DEFAULT_NETWORKDEV			"xl0"
@@ -83,7 +84,7 @@
 #define DEFAULT_SYNC_OUT_PCAP		"sync_output.pcap"
 #define DEFAULT_SYNC_OUT_ASCII		"sync_output.ascii"
 #define DEFAULT_CLOCK_OUT_ASCII		"clock_output.ascii"
-#define DEFAULT_VIRTUAL_MACHINE		VM_NONE		// Default we do not run in vm environment 
+#define DEFAULT_VIRTUAL_MACHINE		VM_NONE			// Default we do not run in vm environment 
 
 
 

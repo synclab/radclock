@@ -426,16 +426,64 @@ int daemonize(char* lockfile, int *daemon_pid_fd)
 /*
  * radclock process specific init of the clock_handle
  */
-// TODO should extract the similar ones from the library to clean up the mess
 int radclock_init_specific (struct radclock *clock_handle) 
 {
+	/* Input source */
+	struct stampsource *stamp_source;
 	int err;
 
 	JDEBUG
 
+	if (clock_handle->run_mode == RADCLOCK_SYNC_LIVE)
+	{
+		err = radclock_init_kernel_support(clock_handle);
+		if (err < 0 )
+			return 1;
+	}
+
 	err = init_virtual_machine_mode(clock_handle);
 	if (err < 0)
 		return -1;
+
+
+	/* Initial status words */
+	// TODO there should be more of them set in here
+	ADD_STATUS(clock_handle, STARAD_STARVING);
+	
+	
+	/* Clock has been init', set the pointer to the clock */
+	set_verbose(clock_handle, clock_handle->is_daemon, clock_handle->conf->verbose_level);
+	set_logger(logger_verbose_bridge);
+
+	/* Create directory to store pid lock file and ipc socket */
+	if (  (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER) 
+				|| (clock_handle->is_daemon) ) 
+		{
+		struct stat sb;
+		if (stat(RADCLOCK_RUN_DIRECTORY, &sb) < 0) {
+			if (mkdir(RADCLOCK_RUN_DIRECTORY, 0755) < 0) { 
+				verbose(LOG_ERR, "Cannot create %s directory. Run as root or (!daemon && !server)",
+					   	RADCLOCK_RUN_DIRECTORY);
+				return 1;
+			}
+		}
+	}
+
+	/* Open input file from which to read TS data */   
+	stamp_source = create_source(clock_handle);
+	if (!stamp_source)
+	{
+		verbose(LOG_ERR, "Error creating stamp source, exiting");
+		exit(EXIT_FAILURE);
+	}
+	/* Hang stamp source on the handler */
+	clock_handle->stamp_source = (void *) stamp_source;
+	
+
+	/* Open output files */ 
+	open_output_stamp(clock_handle);
+	open_output_matlab(clock_handle);
+
 
 	return 0;
 }
@@ -458,14 +506,8 @@ int main (int argc, char *argv[])
 	/* PID lock file for daemon */
 	int daemon_pid_fd 		= 0;
 
-	/* Run mode for the algo. Default is kernel mode */
-	radclock_runmode_t run_mode = RADCLOCK_RUN_KERNEL;
-
 	/* Threads */
 	void* thread_status;
-
-	/* Input source */
-	struct stampsource *stamp_source;
 
 	/* Misc */
 	int err;
@@ -711,7 +753,8 @@ int main (int argc, char *argv[])
 	set_logger(logger_verbose_bridge);
 
 	/* Check for incompatible configurations and correct them */
-	if ( clock_handle->conf->synchro_type == TRIGGER_PIGGY )
+	if (( clock_handle->conf->synchro_type == SYNCTYPE_SPY ) ||
+		( clock_handle->conf->synchro_type == SYNCTYPE_PIGGY ))
 	{
 		if ( clock_handle->conf->server_ntp == BOOL_ON )
 		{
@@ -735,18 +778,31 @@ int main (int argc, char *argv[])
 	 * shared global data on the system or open a BPF. This define input to the
 	 * init of the radclock handle
 	 */
-	if (!is_live_source(clock_handle)) {
-		run_mode = RADCLOCK_RUN_DEAD;
+	if (!is_live_source(clock_handle)) 
+	{
+		clock_handle->run_mode = RADCLOCK_SYNC_DEAD;
+		clock_handle->autoupdate_mode = RADCLOCK_UPDATE_NEVER;
 	}
-	clock_handle->run_mode = run_mode;
+	else {
+		/* We are running live so should make sure we have some kernel support here */	
+		if (!found_ffwd_kernel())
+		{
+			verbose(LOG_ERR, "The RADclock does not run live without kernel support");
+			return 1;
+		}
+		clock_handle->run_mode = RADCLOCK_SYNC_LIVE;
 
-	/* Manually signal we are the radclock algo and that we have to serve global data to the
-	 * kernel and other processes throught the IPC socket.
-	 */
-	if ( clock_handle->conf->server_ipc && is_live_source(clock_handle))
-		clock_handle->ipc_mode = RADCLOCK_IPC_SERVER;
-	else
-		clock_handle->ipc_mode = RADCLOCK_IPC_NONE;
+		/* Manually signal we are the radclock algo and that we have to serve global data to the
+		 * kernel and other processes throught the IPC socket.
+		 */
+		if ( clock_handle->conf->server_ipc)
+			clock_handle->ipc_mode = RADCLOCK_IPC_SERVER;
+		else
+			clock_handle->ipc_mode = RADCLOCK_IPC_NONE;
+
+		// XXX Does the following matters for the radclock?
+		clock_handle->autoupdate_mode = RADCLOCK_UPDATE_ALWAYS;
+	}
 
 	/* Init clock handle and private data */
 	if (radclock_init(clock_handle))
@@ -754,10 +810,8 @@ int main (int argc, char *argv[])
 		verbose(LOG_ERR, "Could not initialise the RADclock");
 		return 1;
 	}
-
-
-// XXX TODO XXX work in progress in here, should extract radclock only init from
-// the library ... 
+	
+	/* Init radclock specific stuff */
 	if (radclock_init_specific(clock_handle))
 	{
 		verbose(LOG_ERR, "Radclock process specific init failed.");
@@ -766,53 +820,13 @@ int main (int argc, char *argv[])
 
 
 
-
-	/* Initial status words */
-	// TODO there should be more set in here
-	ADD_STATUS(clock_handle, STARAD_STARVING);
-	
-	
-	/* Clock has been init', set the pointer to the clock */
-	set_verbose(clock_handle, clock_handle->is_daemon, clock_handle->conf->verbose_level);
-	set_logger(logger_verbose_bridge);
-
-	/* Create directory to store pid lock file and ipc socket */
-	if (  (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER) 
-				|| (clock_handle->is_daemon) ) 
-		{
-		struct stat sb;
-		if (stat(RADCLOCK_RUN_DIRECTORY, &sb) < 0) {
-			if (mkdir(RADCLOCK_RUN_DIRECTORY, 0755) < 0) { 
-				verbose(LOG_ERR, "Cannot create %s directory. Run as root or (!daemon && !server)",
-					   	RADCLOCK_RUN_DIRECTORY);
-				return 1;
-			}
-		}
-	}
-
-	/* Open input file from which to read TS data */   
-	stamp_source = create_source(clock_handle);
-	if (!stamp_source)
-	{
-		verbose(LOG_ERR, "Error creating stamp source, exiting");
-		exit(EXIT_FAILURE);
-	}
-	/* Hang stamp source on the handler */
-	clock_handle->stamp_source = (void *) stamp_source;
-	
-
-	/* Open output files */ 
-	open_output_stamp(clock_handle);
-	open_output_matlab(clock_handle);
-
-
 	/* Now 2 cases. Either we are running live or we are replaying some data.
 	 * If we run live, we will spawn some threads and do some smart things.
 	 * If we replay data, no need to do all of that, we access data and process
 	 * it in the same thread.
 	 */
 
-	if (clock_handle->run_mode == RADCLOCK_RUN_DEAD)
+	if (clock_handle->run_mode == RADCLOCK_SYNC_DEAD)
 	{
 		struct bidir_peer peer;
 		// TODO XXX Need to manage peers better !!
@@ -839,8 +853,8 @@ int main (int argc, char *argv[])
 			 * produce packets, we would be a nasty CPU hog. Better avoid
 			 * creating problems and exit with an error message
 			 */
-			if (	(clock_handle->conf->synchro_type == TRIGGER_NTP)
-				||	(clock_handle->conf->synchro_type == TRIGGER_1588) ) 
+			if (	(clock_handle->conf->synchro_type == SYNCTYPE_NTP)
+				||	(clock_handle->conf->synchro_type == SYNCTYPE_1588) ) 
 			{
 				if ( strlen(clock_handle->conf->time_server) == 0)
 				{
@@ -900,7 +914,7 @@ int main (int argc, char *argv[])
 			 * mode, we need to refresh the fixed point data in the kernel.
 			 * That's this guy's job.
 			 */
-			if ( (clock_handle->run_mode != RADCLOCK_RUN_DEAD) && (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER) ) {
+			if ( (clock_handle->run_mode == RADCLOCK_SYNC_LIVE) && (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER) ) {
 				err = start_thread_FIXEDPOINT(clock_handle);
 				if (err < 0) 	return 1;
 			}
@@ -968,9 +982,9 @@ int main (int argc, char *argv[])
 
 	long int n_stamp;    
 	n_stamp = ((struct bidir_output *)clock_handle->algo_output)->n_stamps;
-	verbose(LOG_NOTICE, "%u NTP packets captured", stampsource_get_stats(clock_handle, stamp_source)->ref_count);
+	verbose(LOG_NOTICE, "%u NTP packets captured", ((struct timeref_stats*)(clock_handle->stamp_source))->ref_count);
 	verbose(LOG_NOTICE,"%ld missed NTP packets",
-			stampsource_get_stats(clock_handle, stamp_source)->ref_count-2*n_stamp);
+			((struct timeref_stats*)(clock_handle->stamp_source))->ref_count-2*n_stamp);
 	verbose(LOG_NOTICE, "%ld valid timestamp tuples extracted", n_stamp);
 
 	/* Close output files */
@@ -981,7 +995,7 @@ int main (int argc, char *argv[])
 	
 
 	// TODO:  all the destructors have to be re-written
-	destroy_source(clock_handle, stamp_source);
+	destroy_source(clock_handle, (struct stampsource *)(clock_handle->stamp_source));
 	radclock_destroy(clock_handle);
 	
 	/* Say bye and close syslog */

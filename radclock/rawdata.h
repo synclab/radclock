@@ -39,17 +39,18 @@
 
 typedef enum { 
 	RD_UNKNOWN,
+	RD_SPY_STAMP,
 	RD_PPS,
-	RD_PACKET,		/* Handed by libpcap */
-} rawdata_t;
+	RD_NTP_PACKET,		/* Handed by libpcap */
+} rawdata_type_t;
 
 
 struct raw_data {
-	int read;						/* Have I been read? i.e. am I ready to be freed? */
 	struct raw_data *prev;			/* Previous buddy */
 	struct raw_data *next;			/* Next buddy */
+	rawdata_type_t type;			/* If we know the type, let's put it there */
+	int read;						/* Have I been read? i.e. am I ready to be freed? */
 	vcounter_t vcount;				/* vcount stamp for this buddy */
-	rawdata_t type;					/* If we know the type, let's put it there */
 	struct pcap_pkthdr pcap_hdr;	/* The PCAP header */
 	void* buf;						/* Actual data, contains packet */
 };

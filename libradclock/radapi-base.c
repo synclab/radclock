@@ -79,7 +79,7 @@ struct radclock * radclock_create(void)
 
 	clock->autoupdate_mode 		= RADCLOCK_UPDATE_AUTO;
 	clock->local_period_mode 	= RADCLOCK_LOCAL_PERIOD_ON;
-	clock->run_mode 			= RADCLOCK_RUN_NOTSET;
+	clock->run_mode 			= RADCLOCK_SYNC_NOTSET;
 	clock->ipc_mode 			= RADCLOCK_IPC_CLIENT;
 
 	/* Network Protocol related stuff */
@@ -211,42 +211,9 @@ int radclock_IPC_client_connect(struct radclock* clock_handle)
 }
 
 
-
-int set_clock_run_mode(struct radclock *handle) 
-{
-	radclock_runmode_t have_kernel_support;
-
-	switch (handle->run_mode) 
-	{
-		case RADCLOCK_RUN_NOTSET:
-			handle->run_mode = RADCLOCK_RUN_NOTSET;
-			break;
-
-		case RADCLOCK_RUN_DEAD:
-			handle->run_mode = RADCLOCK_RUN_DEAD;
-			break;
-
-		case RADCLOCK_RUN_KERNEL:
-			have_kernel_support = radclock_detect_support();
-			if (have_kernel_support == RADCLOCK_RUN_KERNEL)
-				handle->run_mode = RADCLOCK_RUN_KERNEL;
-			else
-				handle->run_mode = RADCLOCK_RUN_NOTSET;
-			break;
-
-		default:
-			/* Unknown mode ... pb */
-			logger(RADLOG_ERR, "The mode passed to init the radclock does not exist");
-			return -1;
-	}
-	return 0;
-}
-
-
-
-// TODO: All of this is a bit ugly, could be written in a cleaner way, there is
-// a bit of overlap in the meaning of run_mode and ipc_mode 
-// TODO: most of this code should be taken out of the library
+/*
+ * Initialise what is common to radclock and other apps that have a clock handle
+ */
 int radclock_init(struct radclock *clock_handle) 
 {
 	/* Few branching to depending we are: 
@@ -264,10 +231,6 @@ int radclock_init(struct radclock *clock_handle)
 	if ( err < 0 )
 		return -1;
 
-	err = set_clock_run_mode(clock_handle);
-	if (err < 0)
-		return -1;
-
 	switch ( clock_handle->ipc_mode) 
 	{
 		/* If we are a client we only need to connect to the server socket */
@@ -283,39 +246,7 @@ int radclock_init(struct radclock *clock_handle)
 			 */
 		case RADCLOCK_IPC_NONE:
 		case RADCLOCK_IPC_SERVER:
-
-			switch (clock_handle->run_mode) {
-
-				case RADCLOCK_RUN_NOTSET:
-					logger(RADLOG_ERR, "No kernel support for the radclock, exiting");
-					err = -1;
-					break;
-
-				case RADCLOCK_RUN_DEAD:
-					/* We don't want to open a socket in this case to access shared
-					 * global data. The RADCLOCK_UPDATE_NEVER mode prevent the code
-					 * trying to access such shared resource.
-					 */ 
-					logger(RADLOG_NOTICE, "Initialise replay mode for the RADclock");
-					radclock_autoupdate_t automode = RADCLOCK_UPDATE_NEVER;
-					radclock_set_autoupdate(clock_handle, &automode);
-					break;
-
-				case RADCLOCK_RUN_KERNEL:
-					logger(RADLOG_NOTICE, "Initialise kernel level support for the RADclock");
-					err = radclock_init_kernelclock(clock_handle);
-					break;
-
-				default:
-					return -1;
-			}
-
-			if (err < 0)
-				return -1;
-
-			break;
-
-			/* Should never go here */
+			return 0;
 		default:
 			logger(RADLOG_ERR, "Got something really wrong, unknown IPC run mode");
 			return -1;

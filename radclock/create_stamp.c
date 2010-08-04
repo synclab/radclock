@@ -392,7 +392,7 @@ while (searching) {
 	 * looking for the server reply
 	 */
 	if (err < 0) {
-		if ( (handle->run_mode == RADCLOCK_RUN_DEAD) 
+		if ( (handle->run_mode == RADCLOCK_SYNC_DEAD) 
 			|| (found_client == 0) )
 		{
 			goto errout;

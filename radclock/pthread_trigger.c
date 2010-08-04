@@ -356,18 +356,18 @@ int trigger_work(struct radclock *clock_handle)
 	} else {
 		switch (clock_handle->conf->synchro_type)
 		{
-			case TRIGGER_PIGGY:
+			case SYNCTYPE_PIGGY:
 				dummy_client();
 				break;
 
-			case TRIGGER_NTP:
+			case SYNCTYPE_NTP:
 				ntp_client(clock_handle);
 				break;
 
-			case TRIGGER_1588:
-			case TRIGGER_PPS:
+			case SYNCTYPE_1588:
+			case SYNCTYPE_PPS:
 			default:
-				verbose(LOG_ERR, "Trigger type not implemented");
+				verbose(LOG_ERR, "Trigger for this sync type is not implemented");
 				break;
 		}
 	}
@@ -479,16 +479,16 @@ int trigger_init(struct radclock *clock_handle)
 	if(!VM_SLAVE(clock_handle)){
 		switch (clock_handle->conf->synchro_type)
 		{
-			case TRIGGER_PIGGY:
+			case SYNCTYPE_PIGGY:
 				/* Nothing to do */	
 				break;
 
-			case TRIGGER_NTP:
+			case SYNCTYPE_NTP:
 				err = ntp_init(clock_handle);
 				break;
 
-			case TRIGGER_1588:
-			case TRIGGER_PPS:
+			case SYNCTYPE_1588:
+			case SYNCTYPE_PPS:
 			default:
 				verbose(LOG_ERR, "Init Trigger type not implemented");
 				break;

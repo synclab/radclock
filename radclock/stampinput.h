@@ -72,10 +72,4 @@ int update_filter_source(struct radclock *handle, struct stampsource *source);
  */
 int update_dumpout_source(struct radclock *handle, struct stampsource *source);
 
-/**
- * Return a pointer to the stats
- */
-struct timeref_stats *stampsource_get_stats(struct radclock *handle, struct stampsource *source);
-	
-
 #endif

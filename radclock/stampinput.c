@@ -129,12 +129,6 @@ void source_breakloop(struct radclock *clock_handle, struct stampsource *source)
 }
 
 
-// TODO ;  to kill?
-struct timeref_stats *stampsource_get_stats(struct radclock *clock_handle, struct stampsource *source)
-{
-	return &source->ntp_stats;
-}
-
 /**
  * Destroy the given source handle
  */

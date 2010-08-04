@@ -104,31 +104,29 @@ static int resolve_family(const char *family_name);
 
 
 
-radclock_runmode_t radclock_detect_support(void) 
+int found_ffwd_kernel (void) 
 {
+	/* 
+	 * It seems the sysctl inteface is quite broken in Linux
+	 * Let's do it this way.
+	 * TODO: improve/ correct the use of the proc filesystem in the future
+	 */
 	FILE *fd = NULL;
-	int ret = 0;
-
-/* 
- * It seems the sysctl inteface is quite broken in Linux
- * Let's do it this way.
- * TODO: improve/ correct the use of the proc filesystem in the future
- */
 	fd = fopen ("/proc/sys/net/core/radclock_default_tsmode", "r");
 	if (!fd)
-		ret = -1;
-	else 
-		fclose(fd);	
-	
-	if (ret == -1) {
-		logger(RADLOG_NOTICE, "Kernel support NOT detected");
-		return RADCLOCK_RUN_NOTSET;
+	{
+		logger(RADLOG_NOTICE, "No Feed-Forward kernel support detected");
+		return 0;
 	}
-	else {
-		logger(RADLOG_NOTICE, "Kernel support detected");
-		return RADCLOCK_RUN_KERNEL;
+	else 
+	{
+		fclose(fd);	
+		logger(RADLOG_NOTICE, "Feed-Forward kernel support detected");
+		return 1;
 	}
 }
+
+
 
 int radclock_init_vcounter_syscall(struct radclock *handle)
 {
@@ -142,9 +140,8 @@ int radclock_init_vcounter_syscall(struct radclock *handle)
 }
 
 
-int radclock_init_kernelclock(struct radclock *handle)
+int radclock_init_kernel_support(struct radclock *handle)
 {
-	radclock_autoupdate_t automode;
 	PRIV_DATA(handle)->radclock_gnl_id = resolve_family(RADCLOCK_NAME);
 	if (PRIV_DATA(handle)->radclock_gnl_id  == 0)
 	{
@@ -156,11 +153,8 @@ int radclock_init_kernelclock(struct radclock *handle)
 	{
 		logger(RADLOG_NOTICE, "Global data generic netlink id is %d", PRIV_DATA(handle)->radclock_gnl_id);
 	}
+	logger(RADLOG_NOTICE, "Feed-Forward Kernel initialised");
 
-	// Init mode for clock autoupdate
-	automode = RADCLOCK_UPDATE_AUTO;
-	radclock_set_autoupdate(handle, &automode);
-		
 	return 0;
 }
 

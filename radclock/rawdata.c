@@ -24,6 +24,7 @@
 
 #include "../config.h"
 #include "sync_algo.h"
+#include "config_mgr.h"
 #include "create_stamp.h"
 #include "radclock.h"
 #include "radclock-private.h"
@@ -62,7 +63,7 @@ inline void insert_rd_in_buffer(struct radclock *clock_handle, struct raw_data *
 /* Really, I have tried to make this as fast as possible
  * but if you have a better implementation, go for it.
  */
-void fill_rawdata_buffer(u_char *c_handle, const struct pcap_pkthdr *pcap_hdr, const u_char *packet_data)
+void fill_rawdata_ntp(u_char *c_handle, const struct pcap_pkthdr *pcap_hdr, const u_char *packet_data)
 {
 	JDEBUG
 
@@ -77,7 +78,7 @@ void fill_rawdata_buffer(u_char *c_handle, const struct pcap_pkthdr *pcap_hdr, c
 	JDEBUG_MEMORY(JDBG_MALLOC, rd->buf);
 
 	rd->read 		= 0;	/* Of course not read yet */
-	rd->type 		= RD_PACKET;
+	rd->type 		= RD_NTP_PACKET;
 	rd->vcount 		= 0;		/* if the next one fails, we will see that quickly */
 
 	if ( extract_vcount_stamp(clock_handle->pcap_handle, pcap_hdr, packet_data, &(rd->vcount)) < 0 )
@@ -100,7 +101,7 @@ int capture_raw_data( struct radclock *clock_handle)
 {
 	JDEBUG
 
-	int err;
+	int err = 0;
 	/* Call pcap_loop() with number of packet =-1 so that it actually never
 	 * returns until error or explicit break. The kernelclock_fill_buffer
 	 * callback is in charge of storing capture packets in the clock raw data
@@ -108,13 +109,31 @@ int capture_raw_data( struct radclock *clock_handle)
 	 */
 	switch( clock_handle->run_mode ) {
 
-		case RADCLOCK_RUN_KERNEL:
-			err = pcap_loop(clock_handle->pcap_handle, -1 /*packet*/, fill_rawdata_buffer, (u_char *) clock_handle);
-			break;
-	
+		case RADCLOCK_SYNC_LIVE:
+			switch ( clock_handle->conf->synchro_type )
+			{
+			case SYNCTYPE_SPY:
+				verbose(LOG_ERR, "IMPLEMENT ME!!");
+				break;
+
+			case SYNCTYPE_PIGGY:
+			case SYNCTYPE_NTP:
+				err = pcap_loop(clock_handle->pcap_handle, -1 /*packet*/, fill_rawdata_ntp, (u_char *) clock_handle);
+				break;
+			
+			case SYNCTYPE_PPS:
+			case SYNCTYPE_1588:
+				verbose(LOG_ERR, "IMPLEMENT ME!!");
+				err = -1;
+				break;
+			
+			default:
+				break;
+			}
+			break;	
 		/* Since we are the radclock, we should know which mode we run in !! */	
-		case RADCLOCK_RUN_DEAD:
-		case RADCLOCK_RUN_NOTSET:
+		case RADCLOCK_SYNC_DEAD:
+		case RADCLOCK_SYNC_NOTSET:
 		default:
 			verbose(LOG_ERR, "Trying to capture data with wrong running mode");
 			return -1;
@@ -205,7 +224,7 @@ int deliver_raw_data( struct radclock *clock_handle, struct radpcap_packet_t *pk
 
 	switch(rd->type) {
 
-		case RD_PACKET:
+		case RD_NTP_PACKET:
 			// TODO: there has been some overkill in here no? Maybe redefine the
 			// TODO: raw data structure
 			/* Copy pcap header and packet payload back-to-back.

@@ -36,7 +36,7 @@
 
 
 // TODO : should provide methods for modify this? 
-typedef enum { RADCLOCK_RUN_NOTSET, RADCLOCK_RUN_KERNEL, RADCLOCK_RUN_DEAD } radclock_runmode_t;
+typedef enum { RADCLOCK_SYNC_NOTSET, RADCLOCK_SYNC_DEAD, RADCLOCK_SYNC_LIVE } radclock_runmode_t;
 typedef enum { RADCLOCK_IPC_CLIENT, RADCLOCK_IPC_SERVER, RADCLOCK_IPC_NONE} radclock_IPC_mode_t;
 typedef enum { RADCLOCK_UNIDIR, RADCLOCK_BIDIR} radclock_syncalgo_mode_t;
 
@@ -279,7 +279,7 @@ struct ipc_reply {
  * Detect possible kernel support for the RADclock prior initialisation 
  * @return The run mode the clock should be initialise to 
  */
-radclock_runmode_t radclock_detect_support(void);
+int found_ffwd_kernel(void);
 
 
 /**
@@ -291,11 +291,11 @@ int radclock_read_kernelclock(struct radclock *handle);
 
 
 /**
- * Init the shared clock structure maintained in kernel. 
+ * Init the kernel support. 
  * @param  handle The private handle for accessing global data
  * @return 0 on success, non-zero on failure
  */
-int radclock_init_kernelclock(struct radclock *handle);
+int radclock_init_kernel_support(struct radclock *handle);
 
 
 /**

@@ -183,7 +183,7 @@ void verbose(int facility, char* format, ...)
 	}
 	else
 	{
-		if ( verbose_data.clock->run_mode == RADCLOCK_RUN_DEAD  )
+		if ( verbose_data.clock->run_mode == RADCLOCK_SYNC_DEAD  )
 		{
 			sprintf(ctime_buf, "Replay");
 		}
