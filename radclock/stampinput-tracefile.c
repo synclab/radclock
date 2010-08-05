@@ -55,7 +55,7 @@ struct tracefile_data
  * It takes a radpcap_packet_t and fills this structure with the actual packet
  * read from the tracefile
  */
-static int get_packet(struct radclock *handle, void *userdata, radpcap_packet_t **packet_p)
+static int get_packet_tracefile(struct radclock *handle, void *userdata, radpcap_packet_t **packet_p)
 {
 	int read;
 	struct tracefile_data *data = (struct tracefile_data *) userdata;
@@ -98,10 +98,6 @@ static int tracefilestamp_init(struct radclock *handle, struct stampsource *sour
 		return -1;
 	}
 
-	/* Init stats */
-	source->ntp_stats.ref_count = 0;
-	source->ntp_stats.badqual_count = 0;
-
 	/* Need to pass a source address to get_bidir_stamp. However, we are
 	 * currently replaying a trace file (from any host) so this address 
 	 * should never match, let's give something silly.
@@ -142,7 +138,7 @@ static int tracefilestamp_get_next( struct radclock *handle,
 	err = get_bidir_stamp(
 			handle,
 			(void *)TRACEFILE_DATA(source),
-			get_packet,
+			get_packet_tracefile,
 			stamp, 
 			&source->ntp_stats, 
 			TRACEFILE_DATA(source)->src_ipaddr);

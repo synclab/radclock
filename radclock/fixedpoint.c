@@ -137,7 +137,7 @@ int update_kernel_fixed(struct radclock *handle)
 	calculate_fixedpoint_data(
 		vcount,
 		time,
-		GLOBAL_DATA(handle)->phat,
+		RAD_DATA(handle)->phat,
 		&fpdata);
 
 	return set_kernel_fixedpoint(handle, &fpdata);

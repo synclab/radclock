@@ -758,12 +758,12 @@ int main (int argc, char *argv[])
 	{
 		if ( clock_handle->conf->server_ntp == BOOL_ON )
 		{
-			verbose(LOG_ERR, "Configuration error. Disabling NTP server (incompatible with piggybacking mode).");
+			verbose(LOG_ERR, "Configuration error. Disabling NTP server (incompatible with spy or piggy mode).");
 			clock_handle->conf->server_ntp = BOOL_OFF;
 		}
 		if ( clock_handle->conf->adjust_sysclock == BOOL_ON )
 		{
-			verbose(LOG_ERR, "Configuration error. Disabling adjust system clock (incompatible with piggybacking mode).");
+			verbose(LOG_ERR, "Configuration error. Disabling adjust system clock (incompatible with spy or piggy mode).");
 			clock_handle->conf->adjust_sysclock = BOOL_OFF;
 		}
 	}
@@ -773,6 +773,11 @@ int main (int argc, char *argv[])
 	
 	/* Reinit the mask that counts updated values */
 	param_mask = UPDMASK_NOUPD;
+
+
+	// TODO extract extra checks from is_live_source and make an input fix function instead, would be clearer
+	// TODO the conf->network_device business is way too messy
+
 
 	/* Need to know if we are replaying data or not. If not, no need to create
 	 * shared global data on the system or open a BPF. This define input to the
@@ -920,7 +925,8 @@ int main (int argc, char *argv[])
 			}
 
 			/* That's our main capture loop, it does not return until the end of
-			 * input of we explicitely break it
+			 * input or if we explicitely break it
+			 * XXX TODO XXX: a unique source is assumed !! 
 			 */
 			err = capture_raw_data(clock_handle);
 
@@ -991,7 +997,7 @@ int main (int argc, char *argv[])
 	close_output_stamp(clock_handle);
 
 	/* Print out last good phat value */
-	verbose(LOG_NOTICE, "Last estimate of the clock source period: %12.10lg", GLOBAL_DATA(clock_handle)->phat);
+	verbose(LOG_NOTICE, "Last estimate of the clock source period: %12.10lg", RAD_DATA(clock_handle)->phat);
 	
 
 	// TODO:  all the destructors have to be re-written

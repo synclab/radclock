@@ -191,7 +191,7 @@ void* thread_ipc_server(void *c_handle)
 
 		/* Send data back using the client's address */
 		if (sendto(s_server, &reply, sizeof(struct ipc_reply), 0, (struct sockaddr *)&sun_client, len) < 0) {
-			verbose(LOG_ERR, "Socket send() error: %s", strerror(errno));
+			verbose(LOG_ERR, "IPC Socket send() error: %s", strerror(errno));
 		}
 	
 		/* Someone told us to die ... sniff */

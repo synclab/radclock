@@ -202,7 +202,7 @@ void set_vcount_in_sll(radpcap_packet_t *packet, vcounter_t vcount)
  * any) before passing the data to the sync algo. The link layer header is
  * replaced by a Linux SLL header and the vcount is stored in its address field.
  */
-static int get_packet(struct radclock *handle, void *userdata, radpcap_packet_t **packet_p)
+static int get_packet_livepcap(struct radclock *handle, void *userdata, radpcap_packet_t **packet_p)
 {
 	JDEBUG
 
@@ -217,7 +217,7 @@ static int get_packet(struct radclock *handle, void *userdata, radpcap_packet_t 
 	radpcap_packet_t *packet = *packet_p;
 
 	/* Retrieve the next packet from the raw data buffer */
-	ret = deliver_raw_data(handle, packet, &vcount);
+	ret = deliver_rawdata_ntp(handle, packet, &vcount);
 	if (ret < 0 )
 	{
 		/* Raw data buffer is empty */
@@ -364,27 +364,20 @@ int get_address_by_name(char* addr, char* hostname)
 	JDEBUG_MEMORY(JDBG_MALLOC, s);
 	char *host = (char*) malloc(lhost* sizeof(char));
 	JDEBUG_MEMORY(JDBG_MALLOC, host);
-	char *domain = (char*) malloc(lhost* sizeof(char));
-	JDEBUG_MEMORY(JDBG_MALLOC, domain);
 
 	int i=0;
 	int found = 0;
 	char **p_addr = NULL;
 
 	// If not given retrieve the local host name
-	if (strlen(hostname) == 0) {
+	if (strlen(hostname) == 0)
+	{
+		verbose(LOG_NOTICE, "Attempt to discover hostname");
 		if (gethostname(host, lhost) < 0) {
 			verbose(LOG_ERR, "Can't get localhost name");
 			return 1;
 		}
-		if (getdomainname(domain, lhost) < 0) {
-			verbose(LOG_ERR, "Can't get domain name");
-			return 1;
-		}
-		if (strcmp(domain, "(none)") == 0)
-			sprintf(hostname, "%s", host);
-		else
-			sprintf(hostname, "%s.%s", host, domain);
+		sprintf(hostname, "%s", host);
 		verbose(LOG_NOTICE, "Found hostname %s", hostname);
 	}
 
@@ -412,8 +405,6 @@ int get_address_by_name(char* addr, char* hostname)
 	if (!found) {
 		verbose(LOG_NOTICE, "Did not find any valid address based on host name %s", hostname);
 
-		JDEBUG_MEMORY(JDBG_FREE, domain);
-		free(domain);
 		JDEBUG_MEMORY(JDBG_FREE, host);
 		free(host);
 		JDEBUG_MEMORY(JDBG_FREE, s);
@@ -422,8 +413,6 @@ int get_address_by_name(char* addr, char* hostname)
 	}
 	strcpy(addr, inet_ntoa(s->sin_addr));
 
-	JDEBUG_MEMORY(JDBG_FREE, domain);
-	free(domain);
 	JDEBUG_MEMORY(JDBG_FREE, host);
 	free(host);
 	JDEBUG_MEMORY(JDBG_FREE, s);
@@ -594,13 +583,26 @@ static int livepcapstamp_init(struct radclock *handle, struct stampsource *sourc
 		verbose(LOG_WARNING, "Could not set RADclock timestamping mode");
 	}
 
-	//Init stats
-	source->ntp_stats.ref_count = 0;
-	source->ntp_stats.badqual_count = 0;
-	
+	/* Let's check we did things right */
+	radclock_get_tsmode(handle, LIVEPCAP_DATA(source)->live_input, &capture_mode);
+	switch(capture_mode) {
+		case RADCLOCK_TSMODE_SYSCLOCK:
+			verbose(LOG_NOTICE, "Capture mode is SYSCLOCK");
+			break;
+		case RADCLOCK_TSMODE_RADCLOCK:
+			verbose(LOG_NOTICE, "Capture mode is RADCLOCK");
+			break;
+		case RADCLOCK_TSMODE_FAIRCOMPARE:
+			verbose(LOG_NOTICE, "Capture mode is FAIRCOMPARE");
+			break;
+		default:
+			verbose(LOG_ERR, "Capture mode UNKNOWN");
+			break;
+	}
+
+	/* Test if previous file exists. Rename it if so */
 	if (strlen(handle->conf->sync_out_pcap) > 0) 
 	{
-		/* Test if previous file exists. Rename it if so */
 		FILE* out_fd = NULL;
 		if ((out_fd = fopen(handle->conf->sync_out_pcap, "r"))) {
 			fclose(out_fd);
@@ -634,24 +636,6 @@ static int livepcapstamp_init(struct radclock *handle, struct stampsource *sourc
 	else
 		LIVEPCAP_DATA(source)->trace_output = NULL;
 
-
-	/* Let's check we did things right */
-	radclock_get_tsmode(handle, LIVEPCAP_DATA(source)->live_input, &capture_mode);
-	switch(capture_mode) {
-		case RADCLOCK_TSMODE_SYSCLOCK:
-			verbose(LOG_NOTICE, "Capture mode is SYSCLOCK");
-			break;
-		case RADCLOCK_TSMODE_RADCLOCK:
-			verbose(LOG_NOTICE, "Capture mode is RADCLOCK");
-			break;
-		case RADCLOCK_TSMODE_FAIRCOMPARE:
-			verbose(LOG_NOTICE, "Capture mode is FAIRCOMPARE");
-			break;
-		default:
-			verbose(LOG_ERR, "Capture mode UNKNOWN");
-			break;
-	}
-
 	return 0;
 }
 
@@ -669,7 +653,7 @@ static int livepcapstamp_get_next(struct radclock *handle, struct stampsource *s
 	err = get_bidir_stamp(
 			handle,
 			(void *)LIVEPCAP_DATA(source),
-			get_packet,
+			get_packet_livepcap,
 			stamp, 
 			&source->ntp_stats, 
 			LIVEPCAP_DATA(source)->src_ipaddr);

@@ -28,6 +28,8 @@
 #include <pcap.h>
 
 #include "../config.h"
+#include "radclock.h"
+#include "radclock-private.h"
 #include "sync_algo.h"
 #include "config_mgr.h"
 #include "verbose.h"
@@ -40,6 +42,7 @@
 extern struct stampsource_def ascii_source;
 extern struct stampsource_def livepcap_source;
 extern struct stampsource_def filepcap_source;
+extern struct stampsource_def spy_source;
 
 
 int is_live_source(struct radclock *clock_handle)
@@ -48,21 +51,25 @@ int is_live_source(struct radclock *clock_handle)
 	
 	if (strlen(clock_handle->conf->sync_in_ascii) > 0) 		input_type++;
 	if (strlen(clock_handle->conf->sync_in_pcap) > 0) 		input_type++; 
-	if (strlen(clock_handle->conf->network_device) > 0) 	input_type++; 
+//	if (strlen(clock_handle->conf->network_device) > 0) 	input_type++; 
 
 	if (input_type > 1) {
-		verbose (LOG_ERR, "Error: Conflict detected, two distinct inputs, \
-							check conf file and/or command line");
+		verbose (LOG_ERR, "Error: Conflict detected, two distinct inputs,"
+							" check conf file and/or command line");
 		exit(EXIT_FAILURE);
 	}
-	/* If no source selected, fall back to live capture */
+	/* If no dead source selected, fall back to live capture */
 	if (input_type == 0) {
 		return 1;
 	}
+	else
+		return 0;
+/*
 	if (strlen(clock_handle->conf->network_device) > 0)
 		return 1;
 	else
 		return 0;
+*/
 }
 
 
@@ -71,7 +78,7 @@ int is_live_source(struct radclock *clock_handle)
  * Try to create a source from the given config
  * @return a source or NULL if there was an error creating it
  */
-struct stampsource *create_source(struct radclock *handle)
+struct stampsource *create_source(struct radclock *clock_handle)
 {
 	struct stampsource *src = (struct stampsource *) malloc(sizeof(struct stampsource));
 	JDEBUG_MEMORY(JDBG_MALLOC, src);
@@ -79,40 +86,71 @@ struct stampsource *create_source(struct radclock *handle)
 	if (!src)
 		goto err_out;
 
-	if (strlen(handle->conf->sync_in_ascii) > 0) {
-		INPUT_OPS(src) = &ascii_source;
-		handle->conf->server_ipc = BOOL_OFF;  
-		handle->conf->server_ntp = BOOL_OFF;  
-	}
-	else if(strlen(handle->conf->sync_in_pcap))
+	switch ( clock_handle->run_mode )
 	{
-		INPUT_OPS(src) = &filepcap_source;
-		handle->conf->server_ipc = BOOL_OFF;  
-		handle->conf->server_ntp = BOOL_OFF;  
-	}
-	else if(strlen(handle->conf->network_device))
-	{
-		INPUT_OPS(src) = &livepcap_source;
-	}
-	else
-	{
-	verbose(LOG_NOTICE, "No source specified, fall back on live input");
-		INPUT_OPS(src) = &livepcap_source;
+		case RADCLOCK_SYNC_DEAD:
+			verbose(LOG_NOTICE, "Creating dead input source");
+			/* is_live_source has checked there is only one dead input */
+			if (strlen(clock_handle->conf->sync_in_ascii) > 0)
+			{
+				INPUT_OPS(src) = &ascii_source;
+				clock_handle->conf->server_ipc = BOOL_OFF;  
+				clock_handle->conf->server_ntp = BOOL_OFF;  
+			}
+
+			if (strlen(clock_handle->conf->sync_in_pcap) > 0)
+			{
+				INPUT_OPS(src) = &filepcap_source;
+				clock_handle->conf->server_ipc = BOOL_OFF;  
+				clock_handle->conf->server_ntp = BOOL_OFF;  
+			}
+
+			break;
+
+		case RADCLOCK_SYNC_LIVE:
+			verbose(LOG_NOTICE, "Creating live input source");
+			switch (clock_handle->conf->synchro_type)
+			{
+				case SYNCTYPE_SPY:
+					INPUT_OPS(src) = &spy_source;
+					break;
+
+				case SYNCTYPE_NTP:
+				case SYNCTYPE_PIGGY:
+					INPUT_OPS(src) = &livepcap_source;
+					break;
+
+				case SYNCTYPE_PPS:
+				case SYNCTYPE_1588:
+				default:
+					verbose(LOG_ERR, "Source for this sync' type does not exist.");
+					return NULL;
+			}
+			break;
+
+		case RADCLOCK_SYNC_NOTSET:
+		default:
+			verbose(LOG_ERR, "Run mode not set when creating input source");
+			return NULL;
 	}
 
-	//Now that we've worked out which one, init it
-	if (INPUT_OPS(src)->init(handle, src))
+	/* Now that we've worked out the type of input source, init it */
+	if (INPUT_OPS(src)->init(clock_handle, src))
 		goto child_err;
-	
-	memset(&src->ntp_stats,0 ,sizeof(struct timeref_stats));
+
+	/* Initialise ntp_stats, common to all sources */	
+	memset(&src->ntp_stats, 0 ,sizeof(struct timeref_stats));
 	
 	return src;
+
 child_err:
 	JDEBUG_MEMORY(JDBG_FREE, src);
 	free(src);
 err_out:
 	return NULL;
 }
+
+
 
 /**
  * Retreive a stamp from the given handle into stamp

@@ -208,8 +208,8 @@ struct radclock
 	pthread_cond_t wakeup_cond;
 
 	/* Raw data capture buffer */
-	struct raw_data *rdb_start;
-	struct raw_data *rdb_end;
+	struct raw_data_bundle *rdb_start;
+	struct raw_data_bundle *rdb_end;
 
 	/* Configuration */
 	struct radclock_config *conf;

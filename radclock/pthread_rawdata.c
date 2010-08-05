@@ -88,11 +88,11 @@ static inline void read_clocks(struct radclock *clock_handle,
 		/* A system call is in the order of 1-2 mus, here we have 3 of them plus a
 		 * reasonable safety bound ... 5 mus?
 		 */
-		if ( (*rad_vc - vc) < ( 5e-6 / GLOBAL_DATA(clock_handle)->phat ) )
+		if ( (*rad_vc - vc) < ( 5e-6 / RAD_DATA(clock_handle)->phat ) )
 			break;
 	}
 	verbose(VERB_DEBUG, "System clock read_clocks vc= %"VC_FMT" rad_vc= %"VC_FMT" delay= %.03f [mus]",
-			vc, *rad_vc, (*rad_vc - vc) * GLOBAL_DATA(clock_handle)->phat * 1e6 );
+			vc, *rad_vc, (*rad_vc - vc) * RAD_DATA(clock_handle)->phat * 1e6 );
 
 	*rad_vc = (vcounter_t) ((vc + *rad_vc)/2);
 	radclock_vcount_to_abstime(clock_handle, rad_vc, rad_tv);
@@ -212,7 +212,7 @@ int update_system_clock(struct radclock *clock_handle)
 		 * mentioned in ntpd code, it is equivalent to removing any corrupted
 		 * drift file.
 		 */
-		if ( GLOBAL_DATA(clock_handle)->phat_err < 5e-7  && ( fabs(offset) < 1e-3) )
+		if ( RAD_DATA(clock_handle)->phat_err < 5e-7  && ( fabs(offset) < 1e-3) )
 		{
 			next_stamp = (int) (60 / clock_handle->conf->poll_period) + 1;
 			next_stamp = next_stamp + ((struct bidir_output*)clock_handle->algo_output)->n_stamps;
@@ -254,7 +254,7 @@ int update_system_clock(struct radclock *clock_handle)
 		read_clocks(clock_handle, &sys_tv, &rad_tv, &vcount); 
 		subtract_tv(&delta_tv, sys_tv, sys_init_tv);
 		offset = delta_tv.tv_sec + (double)delta_tv.tv_usec / 1e6;
-		freq = (( GLOBAL_DATA(clock_handle)->phat * ((vcount - sys_init) / offset) ) - 1 ) * 1e6; 
+		freq = (( RAD_DATA(clock_handle)->phat * ((vcount - sys_init) / offset) ) - 1 ) * 1e6; 
 
 		subtract_tv(&delta_tv, rad_tv, sys_tv);
 		offset = delta_tv.tv_sec + (double)delta_tv.tv_usec / 1e6;
@@ -292,7 +292,7 @@ int update_system_clock(struct radclock *clock_handle)
 	tx.offset = (int32_t) (offset * KERN_RES);
 	tx.status = STA_PLL;
 	tx.maxerror = (long) ((SERVER_DATA(clock_handle)->rootdelay/2 + SERVER_DATA(clock_handle)->rootdispersion) * 1e6);
-	tx.esterror = (long) (GLOBAL_DATA(clock_handle)->phat * 1e6);	/* TODO: not the right estimate !! */
+	tx.esterror = (long) (RAD_DATA(clock_handle)->phat * 1e6);	/* TODO: not the right estimate !! */
 	
 	/* Play slightly with the rate of convergence of the PLL in the kernel. Try
 	 * to converge faster when it is further away
@@ -393,7 +393,7 @@ int insane_bidir_stamp(struct bidir_stamp* stamp, struct bidir_stamp* laststamp)
 
 
 /**
- * XXX TODO: so far we suppose bidir paradigm only
+ * XXX TODO: so far we suppose bidir paradigm only and a single source at a time!!
  */
 int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 {
@@ -461,7 +461,7 @@ int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 			}
 			else {
 				verbose(VERB_DEBUG, "Kernel clock: last vcounter= %llu   p= %15.9lg   Ca= %22.9Lf",
-						GLOBAL_DATA(tmp_clock)->last_changed, GLOBAL_DATA(tmp_clock)->phat, GLOBAL_DATA(tmp_clock)->ca);
+						RAD_DATA(tmp_clock)->last_changed, RAD_DATA(tmp_clock)->phat, RAD_DATA(tmp_clock)->ca);
 			}
 			radclock_destroy(tmp_clock);
 		}
@@ -497,7 +497,7 @@ int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 					|| !(OUTPUT(clock_handle, n_stamps) % ((int)(3600*6/poll_period))) )) 
 //					|| !((((struct bidir_output*)clock_handle->algo_output)->n_stamps)%100)) ) 
 	{
-		radclock_vcount_to_abstime_fp(clock_handle, &(GLOBAL_DATA(clock_handle)->last_changed), &currtime);
+		radclock_vcount_to_abstime_fp(clock_handle, &(RAD_DATA(clock_handle)->last_changed), &currtime);
 		radclock_get_min_RTT(clock_handle, &min_RTT);
 		timediff = (double) (currtime - (long double)stamp.Te);
 

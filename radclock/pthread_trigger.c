@@ -350,13 +350,18 @@ int trigger_work(struct radclock *clock_handle)
 
 	vcounter_t vcount;
 	int err;
-//	struct radclock *clock_handle = (struct radclock *) c_handle; 
-	if(VM_SLAVE(clock_handle)){
+
+	if (VM_SLAVE(clock_handle))
+	{
 		virtual_client(clock_handle);
-	} else {
+	}
+	else {
 		switch (clock_handle->conf->synchro_type)
 		{
+			case SYNCTYPE_SPY:
 			case SYNCTYPE_PIGGY:
+			case SYNCTYPE_PPS:
+			case SYNCTYPE_1588:
 				dummy_client();
 				break;
 
@@ -364,8 +369,6 @@ int trigger_work(struct radclock *clock_handle)
 				ntp_client(clock_handle);
 				break;
 
-			case SYNCTYPE_1588:
-			case SYNCTYPE_PPS:
 			default:
 				verbose(LOG_ERR, "Trigger for this sync type is not implemented");
 				break;
@@ -383,7 +386,7 @@ int trigger_work(struct radclock *clock_handle)
 	if ( err < 0 )
 		return err;
 
-	if ((vcount - GLOBAL_DATA(clock_handle)->last_changed)*GLOBAL_DATA(clock_handle)->phat > OUT_SKM / 2) 
+	if ((vcount - RAD_DATA(clock_handle)->last_changed)*GLOBAL_DATA(clock_handle)->phat > OUT_SKM / 2) 
 	{
 		/* Data is quite old */
 		if ( ! HAS_STATUS(clock_handle, STARAD_STARVING ))
@@ -458,13 +461,13 @@ int ntp_init(struct radclock* clock_handle)
 	 /* CLOCK_REALTIME_HR does not exist on FreeBSD */
 	if ( timer_create (CLOCK_REALTIME, NULL, &ntpclient_timerid) < 0 )
 	{
-		verbose(LOG_ERR, "ntp_init: POSIX timer create failed\n");
+		verbose(LOG_ERR, "ntp_init: POSIX timer create failed");
 		return 1;
 	}
 	if ( set_ptimer(ntpclient_timerid, 0.5 /* !0 */, 
 				(float) clock_handle->conf->poll_period) < 0 )
 	{
-		verbose(LOG_ERR, "ntp_init: POSIX timer cannot be set\n");
+		verbose(LOG_ERR, "ntp_init: POSIX timer cannot be set");
 		return 1;
 	}
 	return 0;
@@ -479,6 +482,7 @@ int trigger_init(struct radclock *clock_handle)
 	if(!VM_SLAVE(clock_handle)){
 		switch (clock_handle->conf->synchro_type)
 		{
+			case SYNCTYPE_SPY:
 			case SYNCTYPE_PIGGY:
 				/* Nothing to do */	
 				break;

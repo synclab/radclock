@@ -40,25 +40,59 @@
 typedef enum { 
 	RD_UNKNOWN,
 	RD_SPY_STAMP,
-	RD_PPS,
 	RD_NTP_PACKET,		/* Handed by libpcap */
+	RD_PPS,
 } rawdata_type_t;
 
 
-struct raw_data {
-	struct raw_data *prev;			/* Previous buddy */
-	struct raw_data *next;			/* Next buddy */
-	rawdata_type_t type;			/* If we know the type, let's put it there */
-	int read;						/* Have I been read? i.e. am I ready to be freed? */
+/*
+ * Raw data structure specific to the SYP capture mode.
+ * So far looks like a bidir stamp, but may change in the future.
+ */
+struct rd_spy_stamp {
+	vcounter_t Ta;
+	struct timeval Tb;
+	struct timeval Te;
+	vcounter_t Tf;
+};
+
+
+/*
+ * Raw data structure specific to NTP and PIGGY capture modes.
+ * Very libpacp oriented.
+ */
+struct rd_ntp_pkt {
 	vcounter_t vcount;				/* vcount stamp for this buddy */
 	struct pcap_pkthdr pcap_hdr;	/* The PCAP header */
 	void* buf;						/* Actual data, contains packet */
 };
 
 
+/*
+ * Raw data bundle. Holds actual raw_data and deals with link list
+ * and light locking
+ */
+struct raw_data_bundle {
+	struct raw_data_bundle *prev;	/* Previous buddy */
+	struct raw_data_bundle *next;	/* Next buddy */
+	int read;						/* Have I been read? i.e. ready to be freed? */
+	rawdata_type_t type;			/* If we know the type, let's put it there */
+	union rd_t {
+		struct rd_ntp_pkt rd_ntp;
+		struct rd_spy_stamp rd_spy;
+	} rd;
+};
 
-int capture_raw_data( struct radclock *clock_handle );
 
-int deliver_raw_data( struct radclock *clock_handle, struct radpcap_packet_t *pkt, vcounter_t *vcount);
+#define RD_NTP(x) (&(x->rd.rd_ntp))
+#define RD_SPY(x) (&(x->rd.rd_spy))
+
+
+
+int capture_raw_data(struct radclock *clock_handle );
+
+int deliver_rawdata_ntp(struct radclock *clock_handle, struct radpcap_packet_t *pkt, vcounter_t *vcount);
+
+int deliver_rawdata_spy(struct radclock *clock_handle, struct bidir_stamp *stamp);
 
 #endif
