@@ -434,6 +434,25 @@ int radclock_init_specific (struct radclock *clock_handle)
 
 	JDEBUG
 
+	/* Open input file from which to read TS data */   
+	stamp_source = create_source(clock_handle);
+	if (!stamp_source)
+	{
+		verbose(LOG_ERR, "Error creating stamp source, exiting");
+		exit(EXIT_FAILURE);
+	}
+	/* Hang stamp source on the handler */
+	clock_handle->stamp_source = (void *) stamp_source;
+
+	/* Open output files */ 
+	open_output_stamp(clock_handle);
+	open_output_matlab(clock_handle);
+
+	
+	/* Clock has been init', set the pointer to the clock */
+	set_verbose(clock_handle, clock_handle->is_daemon, clock_handle->conf->verbose_level);
+	set_logger(logger_verbose_bridge);
+
 	if (clock_handle->run_mode == RADCLOCK_SYNC_LIVE)
 	{
 		err = radclock_init_kernel_support(clock_handle);
@@ -450,11 +469,6 @@ int radclock_init_specific (struct radclock *clock_handle)
 	// TODO there should be more of them set in here
 	ADD_STATUS(clock_handle, STARAD_STARVING);
 	
-	
-	/* Clock has been init', set the pointer to the clock */
-	set_verbose(clock_handle, clock_handle->is_daemon, clock_handle->conf->verbose_level);
-	set_logger(logger_verbose_bridge);
-
 	/* Create directory to store pid lock file and ipc socket */
 	if (  (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER) 
 				|| (clock_handle->is_daemon) ) 
@@ -468,21 +482,6 @@ int radclock_init_specific (struct radclock *clock_handle)
 			}
 		}
 	}
-
-	/* Open input file from which to read TS data */   
-	stamp_source = create_source(clock_handle);
-	if (!stamp_source)
-	{
-		verbose(LOG_ERR, "Error creating stamp source, exiting");
-		exit(EXIT_FAILURE);
-	}
-	/* Hang stamp source on the handler */
-	clock_handle->stamp_source = (void *) stamp_source;
-	
-
-	/* Open output files */ 
-	open_output_stamp(clock_handle);
-	open_output_matlab(clock_handle);
 
 
 	return 0;

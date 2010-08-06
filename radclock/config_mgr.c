@@ -239,7 +239,6 @@ void write_config_file(FILE *fd, struct _key *keys, struct radclock_config *conf
 				"# Note that piggybacking requires an ntp daemon running and is then\n"
 				"# incompatible with the RADclock serving clients over the network or \n"
 				"# adjusting the system clock. Piggybacking disables these functions.\n");
-	fprintf(fd, "#\tspy     : Experimental, spy on sysclock\n");
 	fprintf(fd, "#\tpiggy   : piggybacking on running ntp daemon\n");
 	fprintf(fd, "#\tntp     : RADclock uses NTP protocol\n");
 	fprintf(fd, "#\tieee1588: RADclock uses IEEE 1588 protocol - NOT IMPLEMENTED YET\n");

@@ -140,6 +140,9 @@ int radclock_init_vcounter_syscall(struct radclock *handle)
 }
 
 
+// XXX XXX XXX XXX XXX XXX XXX XXX XXX XXX 
+// This is super ugly, we open a second BPF to write the clock data, generic or fixed point.
+// TODO fix the kernel to have the clock stored somewhere else and remove that stupid code
 int radclock_init_kernel_support(struct radclock *handle)
 {
 	int fd;
@@ -168,8 +171,20 @@ done:
 
 
 
+/*
+ * Clock Data Routines
+ */
+inline int set_kernel_fixedpoint(struct radclock *handle, struct radclock_fixedpoint *fpdata)
+{
+	if (ioctl(PRIV_DATA(handle)->dev_fd, BIOCSRADCLOCKFIXED, (caddr_t)fpdata) == -1) 
+	{
+		logger(LOG_ERR, "Setting fixedpoint data failed");
+		return -1;
+	}
+	return 0;
+}
 
-/* ** Clock Data Routines ** */
+
 /* Set global radclock data. */
 int radclock_set_kernelclock(struct radclock *handle)
 { 
@@ -281,17 +296,5 @@ inline int extract_vcount_stamp(
 	*vcount= vcount_ex;
 	return 0;
 }
-
-inline int set_kernel_fixedpoint(struct radclock *handle, struct radclock_fixedpoint *fpdata)
-{
-	if (ioctl(pcap_fileno(handle->pcap_handle), BIOCSRADCLOCKFIXED, (caddr_t)fpdata) == -1) 
-	{
-		logger(LOG_ERR, "Setting fixedpoint data failed");
-		return -1;
-	}
-	return 0;
-}
-
-
 
 #endif

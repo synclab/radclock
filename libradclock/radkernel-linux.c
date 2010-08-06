@@ -448,7 +448,15 @@ errout:
 
 
 
-/* ** Clock Data Routines ** */
+/*
+ * Clock Data Routines
+ */
+
+inline int set_kernel_fixedpoint(struct radclock *handle, struct radclock_fixedpoint *fpdata)
+{
+	return radclock_gnl_set_attr(PRIV_DATA(handle)->radclock_gnl_id, RADCLOCK_ATTR_FIXEDPOINT, fpdata);
+}
+
 /* Set global radclock data. */
 int radclock_set_kernelclock(struct radclock *handle) 
 {  
@@ -592,10 +600,5 @@ inline int extract_vcount_stamp(
 
 #endif
 
-
-inline int set_kernel_fixedpoint(struct radclock *handle, struct radclock_fixedpoint *fpdata)
-{
-	return radclock_gnl_set_attr(PRIV_DATA(handle)->radclock_gnl_id, RADCLOCK_ATTR_FIXEDPOINT, fpdata);
-}
 
 #endif
