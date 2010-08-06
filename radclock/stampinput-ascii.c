@@ -113,12 +113,12 @@ static int asciistamp_init(struct radclock *handle, struct stampsource *source)
 	return 0;
 }
 
-static int asciistamp_get_next(struct radclock *handle, struct stampsource *source, struct bidir_stamp *stamp)
+static int asciistamp_get_next(struct radclock *handle, struct stampsource *source, struct stamp_t *stamp)
 {
 	FILE *stamp_fd = ASCII_DATA(source)->fd;
 
 	if ( fscanf(stamp_fd,"%"VC_FMT" %Lf %Lf %"VC_FMT,
-			   	&stamp->Ta, &stamp->Tb, &stamp->Te, &stamp->Tf ) == EOF ) {
+			 &(BST(stamp)->Ta), &(BST(stamp)->Tb), &(BST(stamp)->Te), &(BST(stamp)->Tf) ) == EOF ) {
 		verbose(LOG_NOTICE, "Got EOF on ascii input file.");
 		return -1;
 	} 
@@ -128,10 +128,12 @@ static int asciistamp_get_next(struct radclock *handle, struct stampsource *sour
 
 		// TODO: Do we still need to keep this ??
 		// hack to convert old ascii files with NTP TSs to UNIX 
-		if (stamp->Te>NTPtoUNIX_OFFSET) {  
-			stamp->Tb -= NTPtoUNIX_OFFSET;
-			stamp->Te -= NTPtoUNIX_OFFSET;
+		if ( BST(stamp)->Te > NTPtoUNIX_OFFSET ) 
+		{
+			BST(stamp)->Tb -= NTPtoUNIX_OFFSET;
+			BST(stamp)->Te -= NTPtoUNIX_OFFSET;
 		}
+		stamp->type = STAMP_UNKNOWN;
 		stamp->qual_warning = 0;
 		stamp->sPort = 0;
 		source->ntp_stats.ref_count+=2; 

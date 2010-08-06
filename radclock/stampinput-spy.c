@@ -51,7 +51,7 @@ static int spystamp_init(struct radclock *handle, struct stampsource *source)
 
 
 
-static int spystamp_get_next(struct radclock *handle, struct stampsource *source, struct bidir_stamp *stamp)
+static int spystamp_get_next(struct radclock *handle, struct stampsource *source, struct stamp_t *stamp)
 {
 	int err;
 
@@ -62,6 +62,11 @@ static int spystamp_get_next(struct radclock *handle, struct stampsource *source
 		/* Signals empty buffer */
 		return err;
 	}
+	stamp->type = STAMP_SPY;
+	stamp->qual_warning = 0;
+	stamp->sPort = 0;
+	source->ntp_stats.ref_count+=2; 
+
 	return 0;
 }
 

@@ -156,7 +156,7 @@ void close_output_matlab(struct radclock *clock_handle)
 
 
 #define OUTPUT(clock, x) ((struct bidir_output*)clock->algo_output)->x
-void print_out_files(struct radclock *clock_handle, struct bidir_stamp *tuple) 
+void print_out_files(struct radclock *clock_handle, struct stamp_t *stamp) 
 {
 	int err;
 	// XXX What is the reason for me to do it that way? Cannot remember.
@@ -168,17 +168,20 @@ void print_out_files(struct radclock *clock_handle, struct bidir_stamp *tuple)
 	 */
 	long double currtime_out, currtime_in; 
 
-	currtime_out = (long double)(tuple->Ta * OUTPUT(clock_handle, phat)) + OUTPUT(clock_handle, C);
-	currtime_in  = (long double)(tuple->Tf * OUTPUT(clock_handle, phat)) + OUTPUT(clock_handle, C);
+	if ((stamp->type != STAMP_NTP) && (stamp->type != STAMP_SPY))
+		verbose(LOG_ERR, "Do not know how to print these stamps!!");
+
+	currtime_out = (long double)(BST(stamp)->Ta * OUTPUT(clock_handle, phat)) + OUTPUT(clock_handle, C);
+	currtime_in  = (long double)(BST(stamp)->Tf * OUTPUT(clock_handle, phat)) + OUTPUT(clock_handle, C);
 
 	/* Store generated stamp values */
 	if (clock_handle->stampout_fd != NULL) { 
 		err = fprintf(clock_handle->stampout_fd,"%"VC_FMT" %.9Lf %.9Lf %"VC_FMT" %d\n",
-				tuple->Ta,
-				tuple->Tb,
-				tuple->Te,
-				tuple->Tf,
-				tuple->sPort);
+				BST(stamp)->Ta,
+				BST(stamp)->Tb,
+				BST(stamp)->Te,
+				BST(stamp)->Tf,
+				stamp->sPort);
 		if ( err < 0 )
 			verbose(LOG_ERR, "Failed to write data to timestamp file");
 	}
@@ -195,8 +198,8 @@ void print_out_files(struct radclock *clock_handle, struct bidir_stamp *tuple)
 		"%.9Lf %"VC_FMT" %"VC_FMT" %.10lg %.10lg %.11Lf %.10lf "
 		"%"VC_FMT" %"VC_FMT" %"VC_FMT" %.9lg %.9lg %.9lg %.11Lf "
 		"%.11Lf %.10lf %.10lf %.6lg %.6lg %.6lg %"VC_FMT" %u\n",
-		tuple->Tb,
-		tuple->Tf,
+		BST(stamp)->Tb,
+		BST(stamp)->Tf,
 		OUTPUT(clock_handle, RTT),
 		OUTPUT(clock_handle, phat),
 		OUTPUT(clock_handle, plocal),

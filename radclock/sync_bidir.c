@@ -41,8 +41,10 @@
 #include "radclock.h"
 /* The algo needs access to the global_data structure to update the user level clock */
 #include "radclock-private.h"
-#include "verbose.h"
 #include "sync_algo.h"
+#include "create_stamp.h"
+#include "rawdata.h"
+#include "verbose.h"
 #include "config_mgr.h"
 #include "sync_history.h"
 #include "jdebug.h"
@@ -929,7 +931,9 @@ void record_packet_j (struct bidir_peer* peer, vcounter_t RTT, struct bidir_stam
 
 
 
-int process_phat_full (struct bidir_peer* peer, struct radclock* clock_handle, struct radclock_phyparam *phyparam, vcounter_t RTT, struct bidir_stamp* stamp)
+int process_phat_full (struct bidir_peer* peer, struct radclock* clock_handle, 
+						struct radclock_phyparam *phyparam, vcounter_t RTT, 
+						struct bidir_stamp* stamp, int qual_warning)
 
 {
 	double perr_ij;				// estimate of error of phat using given stamp pair [i,j]
@@ -1016,8 +1020,8 @@ int process_phat_full (struct bidir_peer* peer, struct radclock* clock_handle, s
 	 * Sanity check applies here 
 	 * correct C to keep C(t) continuous at time of last stamp
 	 */
-	if ( (fabs(peer->phat - phat)/peer->phat > peer->Ep_sanity) || stamp->qual_warning ) {
-		if (stamp->qual_warning)
+	if ( (fabs(peer->phat - phat)/peer->phat > peer->Ep_sanity) || qual_warning ) {
+		if (qual_warning)
 			verbose(VERB_QUALITY, "i=%lu: qual_warning received, following sanity check for phat", peer->stamp_i);
 		verbose(VERB_SANITY, "i=%lu: phat update fails sanity check: %s", peer->stamp_i, peer->stats); 
 		peer->phat_sanity_count++;
@@ -1058,7 +1062,8 @@ void process_plocal_warmup(struct bidir_peer* peer)
 
 
 int process_plocal_full(struct bidir_peer* peer, struct radclock* clock_handle,
-	   	unsigned int plocal_winratio, int sig_plocal, struct bidir_stamp* stamp, int phat_sanity_raised)
+	   	unsigned int plocal_winratio, int sig_plocal, struct bidir_stamp* stamp, 
+		int phat_sanity_raised, int qual_warning)
 {
 
 	index_t st_end;				// indices of last pkts in stamp history
@@ -1143,8 +1148,8 @@ int process_plocal_full(struct bidir_peer* peer, struct radclock* clock_handle,
 	/* if quality looks good, continue but refuse to update if result looks insane */
 // TODO: why testing current stamp->qual_warning since current stamp may not be
 // either stamp_near or stamp_far
-	if ( (fabs(peer->plocal-plocal)/peer->plocal > peer->Eplocal_sanity) || stamp->qual_warning) {
-		if (stamp->qual_warning)  
+	if ( (fabs(peer->plocal-plocal)/peer->plocal > peer->Eplocal_sanity) || qual_warning) {
+		if (qual_warning)  
 			verbose(VERB_QUALITY, "qual_warning received, i=%lu, following sanity check for plocal", peer->stamp_i);
 		verbose(VERB_SANITY, "plocal update at i=%lu fails sanity check: relative "
 				"difference is: %5.3lg estimated error was  %5.3lg",
@@ -1385,7 +1390,9 @@ void process_thetahat_warmup (struct bidir_peer* peer, struct radclock* clock_ha
 }
 
 
-void process_thetahat_full (struct bidir_peer* peer, struct radclock* clock_handle, struct radclock_phyparam *phyparam, vcounter_t RTT, struct bidir_stamp* stamp)
+void process_thetahat_full (struct bidir_peer* peer, struct radclock* clock_handle, 
+							struct radclock_phyparam *phyparam, vcounter_t RTT, 
+							struct bidir_stamp* stamp, int qual_warning)
 {
 	double thetahat;	// double ok since this corrects clock which is already almost right
 	double errTa = 0;	// calculate causality errors for correction of thetahat
@@ -1608,9 +1615,9 @@ void process_thetahat_full (struct bidir_peer* peer, struct radclock* clock_hand
 	gapsize = MAX(gapsize, peer->phat * (double)(stamp->Tf - peer->thetastamp.Tf) );
 	/* if looks insane given gapsize, refuse update */
 	if ( ( fabs(peer->thetahat-thetahat) > (peer->Eoffset_sanity_min + peer->Eoffset_sanity_rate * gapsize))
-			|| stamp->qual_warning)
+			|| qual_warning)
 	{
-		if (stamp->qual_warning)
+		if (qual_warning)
 			verbose(VERB_QUALITY, "i=%lu qual_warning received, following sanity check for thetahat", peer->stamp_i);
 		verbose(VERB_SANITY, "i=%lu: thetahat update fails sanity check: diff= %5.3lg [ms], "
 				"est''d err= %5.3lg [ms], sanity level: %5.3lg [ms] with total gapsize = %7.0lf [sec]",
@@ -1676,7 +1683,7 @@ void process_thetahat_full (struct bidir_peer* peer, struct radclock* clock_hand
  * Offset estimation C(t) = vcount(t)*phat + C 
  * theta(t) = C(t) - t
  */
-int process_bidir_stamp(struct radclock *clock_handle, struct bidir_peer *peer, struct bidir_stamp *input_stamp)
+int process_bidir_stamp(struct radclock *clock_handle, struct bidir_peer *peer, struct bidir_stamp *input_stamp, int qual_warning)
 {
 	JDEBUG
 
@@ -1942,16 +1949,16 @@ int process_bidir_stamp(struct radclock *clock_handle, struct bidir_peer *peer, 
 	{
 		process_RTT_full(peer, RTT);
 		record_packet_j (peer, RTT, stamp);
-		phat_sanity_raised = process_phat_full(peer, clock_handle, phyparam, RTT, stamp);
+		phat_sanity_raised = process_phat_full(peer, clock_handle, phyparam, RTT, stamp, qual_warning);
 
 		if (peer->using_plocal)
 			// XXX TODO stamp is passed only for quality warning, but plocal
 			// windows exclude the current stamp!! should take into account the
 			// quality warnings of the stamps actually picked up, no?
 			// Check with Darryl
-			process_plocal_full(peer, clock_handle, plocal_winratio, sig_plocal, stamp, phat_sanity_raised);
+			process_plocal_full(peer, clock_handle, plocal_winratio, sig_plocal, stamp, phat_sanity_raised, qual_warning);
 
-		process_thetahat_full(peer, clock_handle, phyparam, RTT, stamp);
+		process_thetahat_full(peer, clock_handle, phyparam, RTT, stamp, qual_warning);
 	}
 
 

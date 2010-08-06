@@ -84,8 +84,8 @@ struct raw_data_bundle {
 };
 
 
-#define RD_NTP(x) (&(x->rd.rd_ntp))
-#define RD_SPY(x) (&(x->rd.rd_spy))
+#define RD_NTP(x) (&((x)->rd.rd_ntp))
+#define RD_SPY(x) (&((x)->rd.rd_spy))
 
 
 
@@ -93,6 +93,6 @@ int capture_raw_data(struct radclock *clock_handle );
 
 int deliver_rawdata_ntp(struct radclock *clock_handle, struct radpcap_packet_t *pkt, vcounter_t *vcount);
 
-int deliver_rawdata_spy(struct radclock *clock_handle, struct bidir_stamp *stamp);
+int deliver_rawdata_spy(struct radclock *clock_handle, struct stamp_t *stamp);
 
 #endif

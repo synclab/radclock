@@ -36,7 +36,7 @@ struct stampsource_def
 	/**
 	 * Get the next stamp, return 0 on sucess
 	 */
-	int (*get_next_stamp)(struct radclock *handle, struct stampsource *source, struct bidir_stamp *stamp);
+	int (*get_next_stamp)(struct radclock *handle, struct stampsource *source, struct stamp_t *stamp);
 
 	/**
 	 * Break blocking loop getting packets

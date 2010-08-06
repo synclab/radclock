@@ -131,9 +131,13 @@ static int tracefilestamp_init(struct radclock *handle, struct stampsource *sour
 
 static int tracefilestamp_get_next( struct radclock *handle, 
 									struct stampsource *source, 
-									struct bidir_stamp *stamp)
+									struct stamp_t *stamp)
 {
 	int err;
+
+	stamp->type = STAMP_NTP;
+	stamp->qual_warning = 0;
+
 	// Call for get_bidir_stamp to read through a BPF device
 	err = get_bidir_stamp(
 			handle,

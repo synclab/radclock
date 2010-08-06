@@ -38,7 +38,7 @@
 #define JDEBUG fprintf(stdout, "%-24s - %-4d | %-25s ENTER\n", __FILE__, __LINE__, __FUNCTION__);
 
 #define JDEBUG_RUSAGE getrusage(RUSAGE_SELF, &jdbg_rusage); \
-		fprintf(stdout, "%-24s - %-4d | %-25s maxrss:  %6ld KB | stime: %ld.%ld, utime: %ld.%ld\n",\
+		fprintf(stdout, "%-24s - %-4d | %-25s USAGE  maxrss:  %6ld KB | stime: %ld.%ld, utime: %ld.%ld\n",\
 		__FILE__, __LINE__, __FUNCTION__,\
 		jdbg_rusage.ru_maxrss,\
 		(long int)jdbg_rusage.ru_stime.tv_sec, (long int)jdbg_rusage.ru_stime.tv_usec,\
@@ -54,11 +54,11 @@ extern struct rusage jdbg_rusage;
 
 #define JDEBUG_MEMORY(_op, _x) \
 	if (_op == JDBG_MALLOC)\
-		fprintf(stdout, "%-24s - %-4d | %-25s malloc'd %6ld KB | memory allocated = %8ld Bytes\n",\
+		fprintf(stdout, "%-24s - %-4d | %-25s MALLOC %6ld KB | memory allocated = %8ld Bytes\n",\
 			__FILE__, __LINE__, __FUNCTION__,\
 			malloc_usable_size(_x), jdbg_memuse+=malloc_usable_size(_x));\
 	else \
-		fprintf(stdout, "%-24s - %-4d | %-25s free'd   %6ld KB | memory allocated = %8ld Bytes\n",\
+		fprintf(stdout, "%-24s - %-4d | %-25s FREE   %6ld KB | memory allocated = %8ld Bytes\n",\
 			__FILE__, __LINE__, __FUNCTION__,\
 			malloc_usable_size(_x), jdbg_memuse-=malloc_usable_size(_x));
 

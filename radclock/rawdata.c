@@ -305,7 +305,7 @@ struct raw_data_bundle* free_and_cherrypick(struct radclock *clock_handle)
 
 
 
-int deliver_rawdata_spy(struct radclock *clock_handle, struct bidir_stamp *stamp)
+int deliver_rawdata_spy(struct radclock *clock_handle, struct stamp_t *stamp)
 {
 	JDEBUG
 
@@ -326,10 +326,11 @@ int deliver_rawdata_spy(struct radclock *clock_handle, struct bidir_stamp *stamp
 		return -1;
 	}
 
-	stamp->Ta = RD_SPY(rdb)->Ta;
-	stamp->Tb = (long double) (RD_SPY(rdb)->Tb.tv_sec) + (long double) (RD_SPY(rdb)->Tb.tv_usec / 1e6);
-	stamp->Te = (long double) (RD_SPY(rdb)->Te.tv_sec) + (long double) (RD_SPY(rdb)->Te.tv_usec / 1e6);
-	stamp->Tf = RD_SPY(rdb)->Tf;
+	BST(stamp)->Ta = RD_SPY(rdb)->Ta;
+	BST(stamp)->Tb = (long double) (RD_SPY(rdb)->Tb.tv_sec) + (long double) (RD_SPY(rdb)->Tb.tv_usec / 1e6);
+	BST(stamp)->Te = (long double) (RD_SPY(rdb)->Te.tv_sec) + (long double) (RD_SPY(rdb)->Te.tv_usec / 1e6);
+	BST(stamp)->Tf = RD_SPY(rdb)->Tf;
+	stamp->type = STAMP_SPY;
 	stamp->qual_warning = 0;
 	stamp->sPort = 0;
 

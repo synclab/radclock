@@ -333,7 +333,7 @@ int get_vcount(radpcap_packet_t *packet, vcounter_t *vcount) {
 int get_bidir_stamp(struct radclock *handle,
 			void * userdata,
 			int (*get_packet)(struct radclock *handle, void *user, radpcap_packet_t **packet),
-			struct bidir_stamp *stamp, 
+			struct stamp_t *stamp, 
 			struct timeref_stats *stats, 
 			char *src_ipaddr
 			)
@@ -359,7 +359,7 @@ int get_bidir_stamp(struct radclock *handle,
 	char *refid_char;
 
 	radpcap_packet_t *packet = create_radpcap_packet();
-	memset(stamp, 0, sizeof (struct bidir_stamp));
+	memset(stamp, 0, sizeof (struct stamp_t));
 
 	refid_str = (char*) malloc(16 * sizeof(char));
 	JDEBUG_MEMORY(JDBG_MALLOC, refid_str);
@@ -506,7 +506,7 @@ while (searching) {
 		found_client = 1;
 		
 		/* Store vcount from the lower layer */
-		stamp->Ta 	= vcount;   
+		BST(stamp)->Ta = vcount;   
 
 		/* Record the port number used. If using ntpdate, it should be a dynamic 
 		 * value. If using NTPd, always 123.  Used as a key to match packets */
@@ -598,9 +598,13 @@ while (searching) {
 
 
 		/* Store timestamps */
-		stamp->Tb = ntpTS_to_UNIXsec(ntp->rec);
-		stamp->Te = ntpTS_to_UNIXsec(ntp->xmt);   // xmt is now xmt'ed from server
-		stamp->Tf = vcount;
+		BST(stamp)->Tb = ntpTS_to_UNIXsec(ntp->rec);
+		BST(stamp)->Te = ntpTS_to_UNIXsec(ntp->xmt);   // xmt is now xmt'ed from server
+		BST(stamp)->Tf = vcount;
+
+		/* Record type */
+		stamp->type = STAMP_NTP;
+
 
 		/* Make leap second adjustments 
 		 * Detect when first past a new leap second change, record total
@@ -624,8 +628,8 @@ while (searching) {
 		}
 		/* Remove total detected leapseconds from UNIX timestamps taken 
 		 * from server if clock jumps back, this brings it forward again */
-		stamp->Tb += ((struct bidir_output*)handle->algo_output)->leapsectotal;
-		stamp->Te += ((struct bidir_output*)handle->algo_output)->leapsectotal;
+		BST(stamp)->Tb += ((struct bidir_output*)handle->algo_output)->leapsectotal;
+		BST(stamp)->Te += ((struct bidir_output*)handle->algo_output)->leapsectotal;
 
 		/* If we passed all of this, update tracking of previous values and 
 		 * then we're all good and can stop searching 

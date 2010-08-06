@@ -640,7 +640,7 @@ static int livepcapstamp_init(struct radclock *handle, struct stampsource *sourc
 }
 
 
-static int livepcapstamp_get_next(struct radclock *handle, struct stampsource *source, struct bidir_stamp *stamp)
+static int livepcapstamp_get_next(struct radclock *handle, struct stampsource *source, struct stamp_t *stamp)
 {
 	JDEBUG
 
@@ -648,6 +648,7 @@ static int livepcapstamp_get_next(struct radclock *handle, struct stampsource *s
 
 	/* Ensure default stamp quality before filling timestamps */
 	stamp->qual_warning = 0;
+	stamp->type = STAMP_NTP;
 	
 	// Call for get_bidir_stamp to read through a BPF device
 	err = get_bidir_stamp(

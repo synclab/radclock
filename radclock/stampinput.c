@@ -156,7 +156,7 @@ err_out:
  * Retreive a stamp from the given handle into stamp
  * @return 0 on success a negitive value on error
  */
-int get_next_stamp(struct radclock *handle, struct stampsource *source, struct bidir_stamp *stamp)
+int get_next_stamp(struct radclock *handle, struct stampsource *source, struct stamp_t *stamp)
 {
 	return INPUT_OPS(source)->get_next_stamp(handle, source, stamp);
 }

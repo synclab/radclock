@@ -98,7 +98,7 @@ typedef struct radpcap_packet_t {
 int get_bidir_stamp(struct radclock *handle,
 		void * userdata,
 		int (*get_packet)(struct radclock *handle, void *user, radpcap_packet_t **packet),
-		struct bidir_stamp *stamp, 
+		struct stamp_t *stamp, 
 		struct timeref_stats *stats, 
 		char *src_ipaddr
 );

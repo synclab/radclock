@@ -332,7 +332,7 @@ int update_system_clock(struct radclock *clock_handle)
 
 
 
-int insane_bidir_stamp(struct bidir_stamp* stamp, struct bidir_stamp* laststamp)
+int insane_bidir_stamp(struct stamp_t *stamp, struct stamp_t *laststamp)
 {
 	/* Sanity check if two consecutive stamps are identical
 	 *
@@ -344,13 +344,22 @@ int insane_bidir_stamp(struct bidir_stamp* stamp, struct bidir_stamp* laststamp)
 	 * note: laststamp initialised at i=0, so can only compare if i>0,
 	 * implies we cannot check the stamp at i=0 (but that is obviously OK)
 	 */
-	if ( memcmp(stamp, laststamp, sizeof(struct bidir_stamp)) == 0 ) {
+
+	if ( stamp->type != laststamp->type )
+	{
+		verbose(LOG_ERR, "Trying to compare two stamps of different types");
+		return 1;
+	}
+
+	if ( memcmp(stamp, laststamp, sizeof(struct stamp_t)) == 0 ) {
 		verbose(LOG_WARNING, "Two identical consecutive stamps detected");
 		return 1;
 	}
 
 	/* Non existent stamps */
-	if ( (stamp->Ta == 0) || (stamp->Tb == 0) || (stamp->Te == 0) || (stamp->Tf == 0) ) {
+	if ( 	(BST(stamp)->Ta == 0) || (BST(stamp)->Tb == 0) || 
+			(BST(stamp)->Te == 0) || (BST(stamp)->Tf == 0) ) 
+	{
 		verbose(LOG_WARNING, "bidir stamp with at least one 0 raw stamp");
 		return 1;
 	}
@@ -360,29 +369,35 @@ int insane_bidir_stamp(struct bidir_stamp* stamp, struct bidir_stamp* laststamp)
 	 * 		stamp->Ta <= laststamp->Ta
 	 * but unlikely in reality so, keep the stronger test
 	 */
-	if ( stamp->Ta <= laststamp->Tf ) {
+	if ( BST(stamp)->Ta <= BST(laststamp)->Tf ) {
 		verbose(LOG_WARNING, "Stamp with not strictly increasing counter");
 		return 1;
 	}
 
 	/* RAW stamps completely messed up */
-	if ( (stamp->Tf < stamp->Ta) || (stamp->Te < stamp->Tb) ) {
+	if ((BST(stamp)->Tf < BST(stamp)->Ta) || (BST(stamp)->Te < BST(stamp)->Tb)) 
+	{
 		verbose(LOG_WARNING, "bidir stamp broke local causality");
 		return 1;
 	}
 
-	/* Sanity checks on null or too small RTT.
-	 * Smallest RTT ever: 100 mus
-	 * Slowest counter  : 1193182 Hz
-	 * Cycles :  ceil( 100e-6 * 1193182 ) = 120
-	 * 		i8254 =   1193182
-	 * 		 ACPI =   3579545
-	 * 		 HPET =  14318180
-	 * 		 TSC  > 500000000
-	 */
-	if ( (stamp->Tf - stamp->Ta) < 120 ) { 
-		verbose(LOG_WARNING, "bidir stamp with RTT impossibly low (< 120)");
-		return 1;
+	/* This does not apply to SPY_STAMP for example */ 
+	if ( stamp->type == STAMP_NTP )
+	{
+		/* Sanity checks on null or too small RTT.
+		 * Smallest RTT ever: 100 mus
+		 * Slowest counter  : 1193182 Hz
+		 * Cycles :  ceil( 100e-6 * 1193182 ) = 120
+		 * 		i8254 =   1193182
+		 * 		 ACPI =   3579545
+		 * 		 HPET =  14318180
+		 * 		 TSC  > 500000000
+		 */
+		if ( (BST(stamp)->Tf - BST(stamp)->Ta) < 120 ) { 
+			verbose(LOG_WARNING, "bidir stamp with RTT impossibly low (< 120)"
+					": %"VC_FMT" cycles", BST(stamp)->Tf - BST(stamp)->Ta);
+			return 1;
+		}
 	}
 
 	/* If we pass all sanity checks */
@@ -400,8 +415,8 @@ int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 	JDEBUG
 
 	/* Bi-directionnal stamp passed to the algo for processing */
-	struct bidir_stamp stamp;
-	static struct bidir_stamp laststamp;
+	struct stamp_t stamp;
+	static struct stamp_t laststamp;
 
 	/* Error control logging */
 	long double currtime 	= 0;
@@ -423,16 +438,21 @@ int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 	/* If the new stamp looks insane just don't pass it for processing, keep
 	 * going and look for the next one. Otherwise, record it.
 	 */
-	if ( insane_bidir_stamp(&stamp, &laststamp) )
-		return 0;
-	memcpy(&laststamp, &stamp, sizeof(struct bidir_stamp));
+	// TODO: this should be stored in a proper structure under the clock handle
+	if ( ((struct bidir_output*)clock_handle->algo_output)->n_stamps > 1)
+	{
+		if ( insane_bidir_stamp(&stamp, &laststamp) )
+			return 0;
+	}
+	memcpy(&laststamp, &stamp, sizeof(struct stamp_t));
 
 	// TODO: this should be stored in a proper structure under the clock handle
 	/* Stamp obtained, increase total counter and process the stamp */
 	((struct bidir_output*)clock_handle->algo_output)->n_stamps++;
 	
 	/* Update calibration using new stamp */ 
-	process_bidir_stamp(clock_handle, peer, &stamp);
+//	process_bidir_stamp(clock_handle, peer, &stamp);
+	process_bidir_stamp(clock_handle, peer, BST(&stamp), stamp.qual_warning);
 
 	/* Update the radclock i.e. the global data 
 	 * Done only in the case of reading from a live device and if 
@@ -499,11 +519,11 @@ int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 	{
 		radclock_vcount_to_abstime_fp(clock_handle, &(RAD_DATA(clock_handle)->last_changed), &currtime);
 		radclock_get_min_RTT(clock_handle, &min_RTT);
-		timediff = (double) (currtime - (long double)stamp.Te);
+		timediff = (double) (currtime - (long double) BST(&stamp)->Te);
 
 		verbose(VERB_CONTROL, "i=%ld: NTPserver stamp %.6Lf, RAD - NTPserver = %.3f [ms], RTT/2 = %.3f [ms]",
 				((struct bidir_output*)clock_handle->algo_output)->n_stamps,
-				stamp.Te, timediff * 1000, min_RTT / 2 * 1000);
+				BST(&stamp)->Te, timediff * 1000, min_RTT / 2 * 1000);
 
 		radclock_get_clockerror_bound(clock_handle, &error_bound);
 		radclock_get_clockerror_bound_avg(clock_handle, &error_bound_avg);

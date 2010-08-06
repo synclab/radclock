@@ -122,21 +122,46 @@ struct radclock_phyparam {
 
 
 
-// TODO sPort is useful for packet mathing purpose (packet pairs and DAG data
-// but it is a bit dirty 
-/**
- * Bi-directionnal stamp used by the bidirectionnal synchronisation algorithm
+/*
+ * Stamps structures, could be uni- or bi- directional. The generic stamp
+ * structure also holds side info regarding network or the like.
  */
+typedef enum { 
+	STAMP_UNKNOWN,
+	STAMP_SPY,
+	STAMP_NTP,		/* Handed by libpcap */
+	STAMP_PPS,
+} stamp_type_t;
+
+
+struct unidir_stamp {
+	vcounter_t stamp;
+};
+
+
 struct bidir_stamp {
 	vcounter_t  Ta;     // vcount timestamp [counter value] of pkt leaving client
 	long double Tb;     // timestamp [sec] of arrival at server
 	long double Te;     // timestamp [sec] of departure from server
 	vcounter_t  Tf;     // vcount timestamp [counter value] of pkt returning to client
-	int 		qual_warning;    // warning level: route or server changes, server problem
-	int 		sPort; // Source port of the client NTP request (useful if using ntpdate)
 };
 
 
+// TODO sPort is useful for packet mathing purpose (packet pairs and DAG data
+// but it is a bit dirty 
+struct stamp_t {
+	stamp_type_t type;
+	union stamp_u {
+		struct unidir_stamp ustamp;
+		struct bidir_stamp  bstamp;
+	} st;
+		
+	int qual_warning;	// warning level: route or server changes, server problem
+	int sPort; 			// Source port of the client NTP request (useful if using ntpdate)
+};
+
+#define UST(x) (&((x)->st.ustamp))
+#define BST(x) (&((x)->st.bstamp))
 
 
 struct bidir_output 
@@ -269,7 +294,7 @@ struct bidir_peer
  * Functions declarations
  */
 
-int process_bidir_stamp(struct radclock *clock_handle, struct bidir_peer *peer, struct bidir_stamp *input_stamp);
+int process_bidir_stamp(struct radclock *clock_handle, struct bidir_peer *peer, struct bidir_stamp *input_stamp, int qual_warning);
 
 
 
