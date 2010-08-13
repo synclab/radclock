@@ -315,9 +315,10 @@ int radclock_set_kernelclock(struct radclock *handle);
  * The outdated criterion relies on the comparison of the vcount stamps stored in
  * the global data structure.
  * @param  handle The private handle for accessing global data
+ * @param  vc A pointer to the current timestamp, or NULL 
  * @return 0 on success, non-zero on failure
  */ 
-int radclock_check_outdated(struct radclock* handle);
+int radclock_check_outdated(struct radclock* handle, vcounter_t *vc);
 
 
 /**

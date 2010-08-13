@@ -98,132 +98,132 @@ int radclock_get_local_period_mode(struct radclock *handle, radclock_local_perio
 
 int radclock_get_last_stamp(struct radclock *handle, vcounter_t *last_vcount)
 {
-	if (radclock_check_outdated(handle))  { return 1; }
-	if ( handle && RAD_DATA(handle)) {
-		*last_vcount = RAD_DATA(handle)->last_changed; 
-		return 0;
-	}
-	else
+	int data_quality = 0;
+	if ( !handle || !RAD_DATA(handle) || !last_vcount)
 		return 1;
+
+	data_quality = radclock_check_outdated(handle, NULL);
+	*last_vcount = RAD_DATA(handle)->last_changed;
+	return data_quality;
 }
 
 
 int radclock_get_till_stamp(struct radclock *handle, vcounter_t *till_vcount)
 {
-	if (radclock_check_outdated(handle))  { return 1; }
-	if ( handle && RAD_DATA(handle)) {
-		*till_vcount = RAD_DATA(handle)->valid_till; 
-		return 0;
-	}
-	else
+	int data_quality = 0;
+	if ( !handle || !RAD_DATA(handle) || !till_vcount)
 		return 1;
+
+	data_quality = radclock_check_outdated(handle, NULL);
+	*till_vcount = RAD_DATA(handle)->valid_till; 
+	return data_quality;
 }
 
 
 int radclock_get_period(struct radclock *handle, double *period)
 {
-	if (radclock_check_outdated(handle))  { return 1; }
-	if ( handle && RAD_DATA(handle) ) {
-		*period = RAD_DATA(handle)->phat; 
-		return 0;
-	}
-	else
+	int data_quality = 0;
+	if ( !handle || !RAD_DATA(handle) || !period)
 		return 1;
+
+	data_quality = radclock_check_outdated(handle, NULL);
+	*period = RAD_DATA(handle)->phat;
+	return data_quality;
 }
 
 
 int radclock_get_offset(struct radclock *handle, long double *offset)
 {
-	if (radclock_check_outdated(handle))  { return 1; }
-	if ( handle && RAD_DATA(handle) ) {
-		*offset = RAD_DATA(handle)->ca;
-		return 0; 
-	}
-	else
+	int data_quality = 0;
+	if ( !handle || !RAD_DATA(handle) || !offset)
 		return 1;
+
+	data_quality = radclock_check_outdated(handle, NULL);
+	*offset = RAD_DATA(handle)->ca;
+	return data_quality;
 }
 
 
 int radclock_get_period_error(struct radclock *handle, double *err_period)
 {
-	if (radclock_check_outdated(handle))  { return 1; }
-	if ( handle && RAD_DATA(handle) ) {
-		*err_period = RAD_DATA(handle)->phat_err; 
-		return 0;
-	}
-	else
+	int data_quality = 0;
+	if ( !handle || !RAD_DATA(handle) || !err_period)
 		return 1;
+
+	data_quality = radclock_check_outdated(handle, NULL);
+	*err_period = RAD_DATA(handle)->phat_err;
+	return data_quality;
 }
 
 
 int radclock_get_offset_error(struct radclock *handle, double *err_offset)
 {
-	if (radclock_check_outdated(handle))  { return 1; }
-	if ( handle && RAD_DATA(handle) ) {
-		*err_offset = RAD_DATA(handle)->ca_err;
-		return 0; 
-	}
-	else
+	int data_quality = 0;
+	if ( !handle || !RAD_DATA(handle) || !err_offset)
 		return 1;
+
+	data_quality = radclock_check_outdated(handle, NULL);
+	*err_offset = RAD_DATA(handle)->ca_err;
+	return data_quality;
 }
 
 
 int radclock_get_status(struct radclock *handle, unsigned int *status)
 {
-	if (radclock_check_outdated(handle))  { return 1; }
-	if ( handle && RAD_DATA(handle) ) {
-		*status = RAD_DATA(handle)->status;
-		return 0; 
-	}
-	else
+	int data_quality = 0;
+	if ( !handle || !RAD_DATA(handle) || !status)
 		return 1;
+
+	data_quality = radclock_check_outdated(handle, NULL);
+	*status = RAD_DATA(handle)->status;
+	return data_quality;
 }
 
 
 int radclock_get_clockerror_bound(struct radclock *handle, double *error_bound)
 {
-	if (radclock_check_outdated(handle))  { return 1; }
-	if ( handle && RAD_ERROR(handle) ) {
-		*error_bound = RAD_ERROR(handle)->error_bound; 
-		return 0;
-	}
-	else
+	int data_quality = 0;
+	if ( !handle || !RAD_DATA(handle) || !error_bound)
 		return 1;
+
+	data_quality = radclock_check_outdated(handle, NULL);
+	*error_bound = RAD_ERROR(handle)->error_bound; 
+	return data_quality;
 }
 
 
 int radclock_get_clockerror_bound_avg(struct radclock *handle, double *error_bound_avg)
 {
-	if (radclock_check_outdated(handle))  { return 1; }
-	if ( handle && RAD_ERROR(handle) ) {
-		*error_bound_avg = RAD_ERROR(handle)->error_bound_avg; 
-		return 0;
-	}
-	else
+	int data_quality = 0;
+	if ( !handle || !RAD_DATA(handle) || !error_bound_avg)
 		return 1;
+
+	data_quality = radclock_check_outdated(handle, NULL);
+	*error_bound_avg = RAD_ERROR(handle)->error_bound_avg; 
+	return data_quality;
 }
 
 
 int radclock_get_clockerror_bound_std(struct radclock *handle, double *error_bound_std)
 {
-	if (radclock_check_outdated(handle))  { return 1; }
-	if ( handle && RAD_ERROR(handle) ) {
-		*error_bound_std = RAD_ERROR(handle)->error_bound_std;
-		return 0;
-	}
-	else
+	int data_quality = 0;
+	if ( !handle || !RAD_DATA(handle) || !error_bound_std)
 		return 1;
+
+	data_quality = radclock_check_outdated(handle, NULL);
+	*error_bound_std = RAD_ERROR(handle)->error_bound_std;
+	return data_quality;
 }
 
 int radclock_get_min_RTT(struct radclock *handle, double *min_RTT)
 {
-	if (radclock_check_outdated(handle))  { return 1; }
-	if ( handle && RAD_ERROR(handle) ) {
-		*min_RTT = RAD_ERROR(handle)->min_RTT;
-		return 0;
-	}
-	else
+	int data_quality = 0;
+	if ( !handle || !RAD_DATA(handle) || !min_RTT)
 		return 1;
+
+	data_quality = radclock_check_outdated(handle, NULL);
+	*min_RTT = RAD_ERROR(handle)->min_RTT;
+	return data_quality;
 }
 
 

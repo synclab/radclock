@@ -128,15 +128,6 @@ int radclock_get_autoupdate(struct radclock *handle, radclock_autoupdate_t *upda
 
 
 /**
- * Get the time from the radclock in a timeval format (micro second resolution).
- * @param  handle The private handle for accessing global data
- * @param  abstime_tv A reference to the timeval structure to be filled 
- * @return 0 on success, non-zero on failure
- */
-int radclock_gettimeofday(struct radclock *handle, struct timeval *abstime_tv);
-
-
-/**
  * Set the mode when composing time based on raw vcount values and RADclock parameters.
  * If set to RADCLOCK_LOCAL_PERIOD_ON a local estimate of the CPU
  * period is used instead of the long term estimate. The default behavior is to
@@ -158,12 +149,31 @@ int radclock_get_local_period_mode(struct radclock *handle, radclock_local_perio
 
 
 /**
+ * Get the time from the radclock in a timeval format (micro second resolution).
+ * @param  handle The private handle for accessing global data
+ * @param  abstime_tv A reference to the timeval structure to be filled 
+ * @return 0 on success
+ * @return 1 on error
+ * @return 2 on possibly poor quality timestamp (clock could not be reached, but
+ * last data is recent)
+ * @return 3 on very poor quality timestamp (clock could not be reached, and
+ * last dat is really old)
+ */
+int radclock_gettimeofday(struct radclock *handle, struct timeval *abstime_tv);
+
+
+/**
  * Get the time from the radclock in a floating point format.
  * The exact resolution obtained depends on the system architecture and the CPU 
  * oscillator frequency.
  * @param  handle The private handle for accessing global data
  * @param  abstime_fp A reference to the long double time value to be filled 
- * @return 0 on success, non-zero on failure
+ * @return 0 on success
+ * @return 1 on error
+ * @return 2 on possibly poor quality timestamp (clock could not be reached, but
+ * last data is recent)
+ * @return 3 on very poor quality timestamp (clock could not be reached, and
+ * last dat is really old)
  */
 int radclock_gettimeofday_fp(struct radclock *handle, long double *abstime_fp);
 
@@ -175,7 +185,12 @@ int radclock_gettimeofday_fp(struct radclock *handle, long double *abstime_fp);
  * @param  handle The private handle for accessing global data
  * @param  vcount A reference to the vcounter_t vcounter value to convert 
  * @param  abstime_tv A reference to the timeval structure to be filled 
- * @return 0 on success, non-zero on failure
+ * @return 0 on success
+ * @return 1 on error
+ * @return 2 on possibly poor quality timestamp (clock could not be reached, but
+ * last data is recent)
+ * @return 3 on very poor quality timestamp (clock could not be reached, and
+ * last dat is really old)
  */
 int radclock_vcount_to_abstime(struct radclock *handle, const vcounter_t *vcount, struct timeval *abstime_tv);
 
@@ -188,7 +203,12 @@ int radclock_vcount_to_abstime(struct radclock *handle, const vcounter_t *vcount
  * @param  handle The private handle for accessing global data 
  * @param  vcount A reference to the vcounter value corresponding to the time event to be built
  * @param  abstime_fp A reference to the long double time value to be filled 
- * @return 0 on success, non-zero on failure
+ * @return 0 on success
+ * @return 1 on error
+ * @return 2 on possibly poor quality timestamp (clock could not be reached, but
+ * last data is recent)
+ * @return 3 on very poor quality timestamp (clock could not be reached, and
+ * last dat is really old)
  */
 int radclock_vcount_to_abstime_fp(struct radclock *handle, const vcounter_t *vcount, long double *abstime_fp);
 
@@ -199,7 +219,12 @@ int radclock_vcount_to_abstime_fp(struct radclock *handle, const vcounter_t *vco
  * @param  handle The private handle for accessing global data 
  * @param  past_vcount A reference to the vcount value corresponding to the past event
  * @param  duration_tv A reference to the long double time value to be filled 
- * @return 0 on success, non-zero on failure
+ * @return 0 on success
+ * @return 1 on error
+ * @return 2 on possibly poor quality timestamp (clock could not be reached, but
+ * last data is recent)
+ * @return 3 on very poor quality timestamp (clock could not be reached, and
+ * last dat is really old)
  */
 int radclock_elapsed(struct radclock *handle, const vcounter_t *past_vcount, struct timeval *duration_tv);
 
@@ -211,7 +236,12 @@ int radclock_elapsed(struct radclock *handle, const vcounter_t *past_vcount, str
  * @param  handle The private handle for accessing global data 
  * @param  past_vcount A reference to the vcount value corresponding to the past event
  * @param  duration_fp A reference to the long double time value to be filled 
- * @return 0 on success, non-zero on failure
+ * @return 0 on success
+ * @return 1 on error
+ * @return 2 on possibly poor quality timestamp (clock could not be reached, but
+ * last data is recent)
+ * @return 3 on very poor quality timestamp (clock could not be reached, and
+ * last dat is really old)
  */
 int radclock_elapsed_fp(struct radclock *handle, const vcounter_t *past_vcount, long double *duration_fp);
 
@@ -223,7 +253,12 @@ int radclock_elapsed_fp(struct radclock *handle, const vcounter_t *past_vcount, 
  * @param  start_vcount A reference to the vcount value corresponding to the starting event
  * @param  end_vcount A reference to the vcount value corresponding to the ending event
  * @param  duration_tv A reference to the timeval structure to be filled 
- * @return 0 on success, non-zero on failure
+ * @return 0 on success
+ * @return 1 on error
+ * @return 2 on possibly poor quality timestamp (clock could not be reached, but
+ * last data is recent)
+ * @return 3 on very poor quality timestamp (clock could not be reached, and
+ * last dat is really old)
  */
 int radclock_duration(struct radclock *handle, const vcounter_t *start_vcount, const vcounter_t *end_vcount, struct timeval *duration_tv);
 
@@ -236,7 +271,12 @@ int radclock_duration(struct radclock *handle, const vcounter_t *start_vcount, c
  * @param  start_vcount A reference to the vcount value corresponding to the starting event
  * @param  end_vcount A reference to the vcount value corresponding to the ending event
  * @param  duration_fp A reference to the long double time value to be filled 
- * @return 0 on success, non-zero on failure
+ * @return 0 on success
+ * @return 1 on error
+ * @return 2 on possibly poor quality timestamp (clock could not be reached, but
+ * last data is recent)
+ * @return 3 on very poor quality timestamp (clock could not be reached, and
+ * last dat is really old)
  */
 int radclock_duration_fp(struct radclock *handle, const vcounter_t *start_vcount, const vcounter_t *end_vcount, long double *duration_fp);
 
@@ -245,7 +285,11 @@ int radclock_duration_fp(struct radclock *handle, const vcounter_t *start_vcount
  * Get instantaneous estimate of the clock error bound in seconds
  * @param  handle The private handle for accessing global data 
  * @param  duration_fp A reference to the long double time value to be filled 
- * @return 0 on success, non-zero on failure
+ * @return 0 on success
+ * @return 1 on error
+ * @return 2 on possibly outdated data (clock could not be reached, but
+ * last data is recent)
+ * @return 3 on very old data (clock could not be reached)
  */
 int radclock_get_clockerror_bound(struct radclock *handle, double *error_bound);
 
@@ -254,7 +298,11 @@ int radclock_get_clockerror_bound(struct radclock *handle, double *error_bound);
  * Get averaged estimate of the clock error bound in seconds
  * @param  handle The private handle for accessing global data 
  * @param  duration_fp A reference to the long double time value to be filled 
- * @return 0 on success, non-zero on failure
+ * @return 0 on success
+ * @return 1 on error
+ * @return 2 on possibly outdated data (clock could not be reached, but
+ * last data is recent)
+ * @return 3 on very old data (clock could not be reached)
  */
 int radclock_get_clockerror_bound_avg(struct radclock *handle, double *error_bound_avg);
 
@@ -263,7 +311,11 @@ int radclock_get_clockerror_bound_avg(struct radclock *handle, double *error_bou
  * Get standard deviation estimate of the clock error bound in seconds
  * @param  handle The private handle for accessing global data 
  * @param  duration_fp A reference to the long double time value to be filled 
- * @return 0 on success, non-zero on failure
+ * @return 0 on success
+ * @return 1 on error
+ * @return 2 on possibly outdated data (clock could not be reached, but
+ * last data is recent)
+ * @return 3 on very old data (clock could not be reached)
  */
 int radclock_get_clockerror_bound_std(struct radclock *handle, double *error_bound_std);
 
@@ -272,7 +324,11 @@ int radclock_get_clockerror_bound_std(struct radclock *handle, double *error_bou
  * Get estimate of the minimum RTT to reference clock in seconds
  * @param  handle The private handle for accessing global data 
  * @param  duration_fp A reference to the long double time value to be filled 
- * @return 0 on success, non-zero on failure
+ * @return 0 on success
+ * @return 1 on error
+ * @return 2 on possibly outdated data (clock could not be reached, but
+ * last data is recent)
+ * @return 3 on very old data (clock could not be reached)
  */
 int radclock_get_min_RTT(struct radclock *handle, double *min_RTT);
 
@@ -282,7 +338,11 @@ int radclock_get_min_RTT(struct radclock *handle, double *min_RTT);
  * parameters have been updated.
  * @param  handle The private handle for accessing global data
  * @param  last_stamp A reference to the vcounter value to be filled
- * @return 0 on success, non-zero on failure
+ * @return 0 on success
+ * @return 1 on error
+ * @return 2 on possibly outdated data (clock could not be reached, but
+ * last data is recent)
+ * @return 3 on very old data (clock could not be reached)
  */
 int radclock_get_last_stamp(struct radclock *handle, vcounter_t *last_stamp);
 
@@ -292,7 +352,11 @@ int radclock_get_last_stamp(struct radclock *handle, vcounter_t *last_stamp);
  * should be updated.
  * @param  handle The private handle for accessing global data
  * @param  till_stamp A reference to the vcounter value to be filled
- * @return 0 on success, non-zero on failure
+ * @return 0 on success
+ * @return 1 on error
+ * @return 2 on possibly outdated data (clock could not be reached, but
+ * last data is recent)
+ * @return 3 on very old data (clock could not be reached)
  */
 int radclock_get_till_stamp(struct radclock *handle, vcounter_t *till_stamp);
 
@@ -301,7 +365,11 @@ int radclock_get_till_stamp(struct radclock *handle, vcounter_t *till_stamp);
  * Get the period of the CPU oscillator.
  * @param  handle The private handle for accessing global data
  * @param  period A reference to the double period to be filled
- * @return 0 on success, non-zero on failure
+ * @return 0 on success
+ * @return 1 on error
+ * @return 2 on possibly outdated data (clock could not be reached, but
+ * last data is recent)
+ * @return 3 on very old data (clock could not be reached)
  */
 int radclock_get_period(struct radclock *handle, double *period);
 
@@ -310,7 +378,11 @@ int radclock_get_period(struct radclock *handle, double *period);
  * Get the radclock offset.
  * @param  handle The private handle for accessing global data
  * @param  offset A reference to the long double offset to be filled
- * @return 0 on success, non-zero on failure
+ * @return 0 on success
+ * @return 1 on error
+ * @return 2 on possibly outdated data (clock could not be reached, but
+ * last data is recent)
+ * @return 3 on very old data (clock could not be reached)
  */
 int radclock_get_offset(struct radclock *handle, long double *offset);
 
@@ -319,7 +391,11 @@ int radclock_get_offset(struct radclock *handle, long double *offset);
  * Get the error estimate of period of the CPU oscillator.
  * @param  handle The private handle for accessing global data
  * @param  err_period A reference to the double err_period to be filled
- * @return 0 on success, non-zero on failure
+ * @return 0 on success
+ * @return 1 on error
+ * @return 2 on possibly outdated data (clock could not be reached, but
+ * last data is recent)
+ * @return 3 on very old data (clock could not be reached)
  */
 int radclock_get_period_error(struct radclock *handle, double *err_period);
 
@@ -328,7 +404,11 @@ int radclock_get_period_error(struct radclock *handle, double *err_period);
  * Get the error estimate of the radclock offset.
  * @param  handle The private handle for accessing global data
  * @param  err_offset A reference to the long double err_offset to be filled
- * @return 0 on success, non-zero on failure
+ * @return 0 on success
+ * @return 1 on error
+ * @return 2 on possibly outdated data (clock could not be reached, but
+ * last data is recent)
+ * @return 3 on very old data (clock could not be reached)
  */
 int radclock_get_offset_error(struct radclock *handle, double *err_offset);
 
@@ -337,7 +417,11 @@ int radclock_get_offset_error(struct radclock *handle, double *err_offset);
  * Get the status of the radclock.
  * @param  handle The private handle for accessing global data
  * @param  status A reference to the unsigned int status to be filled
- * @return 0 on success, non-zero on failure
+ * @return 0 on success
+ * @return 1 on error
+ * @return 2 on possibly outdated data (clock could not be reached, but
+ * last data is recent)
+ * @return 3 on very old data (clock could not be reached)
  */
 int radclock_get_status(struct radclock *handle, unsigned int *status);
 
