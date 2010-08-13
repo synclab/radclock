@@ -316,9 +316,10 @@ int radclock_set_kernelclock(struct radclock *handle);
  * the global data structure.
  * @param  handle The private handle for accessing global data
  * @param  vc A pointer to the current timestamp, or NULL 
+ * @param  req_type Type of IPC request 
  * @return 0 on success, non-zero on failure
  */ 
-int radclock_check_outdated(struct radclock* handle, vcounter_t *vc);
+int radclock_check_outdated(struct radclock* handle, vcounter_t *vc, int req_type);
 
 
 /**

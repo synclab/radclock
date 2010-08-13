@@ -125,7 +125,7 @@ int radclock_gettimeofday(struct radclock *handle , struct timeval *abstime_tv)
 	if ( !RAD_DATA(handle) || !abstime_tv)
 		return 1;
 
-	data_quality = radclock_check_outdated(handle, &vcount);
+	data_quality = radclock_check_outdated(handle, &vcount, IPC_REQ_RAD_DATA);
 	radclock_ld_to_tv(radclock_vcount_to_ld(handle, vcount), abstime_tv);
 	return data_quality;
 }
@@ -148,7 +148,7 @@ int radclock_gettimeofday_fp(struct radclock *handle, long double *abstime_fp)
 	if ( !RAD_DATA(handle) || !abstime_fp)
 		return 1;
 
-	data_quality = radclock_check_outdated(handle, &vcount);
+	data_quality = radclock_check_outdated(handle, &vcount, IPC_REQ_RAD_DATA);
 	*abstime_fp = radclock_vcount_to_ld(handle, vcount);
 	return data_quality;
 }
@@ -162,7 +162,7 @@ int radclock_vcount_to_abstime(struct radclock *handle, const vcounter_t *vcount
 	if ( !handle || !RAD_DATA(handle) || !vcount || !abstime_tv)
 		return 1;
 
-	data_quality = radclock_check_outdated(handle, NULL);
+	data_quality = radclock_check_outdated(handle, NULL, IPC_REQ_RAD_DATA);
 	radclock_ld_to_tv(radclock_vcount_to_ld(handle, *vcount), abstime_tv);
 	return data_quality;
 }
@@ -176,7 +176,7 @@ int radclock_vcount_to_abstime_fp(struct radclock *handle, const vcounter_t *vco
 	if ( !handle || !RAD_DATA(handle) || !vcount || !abstime_fp)
 		return 1;
 
-	data_quality = radclock_check_outdated(handle, NULL);
+	data_quality = radclock_check_outdated(handle, NULL, IPC_REQ_RAD_DATA);
 	*abstime_fp = radclock_vcount_to_ld(handle, *vcount);
 	return data_quality;
 }
@@ -199,7 +199,7 @@ int radclock_elapsed(struct radclock *handle, const vcounter_t *from_vcount, str
 	if ( !RAD_DATA(handle) || !from_vcount || !duration_tv)
 		return 1;
 
-	data_quality = radclock_check_outdated(handle, &vcount);
+	data_quality = radclock_check_outdated(handle, &vcount, IPC_REQ_RAD_DATA);
 // TODO is this the  good behaviour, we should request the clock data associated to from_vcount? maybe not
 	if ( !in_skm(handle, from_vcount, &vcount) )
 		return 1;
@@ -226,7 +226,7 @@ int radclock_elapsed_fp(struct radclock *handle, const vcounter_t *from_vcount, 
 	if ( !RAD_DATA(handle) || !from_vcount || !duration_fp)
 		return 1;
 
-	data_quality = radclock_check_outdated(handle, &vcount);
+	data_quality = radclock_check_outdated(handle, &vcount, IPC_REQ_RAD_DATA);
 // TODO is this the  good behaviour, we should request the clock data associated to from_vcount? maybe not
 	if ( !in_skm(handle, from_vcount, &vcount) )
 		return 1;
@@ -253,7 +253,7 @@ int radclock_duration(struct radclock *handle, const vcounter_t *from_vcount, co
 	if ( !RAD_DATA(handle) || !from_vcount || !till_vcount || !duration_tv)
 		return 1;
 
-	data_quality = radclock_check_outdated(handle, &vcount);
+	data_quality = radclock_check_outdated(handle, &vcount, IPC_REQ_RAD_DATA);
 // TODO is this the  good behaviour, we should request the clock data associated to from_vcount? maybe not
 	if ( !in_skm(handle, from_vcount, &vcount) )
 		return 1;
@@ -280,7 +280,7 @@ int radclock_duration_fp(struct radclock *handle, const vcounter_t *from_vcount,
 	if ( !RAD_DATA(handle) || !from_vcount || !till_vcount || !duration_fp)
 		return 1;
 
-	data_quality = radclock_check_outdated(handle, &vcount);
+	data_quality = radclock_check_outdated(handle, &vcount, IPC_REQ_RAD_DATA);
 // TODO is this the  good behaviour, we should request the clock data associated to from_vcount? maybe not
 	if ( !in_skm(handle, from_vcount, &vcount) )
 		return 1;

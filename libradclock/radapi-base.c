@@ -323,7 +323,7 @@ int radclock_read_IPCclock(struct radclock *handle, int req_type)
 		/* We have not yet received a valid message, recv with a timeout */
 		if(!valid_message){ 
 
-			n = recv(handle->ipc_socket, (void*)(&reply), sizeof(struct ipc_reply), NULL);
+			n = recv(handle->ipc_socket, (void*)(&reply), sizeof(struct ipc_reply), 0);
 		
 		/* We have received a valid message, clear the buffer quickly (no timeout) */
 		} else {
@@ -370,7 +370,7 @@ int radclock_read_IPCclock(struct radclock *handle, int req_type)
 
 
 
-int radclock_check_outdated(struct radclock* handle, vcounter_t *vc)
+int radclock_check_outdated(struct radclock* handle, vcounter_t *vc, int req_type)
 {
 	int err;
 	vcounter_t now;
@@ -427,7 +427,8 @@ int radclock_check_outdated(struct radclock* handle, vcounter_t *vc)
 
 		case RADCLOCK_UPDATE_ALWAYS:
 			/* Update the local copy of the clock. This may fail, but the clock
-			 * data may not be that bad. Return an idea of how bad the data is
+			 * data may not be that bad. Return an idea of how bad the data is.
+			 * All requests require IPC_REQ_RAD_DATA to succeed. 
 			 */
 			err = radclock_read_IPCclock(handle, IPC_REQ_RAD_DATA);
 			if ( err < 0 )
@@ -442,10 +443,19 @@ int radclock_check_outdated(struct radclock* handle, vcounter_t *vc)
 				if ( now > valid_till )
 					return 2;
 			}
-// XXX TODO XXX merge this request with the above? We may want
-// consistency in the results? But not necessary for get/set functions ... 
-			err = radclock_read_IPCclock(handle, IPC_REQ_RAD_ERROR);
-			if ( err < 0 )  { return 1; }
+			/* We manage to get a reply on the IPC channel, but this new one
+			 * failed. This is likely to be a transient error. But last_changed
+			 * and valid_till are recent, so cannot really say anything about
+			 * the quality of the data. Default to worst data quality scenario,
+			 * in case nobody has been requesting this type of request for a
+			 * while.
+			 */
+			if (req_type != IPC_REQ_RAD_DATA)
+			{
+				err = radclock_read_IPCclock(handle, req_type);
+				if ( err < 0 )
+					return 3;
+			}
 			handle->ipc_requests = 0;
 			break;
 
