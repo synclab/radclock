@@ -331,7 +331,13 @@ int update_system_clock(struct radclock *clock_handle)
 
 
 
-
+/*
+ * Check stamps are not insane. The world is divided in black, white and ...
+ * grey. White stamps are clean. Grey stamps have a qual_warning problem, but it
+ * is not clear what to do, and that's up to the algo to deal with them. Black
+ * stamps are insane and could break processing (e.g. induce zero division, NaN
+ * results, etc.). We get rid of them here.
+ */ 
 int insane_bidir_stamp(struct stamp_t *stamp, struct stamp_t *laststamp)
 {
 	/* Sanity check if two consecutive stamps are identical
@@ -451,7 +457,6 @@ int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 	((struct bidir_output*)clock_handle->algo_output)->n_stamps++;
 	
 	/* Update calibration using new stamp */ 
-//	process_bidir_stamp(clock_handle, peer, &stamp);
 	process_bidir_stamp(clock_handle, peer, BST(&stamp), stamp.qual_warning);
 
 	/* Update the radclock i.e. the global data 
@@ -477,11 +482,12 @@ int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
  
 			// This is an explicit call for an update of the user clock
 			if ( (radclock_read_kernelclock(tmp_clock)) < 0) {
-				verbose(LOG_ERR, "Could not GET global data from the kernel and update the user clock");
+				verbose(LOG_ERR, "Could not GET global data from the kernel");
 			}
 			else {
-				verbose(VERB_DEBUG, "Kernel clock: last vcounter= %llu   p= %15.9lg   Ca= %22.9Lf",
-						RAD_DATA(tmp_clock)->last_changed, RAD_DATA(tmp_clock)->phat, RAD_DATA(tmp_clock)->ca);
+				verbose(VERB_DEBUG, "Kernel clock: last vcounter= %llu p= %.9lg Ca= %.9Lf",
+						RAD_DATA(tmp_clock)->last_changed, 
+						RAD_DATA(tmp_clock)->phat, RAD_DATA(tmp_clock)->ca);
 			}
 			radclock_destroy(tmp_clock);
 		}
@@ -510,12 +516,13 @@ int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 	print_out_files(clock_handle, &stamp);
 	
 	/* View updated RADclock data and compare with NTP server stamps in nice
-	 * format. The first 10 then every 6 hours.
+	 * format. The first 10 then every 6 hours (poll_period can change, but
+	 * should be fine with a long term average, do not have to be very precise
+	 * anyway).
 	 */
 	poll_period = ((struct bidir_peer*)(clock_handle->active_peer))->poll_period;
 	if (VERB_LEVEL &&   ( (OUTPUT(clock_handle, n_stamps) < 10)
 					|| !(OUTPUT(clock_handle, n_stamps) % ((int)(3600*6/poll_period))) )) 
-//					|| !((((struct bidir_output*)clock_handle->algo_output)->n_stamps)%100)) ) 
 	{
 		radclock_vcount_to_abstime_fp(clock_handle, &(RAD_DATA(clock_handle)->last_changed), &currtime);
 		radclock_get_min_RTT(clock_handle, &min_RTT);

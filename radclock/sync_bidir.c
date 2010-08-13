@@ -1145,9 +1145,12 @@ int process_plocal_full(struct bidir_peer* peer, struct radclock* clock_handle,
 		return 0;
 	}
 
-	/* if quality looks good, continue but refuse to update if result looks insane */
-// TODO: why testing current stamp->qual_warning since current stamp may not be
-// either stamp_near or stamp_far
+	/* if quality looks good, continue but refuse to update if result looks
+	 * insane. qual_warning may not apply to stamp_near or stamp_far, but we
+	 * still follow the logic "there is something strange going on in here".
+	 * Also, plocal searches in two windows for best stamps, which is a decent
+	 * damage control.
+	 */
 	if ( (fabs(peer->plocal-plocal)/peer->plocal > peer->Eplocal_sanity) || qual_warning) {
 		if (qual_warning)  
 			verbose(VERB_QUALITY, "qual_warning received, i=%lu, following sanity check for plocal", peer->stamp_i);
