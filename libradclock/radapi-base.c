@@ -185,7 +185,7 @@ int radclock_IPC_client_connect(struct radclock* clock_handle)
 
 	/* Set a timeout on the recv side to avoid blocking for lost packets */
 	so_timeout.tv_sec = 0;
-	so_timeout.tv_usec = 25000;	/* 25 ms, should be more than enough */
+	so_timeout.tv_usec = 10000;	/* 10 ms, should be more than enough */
 	setsockopt(s_client, SOL_SOCKET, SO_RCVTIMEO, (void*)(&so_timeout), sizeof(struct timeval)); 
 
 	/* Need to bind the datagram socket, otherwise the server does not 
@@ -287,7 +287,7 @@ void radclock_destroy(struct radclock *handle)
  */
 int radclock_read_IPCclock(struct radclock *handle, int req_type)
 {
-	int max_retries 	= 1; /* set to the number of times to retry on EAGAIN */
+	int max_retries 	= 5; /* set to the number of times to retry on EAGAIN */
 	int valid_message 	= 0;
 	int n;
 
@@ -320,17 +320,33 @@ int radclock_read_IPCclock(struct radclock *handle, int req_type)
  	 */
 	do
 	{
-		n = recv(handle->ipc_socket, (void*)(&reply), sizeof(struct ipc_reply), MSG_DONTWAIT);
-		//if we haven't received a message, yeild to let the server send one!
-		max_retries--;
-		if (!valid_message && n < 0) {
-			sched_yield();
+		/* We have not yet received a valid message, recv with a timeout */
+		if(!valid_message){ 
+
+			n = recv(handle->ipc_socket, (void*)(&reply), sizeof(struct ipc_reply), NULL);
+		
+		/* We have received a valid message, clear the buffer quickly (no timeout) */
+		} else {
+			
+			n = recv(handle->ipc_socket, (void*)(&reply), sizeof(struct ipc_reply), MSG_DONTWAIT);
+		
 		}
-		else if ( n <0)
-			continue;
-		else
-		{
+
+		/* if we haven't received a message, yeild to let the server send one! */
+		if (!valid_message && n < 0) {
+		
+			sched_yield();
+		
+		/* If we fall into this case, we have received a valid  message, and the read buffer is empty, work done, time to leave. */
+		} else if ( n < 0){
+			
+			break;	
+
+		/* A very basic check that we might have the correct data */
+		} else if( n == sizeof(struct ipc_reply) && reply.reply_type == req_type){
+
 			valid_message = 1;
+
 			/* Update requested data */
 			switch (reply.reply_type)
 			{
@@ -345,8 +361,8 @@ int radclock_read_IPCclock(struct radclock *handle, int req_type)
 					break;
 			}
 		}
-	} while(n >0 || (errno == EAGAIN && max_retries >0));
 
+	} while(n > 0 || (max_retries-- > 0));
 	/* Check reply */
 
 	return valid_message ? 0 : 1;

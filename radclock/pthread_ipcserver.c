@@ -165,7 +165,7 @@ void* thread_ipc_server(void *c_handle)
 					
 					/* If the local_valid_till has expired, get new virtual data */
 					radclock_get_vcounter(clock_handle, &vcount);
-					if(vcount > local_valid_till){
+					if(vcount > local_valid_till || vcount < RAD_DATA(clock_handle)->last_changed){
 						RAD_VM(clock_handle)->pull_data(clock_handle);
 						
 						/* If despite the update, the valid_till is still stale, increment our local_valid_till */
