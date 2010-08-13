@@ -397,7 +397,7 @@ int radclock_check_outdated(struct radclock* handle, vcounter_t *vc, int req_typ
 	switch (update_mode)
 	{
 		case RADCLOCK_UPDATE_AUTO:
-			if ( !now )
+			if ( !vc )
 			{
 				/* Some API functions just need to get the clock params and do
 				 * not provide a vcounter
