@@ -12,6 +12,18 @@
 #include <sys/time.h>
 #include <sys/sysproto.h>
 #include <sys/bus.h>
+#include <sys/sysctl.h>
+
+
+/*
+ * Sysctl
+ */
+static int sysctl_version = 1;
+
+SYSCTL_NODE(_kern, OID_AUTO, ffclock, CTLFLAG_RW, 0, "Feed-Forward Clock Support");
+SYSCTL_INT(_kern_ffclock, OID_AUTO, version, CTLFLAG_RD, &sysctl_version, 0, "Version of Feed-Forward Clock Support");
+
+
 
 
 /*
