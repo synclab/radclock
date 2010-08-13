@@ -81,6 +81,7 @@ struct radclock * radclock_create(void)
 	clock->local_period_mode 	= RADCLOCK_LOCAL_PERIOD_ON;
 	clock->run_mode 			= RADCLOCK_SYNC_NOTSET;
 	clock->ipc_mode 			= RADCLOCK_IPC_CLIENT;
+	clock->ipc_requests			= 0;
 
 	/* Network Protocol related stuff */
 	clock->client_data 	= NULL;
@@ -338,7 +339,7 @@ int radclock_read_IPCclock(struct radclock *handle, int req_type)
 			sched_yield();
 		
 		/* If we fall into this case, we have received a valid  message, and the read buffer is empty, work done, time to leave. */
-		} else if ( n < 0){
+		} else if (valid_message && n < 0){
 			
 			break;	
 

@@ -58,7 +58,7 @@ void* thread_ipc_server(void *c_handle)
 	clock_handle = (struct radclock*) c_handle;
 	
 	/* Local valid till, vcount, to regulate virtual store updates */
-	vcounter_t local_valid_till, vcount;
+	vcounter_t valid_till_snooze, vcount;
 
 	/* Exchanged messages */
 	struct ipc_request request;
@@ -124,7 +124,7 @@ void* thread_ipc_server(void *c_handle)
 	/* Do an initial update of the RADclock data, set local to valid till */
 	if(VM_SLAVE(clock_handle)){
 		RAD_VM(clock_handle)->pull_data(clock_handle);
-		local_valid_till = RAD_DATA(clock_handle)->valid_till;
+		valid_till_snooze = RAD_DATA(clock_handle)->valid_till;
 	}
 
 	while ( (clock_handle->pthread_flag_stop & PTH_IPC_SERV_STOP) != PTH_IPC_SERV_STOP )
@@ -157,20 +157,26 @@ void* thread_ipc_server(void *c_handle)
 
 				if(VM_SLAVE(clock_handle)){
 					
-					/* If our local_valid_till is older than the global one, align valid_till's
+					if(clock_handle->ipc_requests++ > 10){
+						RAD_VM(clock_handle)->pull_data(clock_handle);
+						clock_handle->ipc_requests = 0;
+					}
+
+					/* If our valid_till_snooze is older than the global one, align valid_till's
 					 * Having this as a first check allows for something else updating the RADclock data */
-					if(local_valid_till < RAD_DATA(clock_handle)->valid_till){
-						local_valid_till = RAD_DATA(clock_handle)->valid_till;
+					if(valid_till_snooze < RAD_DATA(clock_handle)->valid_till){
+						valid_till_snooze = RAD_DATA(clock_handle)->valid_till;
 					}
 					
-					/* If the local_valid_till has expired, get new virtual data */
+					/* If the valid_till_snooze has expired, get new virtual data */
 					radclock_get_vcounter(clock_handle, &vcount);
-					if(vcount > local_valid_till || vcount < RAD_DATA(clock_handle)->last_changed){
+					if(vcount > valid_till_snooze || vcount < RAD_DATA(clock_handle)->last_changed){
 						RAD_VM(clock_handle)->pull_data(clock_handle);
+						clock_handle->ipc_requests = 0;
 						
-						/* If despite the update, the valid_till is still stale, increment our local_valid_till */
-						if(RAD_DATA(clock_handle)->valid_till < local_valid_till){
-							local_valid_till += (RAD_DATA(clock_handle)->valid_till - RAD_DATA(clock_handle)->last_changed) / 100;
+						/* If despite the update, the valid_till is still stale, increment our valid_till_snooze by one second */
+						if(RAD_DATA(clock_handle)->valid_till < valid_till_snooze){
+							valid_till_snooze += 1 / RAD_DATA(clock_handle)->phat;
 						}
 					}
 				}
