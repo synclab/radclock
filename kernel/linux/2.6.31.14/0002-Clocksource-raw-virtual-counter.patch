@@ -1,23 +1,26 @@
-From 31262faf21b26d4bbbc04bc5717f610bb0bd4331 Mon Sep 17 00:00:00 2001
+From 2d8c91956bb0fc596a4beb5fe53607c4da03e5a7 Mon Sep 17 00:00:00 2001
 From: Julien Ridoux <julien@synclab.org>
-Date: Tue, 17 Aug 2010 17:02:54 +1000
+Date: Wed, 18 Aug 2010 05:54:55 +0000
 Subject: [PATCH RADclock 2/9] Clocksource raw virtual counter
 
-Implement a vcounter_t cumulative counter to track consistent increment
-of the selected clocksource.
+Implement a vcounter_t to support feed-forward paradigm.
+If the hardware counter is reliable and wide enough, the
+pass-through mode can be use.
+Otherwise, default to a cumulative counter to track
+consistent increments of the selected clocksource.
 Provides data structure supprot and access via the read_vcounter()
-function. So far, counter implemented on 64 bits.
+function. The pass-through mode is tunable via sysfs
 ---
- include/linux/clocksource.h |   17 +++++++
- kernel/time/clocksource.c   |   94 +++++++++++++++++++++++++++++++++++++
- kernel/time/timekeeping.c   |  107 +++++++++++++++++++++++++++++++++++++++++++
- 3 files changed, 218 insertions(+), 0 deletions(-)
+ include/linux/clocksource.h |   21 ++++++++
+ kernel/time/clocksource.c   |   94 ++++++++++++++++++++++++++++++++++++
+ kernel/time/timekeeping.c   |  112 +++++++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 227 insertions(+), 0 deletions(-)
 
 diff --git a/include/linux/clocksource.h b/include/linux/clocksource.h
-index a23c293..7031a00 100644
+index a23c293..40bd62e 100644
 --- a/include/linux/clocksource.h
 +++ b/include/linux/clocksource.h
-@@ -195,6 +195,19 @@ struct clocksource {
+@@ -195,6 +195,23 @@ struct clocksource {
  	 * more than one cache line.
  	 */
  	cycle_t cycle_last ____cacheline_aligned_in_smp;
@@ -27,6 +30,10 @@ index a23c293..7031a00 100644
 +	 */
 +	vcounter_t vcounter_record;
 +	vcounter_t vcounter_source_record;
++	/* Use of cumulative counter if the underlying hardware wraps up.
++	 * If we have a wide and reliable counter, pass the hardware reading
++	 * through. This is tunable via sysfs
++	 */
 +#define VCOUNTER_PT_NO		0
 +#define VCOUNTER_PT_TONO	1
 +#define VCOUNTER_PT_YES		2
@@ -37,7 +44,7 @@ index a23c293..7031a00 100644
  	u64 xtime_nsec;
  	s64 error;
  	struct timespec raw_time;
-@@ -398,4 +411,8 @@ static inline void update_vsyscall_tz(void)
+@@ -398,4 +415,8 @@ static inline void update_vsyscall_tz(void)
  }
  #endif
  
@@ -47,7 +54,7 @@ index a23c293..7031a00 100644
 +
  #endif /* _LINUX_CLOCKSOURCE_H */
 diff --git a/kernel/time/clocksource.c b/kernel/time/clocksource.c
-index 7466cb8..d5f7e31 100644
+index 7466cb8..ce913c8 100644
 --- a/kernel/time/clocksource.c
 +++ b/kernel/time/clocksource.c
 @@ -130,6 +130,9 @@ static LIST_HEAD(clocksource_list);
@@ -69,11 +76,11 @@ index 7466cb8..d5f7e31 100644
 +#ifdef CONFIG_RADCLOCK
 +/**
 + * sysfs_show_passthrough_clocksource - sysfs interface for showing vcounter
-+ * reading mode 
++ * reading mode
 + * @dev:	unused
 + * @buf:	char buffer to be filled with passthrough mode
 + *
-+ * Provides sysfs interface for showing vcounter reading mode 
++ * Provides sysfs interface for showing vcounter reading mode
 + */
 +static ssize_t
 +sysfs_show_passthrough_clocksource(struct sys_device *dev,
@@ -104,7 +111,7 @@ index 7466cb8..d5f7e31 100644
 + * sysfs_override_passthrough_clocksource - interface for manually overriding
 + * the vcounter passthrough mode
 + * @dev:	unused
-+ * @buf:	new value of passthrough mode (0 or 1)	
++ * @buf:	new value of passthrough mode (0 or 1)
 + * @count:	length of buffer
 + *
 + * Takes input from sysfs interface for manually overriding the vcounter
@@ -131,10 +138,10 @@ index 7466cb8..d5f7e31 100644
 +	override_passthrough[count] = 0;
 +
 +	if ( !strcmp(override_passthrough, "0"))
-+		curr_clocksource->vcounter_passthrough = VCOUNTER_PT_TOYES;
-+		   
-+	if ( !strcmp(override_passthrough, "1"))
 +		curr_clocksource->vcounter_passthrough = VCOUNTER_PT_TONO;
++
++	if ( !strcmp(override_passthrough, "1"))
++		curr_clocksource->vcounter_passthrough = VCOUNTER_PT_TOYES;
 +
 +	spin_unlock_irq(&clocksource_lock);
 +
@@ -173,10 +180,10 @@ index 7466cb8..d5f7e31 100644
  }
  
 diff --git a/kernel/time/timekeeping.c b/kernel/time/timekeeping.c
-index e8c77d9..7ac8b22 100644
+index e8c77d9..f7672f7 100644
 --- a/kernel/time/timekeeping.c
 +++ b/kernel/time/timekeeping.c
-@@ -58,6 +58,63 @@ void update_xtime_cache(u64 nsec)
+@@ -58,6 +58,69 @@ void update_xtime_cache(u64 nsec)
  
  struct clocksource *clock;
  
@@ -196,10 +203,8 @@ index e8c77d9..7ac8b22 100644
 +}
 +
 +/**
-+ * read_vcounter - retrieve the current value of the vcounter
-+ *
-+ * Return the value of the cumulative count of cycles to functions
-+ * within the kernel.
++ * read_vcounter_cumulative - compute the current value of the cumulative
++ * vcounter. This assumes the hardware wraps up (small counter)
 + *
 + */
 +vcounter_t read_vcounter_cumulative(struct clocksource *cs)
@@ -215,6 +220,10 @@ index e8c77d9..7ac8b22 100644
 +	return vcount;
 +}
 +
++/**
++ * read_vcounter_passthrough - the vcounter relies on the underlying hardware
++ * counter. Direct reads from hardware, required for virtual OS (e.g. Xen)
++ */
 +vcounter_t read_vcounter_passthrough(struct clocksource *cs)
 +{
 +	unsigned long seq;
@@ -229,6 +238,10 @@ index e8c77d9..7ac8b22 100644
 +}
 +
 +
++/**
++ * read_vcounter - Return the value of the vcounter to functions within the
++ * kernel.
++ */
 +vcounter_t read_vcounter(void)
 +{
 +	return clock->read_vcounter(clock);
@@ -240,7 +253,7 @@ index e8c77d9..7ac8b22 100644
  
  #ifdef CONFIG_GENERIC_TIME
  /**
-@@ -191,6 +248,24 @@ static void change_clocksource(void)
+@@ -191,6 +254,23 @@ static void change_clocksource(void)
  {
  	struct clocksource *new, *old;
  
@@ -249,12 +262,11 @@ index e8c77d9..7ac8b22 100644
 +	 * Change the way we access the counter associated to the clocksource
 +	 * xtime_lock is held.
 +	 */
-+	unsigned long seq;
 +	if (clock->vcounter_passthrough == VCOUNTER_PT_TOYES)
 +	{
 +		clock->read_vcounter = &read_vcounter_passthrough;
 +		clock->vcounter_passthrough = VCOUNTER_PT_YES;
-+	}	
++	}
 +	if (clock->vcounter_passthrough == VCOUNTER_PT_TONO)
 +	{
 +		clock->read_vcounter = &read_vcounter_cumulative;
@@ -265,7 +277,7 @@ index e8c77d9..7ac8b22 100644
  	new = clocksource_get_next();
  
  	if (clock == new)
-@@ -208,6 +283,20 @@ static void change_clocksource(void)
+@@ -208,6 +288,20 @@ static void change_clocksource(void)
  
  	clock->cycle_last = 0;
  	clock->cycle_last = clocksource_read(clock);
@@ -286,7 +298,7 @@ index e8c77d9..7ac8b22 100644
  	clock->error = 0;
  	clock->xtime_nsec = 0;
  	clocksource_calculate_interval(clock, NTP_INTERVAL_LENGTH);
-@@ -308,6 +397,13 @@ void __init timekeeping_init(void)
+@@ -308,6 +402,13 @@ void __init timekeeping_init(void)
  	clocksource_calculate_interval(clock, NTP_INTERVAL_LENGTH);
  	clock->cycle_last = clocksource_read(clock);
  
@@ -300,7 +312,7 @@ index e8c77d9..7ac8b22 100644
  	xtime.tv_sec = sec;
  	xtime.tv_nsec = 0;
  	set_normalized_timespec(&wall_to_monotonic,
-@@ -494,6 +590,10 @@ void update_wall_time(void)
+@@ -494,6 +595,10 @@ void update_wall_time(void)
  {
  	cycle_t offset;
  
@@ -311,7 +323,7 @@ index e8c77d9..7ac8b22 100644
  	/* Make sure we're fully resumed: */
  	if (unlikely(timekeeping_suspended))
  		return;
-@@ -503,6 +603,13 @@ void update_wall_time(void)
+@@ -503,6 +608,13 @@ void update_wall_time(void)
  #else
  	offset = clock->cycle_interval;
  #endif
@@ -326,5 +338,5 @@ index e8c77d9..7ac8b22 100644
  
  	/* normally this loop will run just once, however in the
 -- 
-1.6.0.4
+1.5.6.5
 

@@ -1,6 +1,6 @@
-From 1f0fce668e14cc08b97fe734e7f901e8e913a392 Mon Sep 17 00:00:00 2001
+From 623bc8a44b4745f499809d6a9766e88ccd81a943 Mon Sep 17 00:00:00 2001
 From: Julien Ridoux <julien@synclab.org>
-Date: Tue, 17 Aug 2010 17:44:02 +1000
+Date: Wed, 18 Aug 2010 06:40:20 +0000
 Subject: [PATCH RADclock 7/9] RADclock packets timestamps
 
 Create raw vcounter and fair timeval timestamps on incoming and outgoing
@@ -120,5 +120,5 @@ index 26a86a6..4b03278 100644
  		return NET_RX_SUCCESS;
  
 -- 
-1.6.0.4
+1.5.6.5
 
