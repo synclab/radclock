@@ -49,10 +49,10 @@
  */
 
 
-int found_ffwd_kernel(void) 
+int found_ffwd_kernel_version(void) 
 {
 	logger(RADLOG_WARNING, "Feed-Forward Kernel support not compiled.");
-	return 0;
+	return -1;
 }
 
 int radclock_init_vcounter_syscall(struct radclock *handle)

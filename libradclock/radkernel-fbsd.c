@@ -88,7 +88,7 @@ struct vcount_bpf_hdr
 
 
 
-int found_ffwd_kernel(void) 
+int found_ffwd_kernel_version (void) 
 {
 	int ret;
 	int	tsmode;
@@ -100,12 +100,12 @@ int found_ffwd_kernel(void)
 	if (ret == -1) 
 	{
 		logger(RADLOG_NOTICE, "No Feed-Forward kernel support detected");
-		return 0;
+		return -1;
 	}
 	else
 	{
-		logger(RADLOG_NOTICE, "Feed-Forward kernel support detected");
-		return 1;
+		logger(RADLOG_NOTICE, "Feed-Forward kernel support detected (version 0)");
+		return 0;
 	}
 }
 

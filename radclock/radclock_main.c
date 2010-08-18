@@ -789,7 +789,7 @@ int main (int argc, char *argv[])
 	}
 	else {
 		/* We are running live so should make sure we have some kernel support here */	
-		if (!found_ffwd_kernel())
+		if (found_ffwd_kernel_version() < 0)
 		{
 			verbose(LOG_ERR, "The RADclock does not run live without kernel support");
 			return 1;

@@ -119,6 +119,7 @@ fi
 dnl OS detection
 os=unknown
 osversion=unknown
+ffsupportversion=unknown
 case `uname -a` in
 	Linux*)
 		os=linux
@@ -140,28 +141,28 @@ AC_ARG_WITH([radclock-kernel],
 if test "$tscexts" = "no"; then	
 case "$os" in
 	linux)
-		if test -e  /proc/sys/net/core/radclock_default_tsmode ; then
+		if test -e /sys/devices/system/ffclock/ffclock0/version; then
 			tscexts=yes
+			ffsupportversion=`cat /sys/devices/system/ffclock/ffclock0/version`
+		else
+			if test -e  /proc/sys/net/core/radclock_default_tsmode ; then
+				tscexts=yes
+				ffsupportversion=0
+			fi
 		fi
 		;;
+
 	freebsd)
-		case "$osversion" in
-			# Sysctl for 6.x and 7.x kernels 
-			6* | 7* )
-				ext=`sysctl -n net.bpf.bpf_radclock_tsmode`
-				if test $ext ; then
-					tscexts=yes
-				fi
-				;;
-
-			8* )
-				ext=`sysctl -n net.bpf.bpf_radclock_tsmode`
-				if test $ext ; then
-					tscexts=yes
-				fi
-				;;
-
-		esac
+		ffsupportversion=`sysctl -n kern.ffclock.version`
+		if test $ffsupportversion ; then
+			tscexts=yes
+		else
+			ext=`sysctl -n net.bpf.bpf_radclock_tsmode`
+			if test $ext ; then
+				tscexts=yes
+				ffsupportversion=0
+			fi
+		fi
 		;;
 esac
 fi
@@ -383,7 +384,7 @@ AC_MSG_NOTICE([----------------------------------------])
 AC_MSG_NOTICE([RADClock version $PACKAGE_VERSION])
 AC_MSG_NOTICE([Found target arch: $target_cpu])
 AC_MSG_NOTICE([Compiling for $os])
-AC_MSG_NOTICE([Detected kernel RADClock extensions: $tscexts])
+AC_MSG_NOTICE([Detected kernel RADClock extensions: $tscexts (version: $ffsupportversion)])
 AC_MSG_NOTICE([Detected kernel access channel: $kernel_channel])
 if test "$os" = linux
 then

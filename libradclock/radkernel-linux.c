@@ -104,25 +104,38 @@ static int resolve_family(const char *family_name);
 
 
 
-int found_ffwd_kernel (void) 
+int found_ffwd_kernel_version (void) 
 {
 	/* 
 	 * It seems the sysctl inteface is quite broken in Linux
 	 * Let's do it this way.
 	 * TODO: improve/ correct the use of the proc filesystem in the future
 	 */
+	int version = 0;
 	FILE *fd = NULL;
-	fd = fopen ("/proc/sys/net/core/radclock_default_tsmode", "r");
-	if (!fd)
+
+	fd = fopen ("/sys/devices/system/ffclock/ffclock0/version", "r");
+	if (fd)
 	{
-		logger(RADLOG_NOTICE, "No Feed-Forward kernel support detected");
-		return 0;
+		fscanf(fd, "%d", &version);
+		fclose(fd);
+		logger(RADLOG_NOTICE, "Feed-Forward kernel support detected (version: %d)", version);
+		return version;
 	}
-	else 
-	{
-		fclose(fd);	
-		logger(RADLOG_NOTICE, "Feed-Forward kernel support detected");
-		return 1;
+
+	else {
+		fd = fopen ("/proc/sys/net/core/radclock_default_tsmode", "r");
+		if (!fd)
+		{
+			logger(RADLOG_NOTICE, "No Feed-Forward kernel support detected");
+			return -1;
+		}
+		else 
+		{
+			fclose(fd);	
+			logger(RADLOG_NOTICE, "Feed-Forward kernel support detected (version 0)");
+			return 0;
+		}
 	}
 }
 

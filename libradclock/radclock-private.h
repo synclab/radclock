@@ -279,7 +279,7 @@ struct ipc_reply {
  * Detect possible kernel support for the RADclock prior initialisation 
  * @return The run mode the clock should be initialise to 
  */
-int found_ffwd_kernel(void);
+int found_ffwd_kernel_version(void);
 
 
 /**
