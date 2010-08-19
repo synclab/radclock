@@ -70,8 +70,8 @@ struct radclock * radclock_create(void)
 	RAD_VM(clock)->push_data = NULL; 
 	RAD_VM(clock)->pull_data = NULL;
 
-
 	/* Default values before calling init */
+	clock->kernel_version		= -1;
 	clock->is_daemon 			= 0;
 	clock->ipc_socket 			= -1;
 	clock->ipc_socket_path 		= (char*) malloc(strlen(IPC_SOCKET_CLIENT)+strlen("socket")+20);

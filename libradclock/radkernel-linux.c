@@ -103,6 +103,51 @@
 static int resolve_family(const char *family_name);
 
 
+/* Need to check that the passthrough mode is enabled and that the counter can
+ * do the job. The latter is a bit "hard coded"
+ */
+int has_vm_vcounter(void)
+{
+	int passthrough_counter = 0;
+	char clocksource[32];
+	FILE *fd = NULL;
+
+	fd = fopen ("/sys/devices/system/clocksource/clocksource0/passthrough_clocksource", "r");
+	if (!fd)
+	{
+		logger(RADLOG_ERR, "Cannot open passthrough_clocksource from sysfs");
+		return 0;
+	}
+	fscanf(fd, "%d", &passthrough_counter);
+	fclose(fd);
+
+	if ( passthrough_counter == 0)
+	{
+		logger(RADLOG_ERR, "Clocksource not in pass-through mode. Cannot init virtual machine mode");
+		return 0;
+	}
+	logger(RADLOG_NOTICE, "Found clocksource in pass-through mode");
+
+
+	fd = fopen ("/sys/devices/system/clocksource/clocksource0/current_clocksource", "r");
+	if (!fd)
+	{
+		logger(RADLOG_WARNING, "Cannot open current_clocksource from sysfs");
+		return 1;
+	}
+	fscanf(fd, "%s", &clocksource[0]);
+	fclose(fd);
+
+	if ( (strcmp(clocksource, "tsc") != 0) && (strcmp(clocksource, "xen") != 0) )
+		logger(RADLOG_WARNING, "Clocksource is neither tsc nor xen. "
+				"There must be something wrong!!");
+	else
+		logger(RADLOG_WARNING, "Clocksource is %s", clocksource);
+
+	return 1;
+}
+
+
 
 int found_ffwd_kernel_version (void) 
 {
@@ -123,19 +168,18 @@ int found_ffwd_kernel_version (void)
 		return version;
 	}
 
-	else {
-		fd = fopen ("/proc/sys/net/core/radclock_default_tsmode", "r");
-		if (!fd)
-		{
-			logger(RADLOG_NOTICE, "No Feed-Forward kernel support detected");
-			return -1;
-		}
-		else 
-		{
-			fclose(fd);	
-			logger(RADLOG_NOTICE, "Feed-Forward kernel support detected (version 0)");
-			return 0;
-		}
+	/* This is the old way we used before explicit versioning */
+	fd = fopen ("/proc/sys/net/core/radclock_default_tsmode", "r");
+	if (fd)
+	{
+		fclose(fd);	
+		logger(RADLOG_NOTICE, "Feed-Forward kernel support detected (version 0)");
+		return 0;
+	}
+	else 
+	{
+		logger(RADLOG_NOTICE, "No Feed-Forward kernel support detected");
+		return -1;
 	}
 }
 

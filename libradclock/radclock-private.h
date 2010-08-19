@@ -165,6 +165,7 @@ struct radclock
 		struct radclock_impl_bsd 	bsd_data;
 		struct radclock_impl_linux 	linux_data;
 	};
+	int kernel_version;
 
 	/* UNIX signals */
 	unsigned int unix_signal;
@@ -352,6 +353,8 @@ inline int extract_vcount_stamp(
 
 
 int radclock_init_vcounter_syscall(struct radclock *handle);
+
+int has_vm_vcounter(void);
 
 int init_virtual_machine_mode(struct radclock *clock_handle);
 

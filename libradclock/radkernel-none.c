@@ -49,6 +49,12 @@
  */
 
 
+int has_vm_counter(void)
+{
+	return -ENOENT;
+}
+
+
 int found_ffwd_kernel_version(void) 
 {
 	logger(RADLOG_WARNING, "Feed-Forward Kernel support not compiled.");

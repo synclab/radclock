@@ -460,10 +460,8 @@ int radclock_init_specific (struct radclock *clock_handle)
 			return 1;
 	}
 
-	err = init_virtual_machine_mode(clock_handle);
-	if (err < 0)
-		return -1;
-
+	if ( init_virtual_machine_mode(clock_handle) )
+		return 1;
 
 	/* Initial status words */
 	// TODO there should be more of them set in here
@@ -510,7 +508,6 @@ int main (int argc, char *argv[])
 
 	/* Misc */
 	int err;
-
 
 	/* turn off buffering to allow results to be seen immediately if JDEBUG*/
 	#ifdef WITH_JDEBUG
@@ -789,11 +786,25 @@ int main (int argc, char *argv[])
 	}
 	else {
 		/* We are running live so should make sure we have some kernel support here */	
-		if (found_ffwd_kernel_version() < 0)
+		clock_handle->kernel_version = found_ffwd_kernel_version();
+		switch ( clock_handle->kernel_version )
 		{
-			verbose(LOG_ERR, "The RADclock does not run live without kernel support");
-			return 1;
+			case 1:
+				break;	
+
+			case 0:
+				verbose(LOG_WARNING, "The Feed-Forward kernel support is a bit old. "
+						"You should update your kernel.");
+				break;
+
+			case -1:
+			default:
+				verbose(LOG_ERR, "The RADclock does not run live without "
+						"Feed-Forward kernel support");
+				return 1;
 		}
+
+		/* Passed kernel support and version check */
 		clock_handle->run_mode = RADCLOCK_SYNC_LIVE;
 
 		/* Manually signal we are the radclock algo and that we have to serve global data to the

@@ -39,8 +39,11 @@
 #define XENSTORE_PATH "/local/radclock"
 #endif
 
+
+
 int
-init_xenstore(struct radclock *clock_handle){
+init_xenstore(struct radclock *clock_handle)
+{
 	JDEBUG
 #ifdef WITH_XENSTORE
 	struct xs_handle *xs;
@@ -77,8 +80,11 @@ init_xenstore(struct radclock *clock_handle){
 	return NOXENSUPPORT;
 #endif
 }
+
+
 int
-push_data_xen(struct radclock *clock_handle){
+push_data_xen(struct radclock *clock_handle)
+{
 	JDEBUG
 #ifdef WITH_XENSTORE
 	struct xs_handle *xs;
@@ -161,12 +167,31 @@ int push_data_none(struct radclock *clock_handle)
 int init_virtual_machine_mode(struct radclock *clock_handle)
 {
 	JDEBUG
+
+	/* If does not run as a VM_*, quick init and return */	
+	if ( clock_handle->conf->virtual_machine == VM_NONE )
+	{
+		RAD_VM(clock_handle)->pull_data = &pull_data_none;
+		RAD_VM(clock_handle)->push_data = &push_data_none;
+		return 0;
+	}
+
+	/* Check if the kernel is capable of doing all this */
+	if (clock_handle->kernel_version < 1 )
+	{
+		verbose(LOG_ERR, "Virtual machine mode requires Feed-Forward kernel "
+				"support version 1 or above");
+		return 1;
+	}
+
+	/* Do some checks on kernel / counters available.
+	 * We need reliable counter, wide, and common to virtual master and slave
+	 */
+	if ( !has_vm_vcounter() )
+		return 1;
+
 	switch ( clock_handle->conf->virtual_machine )
 	{
-		case VM_NONE:
-			RAD_VM(clock_handle)->pull_data = &pull_data_none;
-			RAD_VM(clock_handle)->push_data = &push_data_none;
-			break;
 
 		case VM_XEN_MASTER:
 
@@ -202,9 +227,10 @@ int init_virtual_machine_mode(struct radclock *clock_handle)
 		case VM_VBOX_SLAVE:
 			break;
 
+		case VM_NONE:
 		default:
 			verbose(LOG_ERR, "Unknown virtual machine mode during init.");
-			return -1;
+			return 1;
 	}
 	return 0;
 }

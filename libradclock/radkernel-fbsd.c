@@ -87,25 +87,75 @@ struct vcount_bpf_hdr
 
 
 
+/* Need to check that the passthrough mode is enabled and that the counter can
+ * do the job. The latter is a bit "hard coded"
+ */
+int has_vm_vcounter(void)
+{
+	int ret;
+	int	passthrough_counter = 0;
+	char timecounter[32];
+	size_t size_ctl;
+
+	size_ctl = sizeof(passthrough_counter);
+	ret = sysctlbyname("kern.timecounter.passthrough", &passthrough_counter, &size_ctl, NULL, 0);
+	if (ret == -1)
+	{
+		logger(RADLOG_ERR, "Cannot find kern.timecounter.passthrough in sysctl");
+		return 0;
+	}
+
+	if ( passthrough_counter == 0)
+	{
+		logger(RADLOG_ERR, "Timecounter not in pass-through mode. Cannot init virtual machine mode");
+		return 0;
+	}
+	logger(RADLOG_NOTICE, "Found timecounter in pass-through mode");
+
+	size_ctl = sizeof(timecounter);
+	ret = sysctlbyname("kern.timecounter.hardware", &timecounter[0], &size_ctl, NULL, 0);
+	if (ret == -1)
+	{
+		logger(RADLOG_ERR, "Cannot find kern.timecounter.hardware in sysctl");
+		return 0;
+	}
+
+	if ( (strcmp(timecounter, "TSC") != 0) && (strcmp(timecounter, "ixen") != 0) )
+		logger(RADLOG_WARNING, "Timecounter is neither TSC nor ixen. "
+				"There must be something wrong!!");
+	else
+		logger(RADLOG_WARNING, "Timecounter is %s", timecounter);
+
+	return 1;
+}
+
 
 int found_ffwd_kernel_version (void) 
 {
 	int ret;
-	int	tsmode;
+	int	version;
 	size_t size_ctl;
 
-	size_ctl = sizeof(tsmode);
-	ret = sysctlbyname("net.bpf.bpf_radclock_tsmode", &tsmode, &size_ctl, NULL, 0);
-
-	if (ret == -1) 
+	size_ctl = sizeof(version);
+	ret = sysctlbyname("kern.ffclock.version", &version, &size_ctl, NULL, 0);
+	
+	if ( ret == 0 )
 	{
-		logger(RADLOG_NOTICE, "No Feed-Forward kernel support detected");
-		return -1;
+		logger(RADLOG_NOTICE, "Feed-Forward kernel support detected (version: %d)", version);
+		return version;
 	}
-	else
+
+	/* This is the old way we used before explicit versioning */
+	ret = sysctlbyname("net.bpf.bpf_radclock_tsmode", &version, &size_ctl, NULL, 0);
+	if (ret == 0) 
 	{
 		logger(RADLOG_NOTICE, "Feed-Forward kernel support detected (version 0)");
 		return 0;
+	}
+	else
+	{
+		logger(RADLOG_NOTICE, "No Feed-Forward kernel support detected");
+		return -1;
 	}
 }
 
