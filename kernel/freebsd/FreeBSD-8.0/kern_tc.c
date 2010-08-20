@@ -193,20 +193,34 @@ tc_delta(struct timehands *th)
  */
 
 #ifdef RADCLOCK
+static int sysctl_kern_timecounter_passthrough = 0;
+SYSCTL_INT(_kern_timecounter, OID_AUTO, passthrough, CTLFLAG_RW,
+	&sysctl_kern_timecounter_passthrough, 0,
+	"Select universal Feed-Forward timecounter for OS virtualization");
+
 vcounter_t
 read_vcounter(void)
 {
+	struct timecounter *tc;
 	struct timehands *th;
 	u_int gen, delta;
 	vcounter_t vcount;
-	do{
-		th = timehands;
-		gen = th->th_generation;
-		delta = tc_delta(th);
-		vcount = th->vcounter_record;
-	} while ( gen == 0 || gen != th->th_generation);
 
-	return(vcount + delta);
+	if ( sysctl_kern_timecounter_passthrough )
+	{
+		tc = timehands->th_counter;
+		return tc->tc_get_timecount(tc);
+	}
+	else {
+		do{
+			th = timehands;
+			gen = th->th_generation;
+			delta = tc_delta(th);
+			vcount = th->vcounter_record;
+		} while ( gen == 0 || gen != th->th_generation);
+
+		return(vcount + delta);
+	}
 }
 #endif	/* RADCLOCK */
 
