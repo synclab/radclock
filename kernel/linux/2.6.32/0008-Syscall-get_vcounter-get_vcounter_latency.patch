@@ -1,6 +1,6 @@
-From 7173980086dfe43843d106458dfbda9af36d7a77 Mon Sep 17 00:00:00 2001
+From f3906c17a741ad731405d4da4cb4d03be64b5405 Mon Sep 17 00:00:00 2001
 From: Julien Ridoux <julien@synclab.org>
-Date: Thu, 21 Jan 2010 16:10:47 +1100
+Date: Mon, 30 Aug 2010 20:32:35 +1000
 Subject: [PATCH RADclock 8/9] Syscall get_vcounter get_vcounter_latency
 
 Add get_vcounter() and get_vcounter_latency syscalls to access the

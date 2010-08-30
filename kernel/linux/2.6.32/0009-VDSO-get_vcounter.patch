@@ -1,6 +1,6 @@
-From 34d9128d7b0f909f9153b6bdac5b222d39b150c6 Mon Sep 17 00:00:00 2001
+From a61bf69720025e8646e450662bae0dd22a88a433 Mon Sep 17 00:00:00 2001
 From: Julien Ridoux <julien@synclab.org>
-Date: Thu, 21 Jan 2010 16:15:52 +1100
+Date: Mon, 30 Aug 2010 20:32:59 +1000
 Subject: [PATCH RADclock 9/9] VDSO get_vcounter
 
 Support for VDSO get_vcounter() for accessing the raw cumulative

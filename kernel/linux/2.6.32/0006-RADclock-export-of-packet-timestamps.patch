@@ -1,6 +1,6 @@
-From 51e80448b3e1ad52ae8bcd30eec3ddf8af4fb793 Mon Sep 17 00:00:00 2001
+From 70675fdcb4f773d43e2170c05b83305cf63a1d6a Mon Sep 17 00:00:00 2001
 From: Julien Ridoux <julien@synclab.org>
-Date: Thu, 21 Jan 2010 15:45:29 +1100
+Date: Mon, 30 Aug 2010 20:26:18 +1000
 Subject: [PATCH RADclock 6/9] RADclock export of packet timestamps
 
 IOCTL or PACKET_MMAP interfaces for passing timestamps to user space
