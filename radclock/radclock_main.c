@@ -464,8 +464,12 @@ int radclock_init_specific (struct radclock *clock_handle)
 		return 1;
 
 	/* Initial status words */
-	// TODO there should be more of them set in here
-	ADD_STATUS(clock_handle, STARAD_STARVING);
+	// TODO there should be more of them set in here, some are for live and dead
+	// runs, but not all!
+	if (clock_handle->run_mode == RADCLOCK_SYNC_LIVE)
+	{
+		ADD_STATUS(clock_handle, STARAD_STARVING);
+	}
 	
 	/* Create directory to store pid lock file and ipc socket */
 	if (  (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER) 
