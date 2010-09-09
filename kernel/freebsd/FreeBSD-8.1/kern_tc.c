@@ -209,7 +209,10 @@ read_vcounter(void)
 	if ( sysctl_kern_timecounter_passthrough )
 	{
 		tc = timehands->th_counter;
-		return tc->tc_get_timecount(tc);
+		if (tc->tc_get_timecount_64)
+			return tc->tc_get_timecount_64(tc);
+		else
+			return 0;
 	}
 	else {
 		do{
@@ -386,7 +389,13 @@ tc_init(struct timecounter *tc)
 		    tc->tc_name, (uintmax_t)tc->tc_frequency,
 		    tc->tc_quality);
 	}
-
+#ifdef RADCLOCK
+	/* XXX this is a super ugly hack to cover my back */
+	if ( (strcmp(tc->tc_name, "TSC") != 0) && (strcmp(tc->tc_name, "ixen") != 0) )
+	{
+		tc->tc_get_timecount_64 = NULL;
+	}
+#endif
 	tc->tc_next = timecounters;
 	timecounters = tc;
 	/*
