@@ -824,10 +824,13 @@ int main (int argc, char *argv[])
 	}
 
 	/* Init clock handle and private data */
-	if (radclock_init(clock_handle))
-	{
-		verbose(LOG_ERR, "Could not initialise the RADclock");
-		return 1;
+	if (clock_handle->run_mode == RADCLOCK_SYNC_LIVE )
+	{ 
+		if (radclock_init(clock_handle))
+		{
+			verbose(LOG_ERR, "Could not initialise the RADclock");
+			return 1;
+		}
 	}
 	
 	/* Init radclock specific stuff */
