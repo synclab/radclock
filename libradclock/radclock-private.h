@@ -224,6 +224,9 @@ struct radclock
 
 	/* Synchronisation Peers */
 	void *active_peer; 	/* Peers are of different nature (bidir, oneway) will cast */
+	
+	/* Read Feed-Forward counter */
+	int (*get_vcounter) (struct radclock *handle, vcounter_t *vcount);
 };
 
 
@@ -352,10 +355,14 @@ inline int extract_vcount_stamp(
 
 
 
-int radclock_init_vcounter_syscall(struct radclock *handle);
 
 int has_vm_vcounter(void);
-
 int init_virtual_machine_mode(struct radclock *clock_handle);
+
+int radclock_init_vcounter_syscall(struct radclock *handle);
+int radclock_init_vcounter(struct radclock *handle);
+int radclock_get_vcounter_syscall(struct radclock *handle, vcounter_t *vcount);
+int radclock_get_vcounter_rdtsc(struct radclock *handle, vcounter_t *vcount);
+
 
 #endif

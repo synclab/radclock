@@ -169,25 +169,79 @@ int radclock_init_vcounter_syscall(struct radclock *handle)
 	stat.version = sizeof(stat);
 	err = modstat(modfind("get_vcounter"), &stat);
 	if (err < 0 ) {
-		logger(RADLOG_ERR, "error on modstat (get_vcounter syscall): %s", strerror(errno));
+		logger(RADLOG_ERR, "Error on modstat (get_vcounter syscall): %s", strerror(errno));
 		logger(RADLOG_ERR, "Is the radclock kernel module loaded?");
 		return -1;
 	}
 	handle->syscall_get_vcounter = stat.data.intval;
-	logger(RADLOG_NOTICE, "registered get_vcounter syscall at %d", handle->syscall_get_vcounter);
+	logger(RADLOG_NOTICE, "Registered get_vcounter syscall at %d", handle->syscall_get_vcounter);
 
 	stat.version = sizeof(stat);
 	err = modstat(modfind("get_vcounter_latency"), &stat);
 	if (err < 0 ) {
-		logger(RADLOG_ERR, "error on modstat (get_vcounter_latency syscall): %s", strerror(errno));
+		logger(RADLOG_ERR, "Error on modstat (get_vcounter_latency syscall): %s", strerror(errno));
 		logger(RADLOG_ERR, "Is the radclock kernel module loaded?");
 		return -1;
 	}
 	handle->syscall_get_vcounter_latency = stat.data.intval;
-	logger(RADLOG_NOTICE, "registered get_vcounter_latency syscall at %d", handle->syscall_get_vcounter_latency);
+	logger(RADLOG_NOTICE, "Registered get_vcounter_latency syscall at %d", handle->syscall_get_vcounter_latency);
 
 	return 0;
 }
+
+
+/* 
+ * Check to see if we can use fast rdtsc() timestamping from userland.
+ * Otherwise fall back to syscalls
+ */
+int radclock_init_vcounter(struct radclock *handle)
+{
+	int ret;
+	int	passthrough_counter = 0;
+	char timecounter[32];
+	size_t size_ctl;
+
+	size_ctl = sizeof(passthrough_counter);
+	ret = sysctlbyname("kern.timecounter.passthrough", &passthrough_counter, &size_ctl, NULL, 0);
+	if (ret == -1)
+	{
+		logger(RADLOG_ERR, "Cannot find kern.timecounter.passthrough in sysctl");
+		return -1;
+	}
+
+	size_ctl = sizeof(timecounter);
+	ret = sysctlbyname("kern.timecounter.hardware", &timecounter[0], &size_ctl, NULL, 0);
+	if (ret == -1)
+	{
+		logger(RADLOG_ERR, "Cannot find kern.timecounter.hardware in sysctl");
+		return -1;
+	}
+	logger(RADLOG_NOTICE, "Timecounter used is %s", timecounter);
+
+	if ( passthrough_counter == 0)
+	{
+		handle->get_vcounter = &radclock_get_vcounter_syscall;
+		logger(RADLOG_NOTICE, "Initialising radclock_get_vcounter with syscall.");
+		return 0;
+	}
+
+	if (strcmp(timecounter, "TSC") == 0)
+	{
+		handle->get_vcounter = &radclock_get_vcounter_rdtsc;
+		logger(RADLOG_NOTICE, "Initialising radclock_get_vcounter using rdtsc(). "
+						"* Make sure TSC is reliable *");
+	}
+	else
+	{
+		handle->get_vcounter = &radclock_get_vcounter_syscall;
+		logger(RADLOG_NOTICE, "Initialising radclock_get_vcounter using syscall.");
+	}
+
+	return 0;
+}
+
+
+
 
 
 // XXX XXX XXX XXX XXX XXX XXX XXX XXX XXX 

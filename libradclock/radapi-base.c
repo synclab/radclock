@@ -117,6 +117,9 @@ struct radclock * radclock_create(void)
 
 	clock->stamp_source = NULL;
 
+	/* vcounter */
+	clock->get_vcounter = NULL;
+
 	return clock;
 }
 
@@ -229,6 +232,10 @@ int radclock_init(struct radclock *clock_handle)
 	}
 
 	err = radclock_init_vcounter_syscall(clock_handle);
+	if ( err < 0 )
+		return -1;
+
+	err = radclock_init_vcounter(clock_handle);
 	if ( err < 0 )
 		return -1;
 

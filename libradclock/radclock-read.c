@@ -20,7 +20,6 @@
 
 #include "../config.h"
 
-/* LINUX */
 #if defined (__linux__)
 #define _GNU_SOURCE
 #endif
@@ -29,14 +28,51 @@
 #include <sys/syscall.h>
 #include <sys/types.h>
 
+
+#if defined (__FreeBSD__)
+# ifdef HAVE_RDTSC
+#  ifdef HAVE_MACHINE_CPUFUNC_H
+#   include <machine/cpufunc.h>
+#  else
+#   error "FreeBSD with rdtsc() defined but no machine/cpufunc.h header"
+#  endif
+# else
+static inline uint64_t
+rdtsc(void)
+{
+    u_int32_t low, high;
+    __asm __volatile("rdtsc" : "=a" (low), "=d" (high));
+    return (low | ((u_int64_t)high << 32));
+}
+# endif
+#endif
+
+
+
+
+
 #include <string.h>
 #include <errno.h>
-#include <radclock.h>
-#include <radclock-private.h>
+
+#include "radclock.h"
+#include "radclock-private.h"
 #include "logger.h"
 
 
 int radclock_get_vcounter(struct radclock *handle, vcounter_t *vcount)
+{
+	return handle->get_vcounter(handle, vcount);
+}
+
+
+int radclock_get_vcounter_rdtsc(struct radclock *handle, vcounter_t *vcount)
+{
+	*vcount = rdtsc();
+	return 0;
+}
+
+
+int radclock_get_vcounter_syscall(struct radclock *handle, vcounter_t *vcount)
 {
 	int ret;
 	if (vcount == NULL)
@@ -50,6 +86,9 @@ int radclock_get_vcounter(struct radclock *handle, vcounter_t *vcount)
 	}
 	return 0;
 }
+
+
+
 
 int radclock_get_vcounter_latency(struct radclock *handle, vcounter_t *vcount, vcounter_t *vcount_lat, tsc_t *tsc_lat)
 {
@@ -79,17 +118,6 @@ int radclock_get_vcounter_latency(struct radclock *handle, vcounter_t *vcount, v
  * There are also some uncertainties ... why does rdtscll on linux returns crazy results?
  * There is work to do to have a complete coverage of all possibilities ...
  */
-
-#if defined (__FreeBSD__)
-#ifdef HAVE_MACHINE_CPUFUNC_H
-	#include <machine/cpufunc.h>
-#else
-	#ifdef HAVE_RDTSC
-	#error "FreeBSD with rdtsc() defined but no machine/cpufunc.h header"
-	#endif
-#endif
-#endif
-
 
 
 

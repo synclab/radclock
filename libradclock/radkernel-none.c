@@ -49,7 +49,7 @@
  */
 
 
-int has_vm_counter(void)
+int has_vm_vcounter(void)
 {
 	return -ENOENT;
 }
