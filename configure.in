@@ -77,7 +77,7 @@ AC_HEADER_TIME
 AC_SYS_LARGEFILE
 
 AC_PROG_GCC_TRADITIONAL
-AC_CHECK_FUNCS(socket strdup strlcpy mkstemps mkstemp rdtsc rdtscll)
+AC_CHECK_FUNCS(socket strdup strlcpy mkstemps mkstemp)
 
 dnl Check requires types. Error output if not correct.
 AC_CHECK_SIZEOF([int])
@@ -85,8 +85,37 @@ AC_CHECK_SIZEOF([long long int])
 
 
 dnl XXX TODO XXX: a few of them are not needed anymore 
-AC_CHECK_HEADERS(pcap.h pcap-bpf.h net/bpf.h zlib.h sys/limits.h stddef.h inttypes.h limits.h net/ethernet.h ifaddrs.h machine/cpufunc.h asm/msr.h asm-x86_64/msr.h asm-x86/msr.h)
+dnl AC_CHECK_HEADERS(pcap.h pcap-bpf.h net/bpf.h zlib.h sys/limits.h stddef.h inttypes.h limits.h net/ethernet.h ifaddrs.h machine/cpufunc.h asm/msr.h asm-x86_64/msr.h asm-x86/msr.h)
+AC_CHECK_HEADERS(pcap.h pcap-bpf.h net/bpf.h zlib.h sys/limits.h stddef.h inttypes.h limits.h net/ethernet.h ifaddrs.h)
 
+
+dnl rdtsc() detection. Always messy, different for OS detected by autoconf
+case $target_os in
+
+	freebsd*)
+		AC_CHECK_HEADERS([sys/types.h])
+		AC_CHECK_HEADERS([machine/cpufunc.h], [], [],
+		[#ifdef HAVE_SYS_TYPES_H
+		 #include <sys/types.h>
+		 #endif
+		])
+		AC_CHECK_DECL([rdtsc],
+			[AC_DEFINE([HAVE_RDTSC], [1],[Define to 1 if you have rdtsc()])],
+			[],
+			[#include <sys/types.h>
+		 	#include <machine/cpufunc.h>
+			]
+		)
+		;;
+
+	linux*)
+		echo "Something do do in here !!"
+		AC_CHECK_HEADERS([ asm/msr.h asm-x86_64/msr.h asm-x86/msr.h ])
+	 ;;
+
+	*)
+	;;
+esac
 
 
 
@@ -305,7 +334,7 @@ fi
        
 if test "$os" = linux; then
 #not common header, use our own
-	AC_CHECK_HEADER(linux/genetlink.h, AC_DEFINE([HAVE_LINUX_GENETLINK_H], [],[Use a system copy of linux/genetlink.h]), AC_DEFINE([WITH_LOCAL_GENETLINK_H], [],[Use a local copy of linux/genetlink.h]))
+	AC_CHECK_HEADER(linux/genetlink.h, AC_DEFINE([HAVE_LINUX_GENETLINK_H], [1],[Define to 1 if you hane linux/genetlink.h]), AC_DEFINE([WITH_LOCAL_GENETLINK_H], [],[Use a local copy of linux/genetlink.h]))
 	AC_CHECK_HEADER(netlink/netlink.h,, netlink=no)
 	AC_CHECK_HEADER(linux/netlink.h,, netlink=no)
 	AC_CHECK_LIB(nl,nl_handle_alloc,, netlink=no)
