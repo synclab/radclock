@@ -359,7 +359,7 @@ index 0000000..bc8ff84
 +int sysfs_ffclock_tsmode = RADCLOCK_TSMODE_SYSCLOCK;
 +
 +/**
-+ * sysfs_show_ffclock_tsmode- sysfs interface to get ffclock timestamping mode 
++ * sysfs_show_ffclock_tsmode- sysfs interface to get ffclock timestamping mode
 + * @dev:	unused
 + * @buf:	char buffer to be filled with passthrough mode
 + *
@@ -388,13 +388,13 @@ index 0000000..bc8ff84
 +
 +/**
 + * sysfs_change_ffclock_tsmode - interface for manually changing the default
-+ * timestamping mode 
++ * timestamping mode
 + * @dev:	unused
-+ * @buf:	new value of passthrough mode (0 or 1)	
++ * @buf:	new value of passthrough mode (0 or 1)
 + * @count:	length of buffer
 + *
 + * Takes input from sysfs interface for manually changing the default
-+ * timestamping mode. 
++ * timestamping mode.
 + */
 +static ssize_t sysfs_change_ffclock_tsmode(struct sys_device *dev,
 +					  struct sysdev_attribute *attr,
