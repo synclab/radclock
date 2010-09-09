@@ -27,6 +27,13 @@
 #include <unistd.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
+#include <string.h>
+#include <errno.h>
+
+#include "radclock.h"
+#include "radclock-private.h"
+#include "logger.h"
+
 
 
 #if defined (__FreeBSD__)
@@ -49,14 +56,52 @@ rdtsc(void)
 
 
 
+#if defined (__linux__)
+
+#if defined (HAVE_RDTSCLL)
+/* if we have it, must be one of these headers */
+#if HAVE_ASM_MSR_H
+# include <asm/msr.h>
+#elif HAVE_ASM_X86_MSR_H
+# include <asm-x86/msr.h>
+#elif HAVE_ASM_X86_64_MSR_H
+# include <asm-x86_64/msr.h>
+#endif
+#ifndef rdtscll
+#error "rdtscll() exist but we didn't include the correct header?"
+#endif
+#define linux_rdtscll(val) rdtscll(val)
+
+#else /* HAVE_RDTSCLL not defined  */
 
 
-#include <string.h>
-#include <errno.h>
+#ifdef __x86_64__
+	/* So we 64 bits machine and no header ... black magic area */
+	#define linux_rdtscll(val) do { \
+		unsigned int __a,__d; \
+		asm volatile("rdtsc" : "=a" (__a), "=d" (__d)); \
+		(val) = ((unsigned long)__a) | (((unsigned long)__d)<<32); \
+	} while(0)
+#endif
 
-#include "radclock.h"
-#include "radclock-private.h"
-#include "logger.h"
+# ifdef __i386__
+	#define linux_rdtscll(val) __asm__ __volatile__("rdtsc" : "=A" (val))
+#endif
+
+#endif
+
+uint64_t
+rdtsc(void)
+{
+    uint64_t val;
+    linux_rdtscll(val);
+    return val;
+}
+
+#endif
+
+
+
 
 
 int radclock_get_vcounter(struct radclock *handle, vcounter_t *vcount)
@@ -119,42 +164,6 @@ int radclock_get_vcounter_latency(struct radclock *handle, vcounter_t *vcount, v
  * There is work to do to have a complete coverage of all possibilities ...
  */
 
-
-
-#if defined (__linux__)
-
-#if defined (HAVE_RDTSCLL)
-/* if we have it, must be one of these headers */
-#if HAVE_ASM_MSR_H
-# include <asm/msr.h>
-#elif HAVE_ASM_X86_MSR_H
-# include <asm-x86/msr.h>
-#elif HAVE_ASM_X86_64_MSR_H
-# include <asm-x86_64/msr.h>
-#endif
-#ifndef rdtscll
-#error "rdtscll() exist but we didn't include the correct header?"
-#endif
-#define linux_rdtscll(val) rdtscll(val)
-
-#else /* HAVE_RDTSCLL not defined  */
-
-
-#ifdef __x86_64__
-	/* So we 64 bits machine and no header ... black magic area */
-	#define linux_rdtscll(val) do { \
-		unsigned int __a,__d; \
-		asm volatile("rdtsc" : "=a" (__a), "=d" (__d)); \
-		(val) = ((unsigned long)__a) | (((unsigned long)__d)<<32); \
-	} while(0)
-#endif
-
-# ifdef __i386__
-	#define linux_rdtscll(val) __asm__ __volatile__("rdtsc" : "=A" (val))
-#endif
-
-#endif
-#endif
 
 /* We first want to define the rdtsc function for OS or distro that do not provide one.
  * Also, some distributions replaced the asm-i385/msr.h by the asm-x86_64/msr.h version.

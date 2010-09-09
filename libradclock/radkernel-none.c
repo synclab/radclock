@@ -68,6 +68,12 @@ int radclock_init_vcounter_syscall(struct radclock *handle)
 	return 0;
 }
 
+int radclock_init_vcounter(struct radclock *handle)
+{
+	handle->get_vcounter = NULL;
+	return 0;
+}
+
 int radclock_init_kernel_support(struct radclock *handle)
 {
 	return -ENOENT;
