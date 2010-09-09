@@ -106,17 +106,16 @@ static int	bpf_setif(struct bpf_d *, struct ifreq *);
 static void	bpf_timed_out(void *);
 static __inline void
 		bpf_wakeup(struct bpf_d *);
-/* RADCLOCK
- * Replace catchpacket by our new prototype ...
- * static void	catchpacket(struct bpf_d *, u_char *, u_int,
- *		    u_int, void (*)(const void *, void *, size_t),
- *		    struct timeval *);
- */
+#ifdef RADCLOCK
+static void radclock_fill_timeval(vcounter_t vcounter, struct timeval *time);
 static void	catchpacket(struct bpf_d *, u_char *, u_int,
 		    u_int, void (*)(const void *, void *, size_t),
 			struct timeval *, vcounter_t *);
-static void radclock_fill_timeval(vcounter_t vcounter, struct timeval *time);
-/* end RADCLOCK */
+#else
+static void	catchpacket(struct bpf_d *, u_char *, u_int,
+		    u_int, void (*)(const void *, void *, size_t),
+		    struct timeval *);
+#endif
 static void	reset_d(struct bpf_d *);
 static int	 bpf_setf(struct bpf_d *, struct bpf_program *, u_long cmd);
 static int	bpf_getdltlist(struct bpf_d *, struct bpf_dltlist *);
@@ -1394,7 +1393,7 @@ bpf_tap(struct bpf_if *bp, u_char *pkt, u_int pktlen)
 #ifdef RADCLOCK
 				catchpacket(d, pkt, pktlen, slen, bcopy, &tv, &vcount);
 #else
-				catchpacket(d, pkt, pktlen, slen, bcopy, &tv, NULL);
+				catchpacket(d, pkt, pktlen, slen, bcopy, &tv);
 #endif
 		}
 		BPFD_UNLOCK(d);
@@ -1491,7 +1490,7 @@ bpf_mtap(struct bpf_if *bp, struct mbuf *m)
 				    bpf_mcopy, &tv, &vcount);
 #else
 				catchpacket(d, (u_char *)m, pktlen, slen,
-				    bpf_mcopy, &tv, NULL);
+				    bpf_mcopy, &tv);
 #endif 	/* RADCLOCK */
 		}
 		BPFD_UNLOCK(d);
@@ -1561,7 +1560,7 @@ bpf_mtap2(struct bpf_if *bp, void *data, u_int dlen, struct mbuf *m)
 				    bpf_mcopy, &tv, &vcount);
 #else
 				catchpacket(d, (u_char *)&mb, pktlen, slen,
-				    bpf_mcopy, &tv, NULL);
+				    bpf_mcopy, &tv);
 #endif	/* RADCLOCK */
 		}
 		BPFD_UNLOCK(d);
@@ -1701,10 +1700,6 @@ radclock_fill_timeval(vcounter_t vcounter, struct timeval *time)
 	 * lock in here
 	 */
 }
-#else 	/* RADCLOCK */
-static void radclock_fill_timeval(vcounter_t vcounter, struct timeval *tval)
-{
-}
 #endif	/* RADCLOCK */
 
 
@@ -1715,14 +1710,15 @@ static void radclock_fill_timeval(vcounter_t vcounter, struct timeval *tval)
  * bpf_mcopy is passed in to copy mbuf chains.  In the latter case,
  * pkt is really an mbuf.
  */
-/* RADCLOCK
-static void
-catchpacket(struct bpf_d *d, u_char *pkt, u_int pktlen, u_int snaplen,
-    void (*cpfn)(const void *, void *, size_t), struct timeval *tv)
-*/
+#ifdef RADCLOCK
 static void
 catchpacket(struct bpf_d *d, u_char *pkt, u_int pktlen, u_int snaplen,
 	void (*cpfn)(const void *, void *, size_t), struct timeval *tv, vcounter_t *vcount)
+#else
+static void
+catchpacket(struct bpf_d *d, u_char *pkt, u_int pktlen, u_int snaplen,
+    void (*cpfn)(const void *, void *, size_t), struct timeval *tv)
+#endif
 {
 	struct bpf_hdr *hp;
 	int totlen, curlen;
@@ -1775,7 +1771,7 @@ catchpacket(struct bpf_d *d, u_char *pkt, u_int pktlen, u_int snaplen,
 	 */
 	hp = (struct bpf_hdr *)(d->bd_sbuf + curlen);
 
-	/* RADCLOCK */
+	#ifdef RADCLOCK
 	if (vcount == NULL) {
 		/* We have been called by a non-RADCLOCK function so
 		 * default to normal behaviour. Note: receiving side will 
@@ -1813,7 +1809,10 @@ catchpacket(struct bpf_d *d, u_char *pkt, u_int pktlen, u_int snaplen,
 			default:
 				panic("Unknown RADclock timestamping mode");
 		}
-	} /* end of RADCLOCK modification */
+	}
+	#else
+	hp->bh_tstamp = *tv;
+	#endif  /* end of RADCLOCK modification */
 
 	hp->bh_datalen = pktlen;
 	hp->bh_hdrlen = hdrlen;

@@ -5,7 +5,7 @@ julien@synclab.org
 
 diff -aur --unidirectional-new-file sys/amd64/conf/RADCLOCK.amd64 FreeBSD-7.3/amd64/conf/RADCLOCK.amd64
 --- sys/amd64/conf/RADCLOCK.amd64	1970-01-01 10:00:00.000000000 +1000
-+++ FreeBSD-7.3/amd64/conf/RADCLOCK.amd64	2010-08-13 17:10:10.000000000 +1000
++++ FreeBSD-7.3/amd64/conf/RADCLOCK.amd64	2010-09-08 16:07:07.000000000 +1000
 @@ -0,0 +1,322 @@
 +#
 +# GENERIC -- Generic kernel configuration file for FreeBSD/amd64
@@ -331,7 +331,7 @@ diff -aur --unidirectional-new-file sys/amd64/conf/RADCLOCK.amd64 FreeBSD-7.3/am
 +
 diff -aur --unidirectional-new-file sys/conf/options.amd64 FreeBSD-7.3/conf/options.amd64
 --- sys/conf/options.amd64	2010-02-10 11:26:20.000000000 +1100
-+++ FreeBSD-7.3/conf/options.amd64	2010-08-13 17:10:10.000000000 +1000
++++ FreeBSD-7.3/conf/options.amd64	2010-09-08 16:07:07.000000000 +1000
 @@ -68,3 +68,7 @@
  
  # BPF just-in-time compiler
@@ -342,7 +342,7 @@ diff -aur --unidirectional-new-file sys/conf/options.amd64 FreeBSD-7.3/conf/opti
 +
 diff -aur --unidirectional-new-file sys/conf/options.i386 FreeBSD-7.3/conf/options.i386
 --- sys/conf/options.i386	2010-02-10 11:26:20.000000000 +1100
-+++ FreeBSD-7.3/conf/options.i386	2010-08-13 17:10:10.000000000 +1000
++++ FreeBSD-7.3/conf/options.i386	2010-09-08 16:07:07.000000000 +1000
 @@ -148,3 +148,7 @@
  
  # BPF just-in-time compiler
@@ -353,7 +353,7 @@ diff -aur --unidirectional-new-file sys/conf/options.i386 FreeBSD-7.3/conf/optio
 +
 diff -aur --unidirectional-new-file sys/i386/conf/RADCLOCK.i386 FreeBSD-7.3/i386/conf/RADCLOCK.i386
 --- sys/i386/conf/RADCLOCK.i386	1970-01-01 10:00:00.000000000 +1000
-+++ FreeBSD-7.3/i386/conf/RADCLOCK.i386	2010-08-13 17:10:10.000000000 +1000
++++ FreeBSD-7.3/i386/conf/RADCLOCK.i386	2010-09-08 16:07:07.000000000 +1000
 @@ -0,0 +1,335 @@
 +#
 +# GENERIC -- Generic kernel configuration file for FreeBSD/i386
@@ -692,7 +692,7 @@ diff -aur --unidirectional-new-file sys/i386/conf/RADCLOCK.i386 FreeBSD-7.3/i386
 +#options		PPS_SYNC
 diff -aur --unidirectional-new-file sys/kern/kern_tc.c FreeBSD-7.3/kern/kern_tc.c
 --- sys/kern/kern_tc.c	2010-02-10 11:26:20.000000000 +1100
-+++ FreeBSD-7.3/kern/kern_tc.c	2010-08-13 17:10:10.000000000 +1000
++++ FreeBSD-7.3/kern/kern_tc.c	2010-09-08 16:07:07.000000000 +1000
 @@ -11,6 +11,7 @@
  __FBSDID("$FreeBSD: src/sys/kern/kern_tc.c,v 1.178.2.3.4.1 2010/02/10 00:26:20 kensmith Exp $");
  
@@ -891,7 +891,7 @@ diff -aur --unidirectional-new-file sys/kern/kern_tc.c FreeBSD-7.3/kern/kern_tc.
  		timespecadd(tsp, osp);
 diff -aur --unidirectional-new-file sys/kern/radclock.c FreeBSD-7.3/kern/radclock.c
 --- sys/kern/radclock.c	1970-01-01 10:00:00.000000000 +1000
-+++ FreeBSD-7.3/kern/radclock.c	2010-08-13 17:10:10.000000000 +1000
++++ FreeBSD-7.3/kern/radclock.c	2010-09-08 16:07:07.000000000 +1000
 @@ -0,0 +1,169 @@
 +/*
 + * System calls to access the cumulative virtual timecounter
@@ -1064,7 +1064,7 @@ diff -aur --unidirectional-new-file sys/kern/radclock.c FreeBSD-7.3/kern/radcloc
 +
 diff -aur --unidirectional-new-file sys/modules/Makefile FreeBSD-7.3/modules/Makefile
 --- sys/modules/Makefile	2010-02-10 11:26:20.000000000 +1100
-+++ FreeBSD-7.3/modules/Makefile	2010-08-13 17:10:10.000000000 +1000
++++ FreeBSD-7.3/modules/Makefile	2010-09-08 16:07:07.000000000 +1000
 @@ -2,7 +2,7 @@
  
  .include <bsd.own.mk>
@@ -1085,7 +1085,7 @@ diff -aur --unidirectional-new-file sys/modules/Makefile FreeBSD-7.3/modules/Mak
  .for reject in ${WITHOUT_MODULES}
 diff -aur --unidirectional-new-file sys/modules/radclock/Makefile FreeBSD-7.3/modules/radclock/Makefile
 --- sys/modules/radclock/Makefile	1970-01-01 10:00:00.000000000 +1000
-+++ FreeBSD-7.3/modules/radclock/Makefile	2010-08-13 17:10:10.000000000 +1000
++++ FreeBSD-7.3/modules/radclock/Makefile	2010-09-08 16:07:07.000000000 +1000
 @@ -0,0 +1,15 @@
 +# This make file creates the .ko module for retrieving the vitual counter through syscall.
 +
@@ -1104,27 +1104,25 @@ diff -aur --unidirectional-new-file sys/modules/radclock/Makefile FreeBSD-7.3/mo
 +.include <bsd.kmod.mk>
 diff -aur --unidirectional-new-file sys/net/bpf.c FreeBSD-7.3/net/bpf.c
 --- sys/net/bpf.c	2010-02-10 11:26:20.000000000 +1100
-+++ FreeBSD-7.3/net/bpf.c	2010-08-13 17:10:10.000000000 +1000
-@@ -106,9 +106,17 @@
++++ FreeBSD-7.3/net/bpf.c	2010-09-08 16:07:07.000000000 +1000
+@@ -106,9 +106,16 @@
  static void	bpf_timed_out(void *);
  static __inline void
  		bpf_wakeup(struct bpf_d *);
-+/* RADCLOCK
-+ * Replace catchpacket by our new prototype ...
-+ * static void	catchpacket(struct bpf_d *, u_char *, u_int,
-+ *		    u_int, void (*)(const void *, void *, size_t),
-+ *		    struct timeval *);
-+ */
++#ifdef RADCLOCK
++static void radclock_fill_timeval(vcounter_t vcounter, struct timeval *time);
++static void	catchpacket(struct bpf_d *, u_char *, u_int,
++		    u_int, void (*)(const void *, void *, size_t),
++			struct timeval *, vcounter_t *);
++#else
  static void	catchpacket(struct bpf_d *, u_char *, u_int,
  		    u_int, void (*)(const void *, void *, size_t),
--		    struct timeval *);
-+			struct timeval *, vcounter_t *);
-+static void radclock_fill_timeval(vcounter_t vcounter, struct timeval *time);
-+/* end RADCLOCK */
+ 		    struct timeval *);
++#endif
  static void	reset_d(struct bpf_d *);
  static int	 bpf_setf(struct bpf_d *, struct bpf_program *, u_long cmd);
  static int	bpf_getdltlist(struct bpf_d *, struct bpf_dltlist *);
-@@ -131,6 +139,11 @@
+@@ -131,6 +138,11 @@
      &bpf_maxinsns, 0, "Maximum bpf program instructions");
  SYSCTL_NODE(_net_bpf, OID_AUTO, stats, CTLFLAG_MPSAFE | CTLFLAG_RW,
      bpf_stats_sysctl, "bpf statistics portal");
@@ -1136,7 +1134,7 @@ diff -aur --unidirectional-new-file sys/net/bpf.c FreeBSD-7.3/net/bpf.c
  
  static	d_open_t	bpfopen;
  static	d_close_t	bpfclose;
-@@ -156,6 +169,14 @@
+@@ -156,6 +168,14 @@
  static struct filterops bpfread_filtops =
  	{ 1, NULL, filt_bpfdetach, filt_bpfread };
  
@@ -1151,7 +1149,7 @@ diff -aur --unidirectional-new-file sys/net/bpf.c FreeBSD-7.3/net/bpf.c
  static int
  bpf_movein(struct uio *uio, int linktype, struct ifnet *ifp, struct mbuf **mp,
      struct sockaddr *sockp, int *hdrlen, struct bpf_insn *wfilter)
-@@ -427,6 +448,11 @@
+@@ -427,6 +447,11 @@
  	callout_init(&d->bd_callout, CALLOUT_MPSAFE);
  	knlist_init_mtx(&d->bd_sel.si_note, &d->bd_mtx);
  
@@ -1163,7 +1161,7 @@ diff -aur --unidirectional-new-file sys/net/bpf.c FreeBSD-7.3/net/bpf.c
  	return (0);
  }
  
-@@ -1060,6 +1086,49 @@
+@@ -1060,6 +1085,49 @@
  	case BIOCGRSIG:
  		*(u_int *)addr = d->bd_sig;
  		break;
@@ -1213,7 +1211,7 @@ diff -aur --unidirectional-new-file sys/net/bpf.c FreeBSD-7.3/net/bpf.c
  	}
  	return (error);
  }
-@@ -1294,6 +1363,9 @@
+@@ -1294,6 +1362,9 @@
  	u_int slen;
  	int gottime;
  	struct timeval tv;
@@ -1223,7 +1221,7 @@ diff -aur --unidirectional-new-file sys/net/bpf.c FreeBSD-7.3/net/bpf.c
  
  	gottime = 0;
  	BPFIF_LOCK(bp);
-@@ -1311,12 +1383,19 @@
+@@ -1311,12 +1382,19 @@
  			d->bd_fcount++;
  			if (!gottime) {
  				microtime(&tv);
@@ -1235,16 +1233,15 @@ diff -aur --unidirectional-new-file sys/net/bpf.c FreeBSD-7.3/net/bpf.c
  #ifdef MAC
  			if (mac_check_bpfdesc_receive(d, bp->bif_ifp) == 0)
  #endif
--				catchpacket(d, pkt, pktlen, slen, bcopy, &tv);
 +#ifdef RADCLOCK
 +				catchpacket(d, pkt, pktlen, slen, bcopy, &tv, &vcount);
 +#else
-+				catchpacket(d, pkt, pktlen, slen, bcopy, &tv, NULL);
+ 				catchpacket(d, pkt, pktlen, slen, bcopy, &tv);
 +#endif
  		}
  		BPFD_UNLOCK(d);
  	}
-@@ -1365,6 +1444,10 @@
+@@ -1365,6 +1443,10 @@
  	int gottime;
  	struct timeval tv;
  
@@ -1255,7 +1252,7 @@ diff -aur --unidirectional-new-file sys/net/bpf.c FreeBSD-7.3/net/bpf.c
  	/* Skip outgoing duplicate packets. */
  	if ((m->m_flags & M_PROMISC) != 0 && m->m_pkthdr.rcvif == NULL) {
  		m->m_flags &= ~M_PROMISC;
-@@ -1393,13 +1476,23 @@
+@@ -1393,13 +1475,23 @@
  			d->bd_fcount++;
  			if (!gottime) {
  				microtime(&tv);
@@ -1274,13 +1271,12 @@ diff -aur --unidirectional-new-file sys/net/bpf.c FreeBSD-7.3/net/bpf.c
 +				    bpf_mcopy, &tv, &vcount);
 +#else
  				catchpacket(d, (u_char *)m, pktlen, slen,
--				    bpf_mcopy, &tv);
-+				    bpf_mcopy, &tv, NULL);
+ 				    bpf_mcopy, &tv);
 +#endif 	/* RADCLOCK */
  		}
  		BPFD_UNLOCK(d);
  	}
-@@ -1419,6 +1512,10 @@
+@@ -1419,6 +1511,10 @@
  	int gottime;
  	struct timeval tv;
  
@@ -1291,7 +1287,7 @@ diff -aur --unidirectional-new-file sys/net/bpf.c FreeBSD-7.3/net/bpf.c
  	/* Skip outgoing duplicate packets. */
  	if ((m->m_flags & M_PROMISC) != 0 && m->m_pkthdr.rcvif == NULL) {
  		m->m_flags &= ~M_PROMISC;
-@@ -1449,21 +1546,168 @@
+@@ -1449,21 +1545,164 @@
  			d->bd_fcount++;
  			if (!gottime) {
  				microtime(&tv);
@@ -1310,8 +1306,7 @@ diff -aur --unidirectional-new-file sys/net/bpf.c FreeBSD-7.3/net/bpf.c
 +				    bpf_mcopy, &tv, &vcount);
 +#else
  				catchpacket(d, (u_char *)&mb, pktlen, slen,
--				    bpf_mcopy, &tv);
-+				    bpf_mcopy, &tv, NULL);
+ 				    bpf_mcopy, &tv);
 +#endif	/* RADCLOCK */
  		}
  		BPFD_UNLOCK(d);
@@ -1451,38 +1446,34 @@ diff -aur --unidirectional-new-file sys/net/bpf.c FreeBSD-7.3/net/bpf.c
 +	 * lock in here
 +	 */
 +}
-+#else 	/* RADCLOCK */
-+static void radclock_fill_timeval(vcounter_t vcounter, struct timeval *tval)
-+{
-+}
 +#endif	/* RADCLOCK */
 +
 +
  /*
   * Move the packet data from interface memory (pkt) into the
   * store buffer.  "cpfn" is the routine called to do the actual data
-@@ -1471,9 +1715,14 @@
+@@ -1471,9 +1710,15 @@
   * bpf_mcopy is passed in to copy mbuf chains.  In the latter case,
   * pkt is really an mbuf.
   */
-+/* RADCLOCK
- static void
- catchpacket(struct bpf_d *d, u_char *pkt, u_int pktlen, u_int snaplen,
-     void (*cpfn)(const void *, void *, size_t), struct timeval *tv)
-+*/
++#ifdef RADCLOCK
 +static void
 +catchpacket(struct bpf_d *d, u_char *pkt, u_int pktlen, u_int snaplen,
 +	void (*cpfn)(const void *, void *, size_t), struct timeval *tv, vcounter_t *vcount)
++#else
+ static void
+ catchpacket(struct bpf_d *d, u_char *pkt, u_int pktlen, u_int snaplen,
+     void (*cpfn)(const void *, void *, size_t), struct timeval *tv)
++#endif
  {
  	struct bpf_hdr *hp;
  	int totlen, curlen;
-@@ -1525,7 +1774,47 @@
+@@ -1525,7 +1770,50 @@
  	 * Append the bpf header.
  	 */
  	hp = (struct bpf_hdr *)(d->bd_sbuf + curlen);
--	hp->bh_tstamp = *tv;
 +
-+	/* RADCLOCK */
++	#ifdef RADCLOCK
 +	if (vcount == NULL) {
 +		/* We have been called by a non-RADCLOCK function so
 +		 * default to normal behaviour. Note: receiving side will 
@@ -1520,14 +1511,17 @@ diff -aur --unidirectional-new-file sys/net/bpf.c FreeBSD-7.3/net/bpf.c
 +			default:
 +				panic("Unknown RADclock timestamping mode");
 +		}
-+	} /* end of RADCLOCK modification */
++	}
++	#else
+ 	hp->bh_tstamp = *tv;
++	#endif  /* end of RADCLOCK modification */
 +
  	hp->bh_datalen = pktlen;
  	hp->bh_hdrlen = hdrlen;
  	/*
 diff -aur --unidirectional-new-file sys/net/bpf.h FreeBSD-7.3/net/bpf.h
 --- sys/net/bpf.h	2010-02-10 11:26:20.000000000 +1100
-+++ FreeBSD-7.3/net/bpf.h	2010-08-13 17:10:10.000000000 +1000
++++ FreeBSD-7.3/net/bpf.h	2010-09-08 16:07:07.000000000 +1000
 @@ -37,9 +37,57 @@
   * $FreeBSD: src/sys/net/bpf.h,v 1.47.2.2.6.1 2010/02/10 00:26:20 kensmith Exp $
   */
@@ -1681,7 +1675,7 @@ diff -aur --unidirectional-new-file sys/net/bpf.h FreeBSD-7.3/net/bpf.h
  		bpf_tap((_ifp)->if_bpf, (_pkt), (_pktlen));	\
 diff -aur --unidirectional-new-file sys/net/bpfdesc.h FreeBSD-7.3/net/bpfdesc.h
 --- sys/net/bpfdesc.h	2010-02-10 11:26:20.000000000 +1100
-+++ FreeBSD-7.3/net/bpfdesc.h	2010-08-13 17:10:10.000000000 +1000
++++ FreeBSD-7.3/net/bpfdesc.h	2010-09-08 16:07:07.000000000 +1000
 @@ -91,6 +91,9 @@
  	u_long		bd_fcount;	/* number of packets which matched filter */
  	pid_t		bd_pid;		/* PID which created descriptor */
@@ -1694,7 +1688,7 @@ diff -aur --unidirectional-new-file sys/net/bpfdesc.h FreeBSD-7.3/net/bpfdesc.h
  /* Values for bd_state */
 diff -aur --unidirectional-new-file sys/net/if_ethersubr.c FreeBSD-7.3/net/if_ethersubr.c
 --- sys/net/if_ethersubr.c	2010-02-10 11:26:20.000000000 +1100
-+++ FreeBSD-7.3/net/if_ethersubr.c	2010-08-13 17:10:10.000000000 +1000
++++ FreeBSD-7.3/net/if_ethersubr.c	2010-09-08 16:07:07.000000000 +1000
 @@ -37,6 +37,7 @@
  #include "opt_mac.h"
  #include "opt_netgraph.h"
@@ -1751,7 +1745,7 @@ diff -aur --unidirectional-new-file sys/net/if_ethersubr.c FreeBSD-7.3/net/if_et
  	 * If the CRC is still on the packet, trim it off. We do this once
 diff -aur --unidirectional-new-file sys/sys/time.h FreeBSD-7.3/sys/time.h
 --- sys/sys/time.h	2010-02-10 11:26:20.000000000 +1100
-+++ FreeBSD-7.3/sys/time.h	2010-08-13 17:10:10.000000000 +1000
++++ FreeBSD-7.3/sys/time.h	2010-09-08 16:07:07.000000000 +1000
 @@ -297,6 +297,11 @@
  void	getnanotime(struct timespec *tsp);
  void	getmicrotime(struct timeval *tvp);
@@ -1766,7 +1760,7 @@ diff -aur --unidirectional-new-file sys/sys/time.h FreeBSD-7.3/sys/time.h
  int	itimerfix(struct timeval *tv);
 diff -aur --unidirectional-new-file sys/sys/timepps.h FreeBSD-7.3/sys/timepps.h
 --- sys/sys/timepps.h	2010-02-10 11:26:20.000000000 +1100
-+++ FreeBSD-7.3/sys/timepps.h	2010-08-13 17:10:10.000000000 +1000
++++ FreeBSD-7.3/sys/timepps.h	2010-09-08 16:07:07.000000000 +1000
 @@ -15,6 +15,8 @@
  #ifndef _SYS_TIMEPPS_H_
  #define _SYS_TIMEPPS_H_
