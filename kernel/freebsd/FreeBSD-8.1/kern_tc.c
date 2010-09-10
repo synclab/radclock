@@ -198,6 +198,15 @@ SYSCTL_INT(_kern_timecounter, OID_AUTO, passthrough, CTLFLAG_RW,
 	&sysctl_kern_timecounter_passthrough, 0,
 	"Select universal Feed-Forward timecounter for OS virtualization");
 
+
+static __inline uint64_t
+tc_get_timecount_fake64(struct timecounter *tc)
+{
+	u_int count;
+	count = tc->tc_get_timecount(tc);
+	return (uint64_t) count;
+}
+
 vcounter_t
 read_vcounter(void)
 {
@@ -209,10 +218,7 @@ read_vcounter(void)
 	if ( sysctl_kern_timecounter_passthrough )
 	{
 		tc = timehands->th_counter;
-		if (tc->tc_get_timecount_64)
-			return tc->tc_get_timecount_64(tc);
-		else
-			return 0;
+		return tc->tc_get_timecount_64(tc);
 	}
 	else {
 		do{
@@ -390,10 +396,10 @@ tc_init(struct timecounter *tc)
 		    tc->tc_quality);
 	}
 #ifdef RADCLOCK
-	/* XXX this is a super ugly hack to cover my back */
+	/* XXX this is a very ugly but good enough to cover my back */
 	if ( (strcmp(tc->tc_name, "TSC") != 0) && (strcmp(tc->tc_name, "ixen") != 0) )
 	{
-		tc->tc_get_timecount_64 = NULL;
+		tc->tc_get_timecount_64 = &tc_get_timecount_fake64;
 	}
 #endif
 	tc->tc_next = timecounters;
