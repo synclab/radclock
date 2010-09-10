@@ -3,9 +3,51 @@ Freebsd Kernel patch: FreeBSD-8.0
 Julien Ridoux
 julien@synclab.org
 
+diff -aur --unidirectional-new-file sys/amd64/amd64/tsc.c FreeBSD-8.0/amd64/amd64/tsc.c
+--- sys/amd64/amd64/tsc.c	2009-10-25 12:10:29.000000000 +1100
++++ FreeBSD-8.0/amd64/amd64/tsc.c	2010-09-10 16:21:18.000000000 +1000
+@@ -69,6 +69,18 @@
+ static	unsigned tsc_get_timecount(struct timecounter *tc);
+ static void tsc_levels_changed(void *arg, int unit);
+ 
++#ifdef RADCLOCK
++static uint64_t tsc_get_timecount_64(struct timecounter *tc);
++static struct timecounter tsc_timecounter = {
++	.tc_get_timecount = tsc_get_timecount,
++	.tc_poll_pps = 0,
++	.tc_counter_mask = ~0u,
++	.tc_frequency = 0,
++	.tc_name = "TSC",
++	.tc_quality = 800,
++	.tc_get_timecount_64 = &tsc_get_timecount_64
++};
++#else
+ static struct timecounter tsc_timecounter = {
+ 	tsc_get_timecount,	/* get_timecount */
+ 	0,			/* no poll_pps */
+@@ -77,6 +89,7 @@
+ 	"TSC",			/* name */
+ 	800,			/* quality (adjusted in code) */
+ };
++#endif
+ 
+ void
+ init_TSC(void)
+@@ -229,3 +242,11 @@
+ {
+ 	return (rdtsc());
+ }
++
++#ifdef RADCLOCK
++static uint64_t
++tsc_get_timecount_64(struct timecounter *tc)
++{
++	return (rdtsc());
++}
++#endif
 diff -aur --unidirectional-new-file sys/amd64/conf/RADCLOCK.amd64 FreeBSD-8.0/amd64/conf/RADCLOCK.amd64
 --- sys/amd64/conf/RADCLOCK.amd64	1970-01-01 10:00:00.000000000 +1000
-+++ FreeBSD-8.0/amd64/conf/RADCLOCK.amd64	2010-09-08 16:00:00.000000000 +1000
++++ FreeBSD-8.0/amd64/conf/RADCLOCK.amd64	2010-09-10 16:21:18.000000000 +1000
 @@ -0,0 +1,327 @@
 +#
 +# GENERIC -- Generic kernel configuration file for FreeBSD/amd64
@@ -336,7 +378,7 @@ diff -aur --unidirectional-new-file sys/amd64/conf/RADCLOCK.amd64 FreeBSD-8.0/am
 +
 diff -aur --unidirectional-new-file sys/conf/options.amd64 FreeBSD-8.0/conf/options.amd64
 --- sys/conf/options.amd64	2009-10-25 12:10:29.000000000 +1100
-+++ FreeBSD-8.0/conf/options.amd64	2010-09-08 16:00:00.000000000 +1000
++++ FreeBSD-8.0/conf/options.amd64	2010-09-10 16:21:19.000000000 +1000
 @@ -58,3 +58,7 @@
  BPF_JITTER		opt_bpf.h
  
@@ -347,7 +389,7 @@ diff -aur --unidirectional-new-file sys/conf/options.amd64 FreeBSD-8.0/conf/opti
 +
 diff -aur --unidirectional-new-file sys/conf/options.i386 FreeBSD-8.0/conf/options.i386
 --- sys/conf/options.i386	2009-10-25 12:10:29.000000000 +1100
-+++ FreeBSD-8.0/conf/options.i386	2010-09-08 16:00:00.000000000 +1000
++++ FreeBSD-8.0/conf/options.i386	2010-09-10 16:21:19.000000000 +1000
 @@ -116,3 +116,7 @@
  
  NATIVE			opt_global.h
@@ -356,9 +398,123 @@ diff -aur --unidirectional-new-file sys/conf/options.i386 FreeBSD-8.0/conf/optio
 +# RADclock support 
 +RADCLOCK		opt_radclock.h
 +
+diff -aur --unidirectional-new-file sys/dev/e1000/if_em.c FreeBSD-8.0/dev/e1000/if_em.c
+--- sys/dev/e1000/if_em.c	2009-10-25 12:10:29.000000000 +1100
++++ FreeBSD-8.0/dev/e1000/if_em.c	2010-09-10 16:21:18.000000000 +1000
+@@ -291,7 +291,10 @@
+ static void	em_unregister_vlan(void *, struct ifnet *, u16);
+ static void	em_setup_vlan_hw_support(struct adapter *);
+ #endif
+-static int	em_xmit(struct adapter *, struct mbuf **);
++
++// jrid
++//static int	em_xmit(struct adapter *, struct mbuf **);
++static int	em_xmit(struct adapter *, struct mbuf **, struct ifnet *);
+ static void	em_smartspeed(struct adapter *);
+ static int	em_82547_fifo_workaround(struct adapter *, int);
+ static void	em_82547_update_fifo_head(struct adapter *, int);
+@@ -1034,7 +1037,9 @@
+ 		return (error);
+ 	} else if (drbr_empty(ifp, adapter->br) &&
+ 	    (adapter->num_tx_desc_avail > EM_TX_OP_THRESHOLD)) {
+-		if ((error = em_xmit(adapter, &m)) != 0) {
++// jrid
++//		if ((error = em_xmit(adapter, &m)) != 0) {
++		if ((error = em_xmit(adapter, &m, ifp)) != 0) {
+ 			if (m != NULL)
+ 				error = drbr_enqueue(ifp, adapter->br, m);
+ 			return (error);
+@@ -1048,7 +1053,8 @@
+ 			** Send a copy of the frame to the BPF
+ 			** listener and set the watchdog on.
+ 			*/
+-			ETHER_BPF_MTAP(ifp, m);
++// jrid
++//			ETHER_BPF_MTAP(ifp, m);
+ 			adapter->watchdog_timer = EM_TX_TIMEOUT;
+ 		}
+ 	} else if ((error = drbr_enqueue(ifp, adapter->br, m)) != 0)
+@@ -1064,13 +1070,16 @@
+                 next = drbr_dequeue(ifp, adapter->br);
+                 if (next == NULL)
+                         break;
+-                if ((error = em_xmit(adapter, &next)) != 0) {
++// jrid
++//                if ((error = em_xmit(adapter, &next)) != 0) {
++                if ((error = em_xmit(adapter, &next, ifp)) != 0) {
+ 			if (next != NULL)
+ 				error = drbr_enqueue(ifp, adapter->br, next);
+                         break;
+ 		}
+ 		drbr_stats_update(ifp, next->m_pkthdr.len, next->m_flags);
+-                ETHER_BPF_MTAP(ifp, next);
++// jrid
++//                ETHER_BPF_MTAP(ifp, next);
+                 /* Set the watchdog */
+                 adapter->watchdog_timer = EM_TX_TIMEOUT;
+         }
+@@ -1139,7 +1148,10 @@
+ 		 *  Encapsulation can modify our pointer, and or make it
+ 		 *  NULL on failure.  In that event, we can't requeue.
+ 		 */
+-		if (em_xmit(adapter, &m_head)) {
++// jrid
++// To be able to call BPF_MTAP from em_xmit
++//		if (em_xmit(adapter, &m_head)) {
++		if (em_xmit(adapter, &m_head, ifp)) {
+ 			if (m_head == NULL)
+ 				break;
+ 			ifp->if_drv_flags |= IFF_DRV_OACTIVE;
+@@ -1148,7 +1160,11 @@
+ 		}
+ 
+ 		/* Send a copy of the frame to the BPF listener */
+-		ETHER_BPF_MTAP(ifp, m_head);
++// jrid
++// This call after em_xmit() does not preserve causality
++// If called before em_xmit() (which can fail) takes the risk to send 2 copies of the
++// same packet. Need to move it into em_xmit()
++//		ETHER_BPF_MTAP(ifp, m_head);
+ 
+ 		/* Set timeout in case hardware has problems transmitting. */
+ 		adapter->watchdog_timer = EM_TX_TIMEOUT;
+@@ -2064,8 +2080,10 @@
+  *  return 0 on success, positive on failure
+  **********************************************************************/
+ 
++// jrid
++//em_xmit(struct adapter *adapter, struct mbuf **m_headp)
+ static int
+-em_xmit(struct adapter *adapter, struct mbuf **m_headp)
++em_xmit(struct adapter *adapter, struct mbuf **m_headp, struct ifnet *ifp)
+ {
+ 	bus_dma_segment_t	segs[EM_MAX_SCATTER];
+ 	bus_dmamap_t		map;
+@@ -2335,6 +2353,9 @@
+ 	tx_buffer = &adapter->tx_buffer_area[first];
+ 	tx_buffer->next_eop = last;
+ 
++// jrid
++// This cannot fail
++		ETHER_BPF_MTAP(ifp, m_head);
+ 	/*
+ 	 * Advance the Transmit Descriptor Tail (TDT), this tells the E1000
+ 	 * that this frame is available to transmit.
+@@ -4286,7 +4307,10 @@
+ 		 * Set the interrupt throttling rate. Value is calculated
+ 		 * as DEFAULT_ITR = 1/(MAX_INTS_PER_SEC * 256ns)
+ 		 */
+-		E1000_WRITE_REG(&adapter->hw, E1000_ITR, DEFAULT_ITR);
++// jrid
++// Disable any type of interrupt throttling
++//		E1000_WRITE_REG(&adapter->hw, E1000_ITR, DEFAULT_ITR);
++		E1000_WRITE_REG(&adapter->hw, E1000_ITR, 0);
+ 	}
+ 
+ 	/*
 diff -aur --unidirectional-new-file sys/i386/conf/RADCLOCK.i386 FreeBSD-8.0/i386/conf/RADCLOCK.i386
 --- sys/i386/conf/RADCLOCK.i386	1970-01-01 10:00:00.000000000 +1000
-+++ FreeBSD-8.0/i386/conf/RADCLOCK.i386	2010-09-08 16:00:00.000000000 +1000
++++ FreeBSD-8.0/i386/conf/RADCLOCK.i386	2010-09-10 16:21:19.000000000 +1000
 @@ -0,0 +1,340 @@
 +#
 +# GENERIC -- Generic kernel configuration file for FreeBSD/i386
@@ -700,9 +856,104 @@ diff -aur --unidirectional-new-file sys/i386/conf/RADCLOCK.i386 FreeBSD-8.0/i386
 +
 +#enable PPS management in Kernel
 +#options		PPS_SYNC
+diff -aur --unidirectional-new-file sys/i386/i386/tsc.c FreeBSD-8.0/i386/i386/tsc.c
+--- sys/i386/i386/tsc.c	2009-10-25 12:10:29.000000000 +1100
++++ FreeBSD-8.0/i386/i386/tsc.c	2010-09-10 16:21:20.000000000 +1000
+@@ -70,6 +70,18 @@
+ static	unsigned tsc_get_timecount(struct timecounter *tc);
+ static void tsc_levels_changed(void *arg, int unit);
+ 
++#ifdef RADCLOCK
++static uint64_t tsc_get_timecount_64(struct timecounter *tc);
++static struct timecounter tsc_timecounter = {
++	.tc_get_timecount = tsc_get_timecount,
++	.tc_poll_pps = 0,
++	.tc_counter_mask = ~0u,
++	.tc_frequency = 0,
++	.tc_name = "TSC",
++	.tc_quality = 800,
++	.tc_get_timecount_64 = &tsc_get_timecount_64
++};
++#else
+ static struct timecounter tsc_timecounter = {
+ 	tsc_get_timecount,	/* get_timecount */
+ 	0,			/* no poll_pps */
+@@ -78,6 +90,7 @@
+ 	"TSC",			/* name */
+ 	800,			/* quality (adjusted in code) */
+ };
++#endif
+ 
+ void
+ init_TSC(void)
+@@ -253,3 +266,11 @@
+ {
+ 	return (rdtsc());
+ }
++
++#ifdef RADCLOCK
++static uint64_t
++tsc_get_timecount_64(struct timecounter *tc)
++{
++	return (rdtsc());
++}
++#endif
+diff -aur --unidirectional-new-file sys/i386/xen/clock.c FreeBSD-8.0/i386/xen/clock.c
+--- sys/i386/xen/clock.c	2009-10-25 12:10:29.000000000 +1100
++++ FreeBSD-8.0/i386/xen/clock.c	2010-09-10 16:21:19.000000000 +1000
+@@ -292,6 +292,19 @@
+ 
+ static	unsigned xen_get_timecount(struct timecounter *tc);
+ 
++#ifdef RADCLOCK
++static uint64_t xen_get_timecount_64(struct timecounter *tc);
++
++static struct timecounter xen_timecounter = {
++	.tc_get_timecount = xen_get_timecount,
++	.tc_poll_pps = 0,
++	.tc_counter_mask = ~0u,
++	.tc_frequency = 0,
++	.tc_name = "ixen",
++	.tc_quality = 0,
++	.tc_get_timecount_64 = &xen_get_timecount_64 
++};
++#else
+ static struct timecounter xen_timecounter = {
+ 	xen_get_timecount,	/* get_timecount */
+ 	0,			/* no poll_pps */
+@@ -300,6 +313,7 @@
+ 	"ixen",			/* name */
+ 	0			/* quality */
+ };
++#endif
+ 
+ static int
+ clkintr(void *arg)
+@@ -833,6 +847,21 @@
+ 
+ }
+ 
++#ifdef RADCLOCK
++static uint64_t
++xen_get_timecount_64(struct timecounter *tc)
++{	
++	uint64_t clk;
++	struct shadow_time_info *shadow;
++	shadow = &per_cpu(shadow_time, smp_processor_id());
++
++	__get_time_values_from_xen();
++	clk = shadow->system_timestamp + get_nsec_offset(shadow);
++
++	return clk;
++}
++#endif
++
+ /* Return system time offset by ticks */
+ uint64_t
+ get_system_time(int ticks)
 diff -aur --unidirectional-new-file sys/kern/kern_tc.c FreeBSD-8.0/kern/kern_tc.c
 --- sys/kern/kern_tc.c	2009-10-25 12:10:29.000000000 +1100
-+++ FreeBSD-8.0/kern/kern_tc.c	2010-09-08 16:00:02.000000000 +1000
++++ FreeBSD-8.0/kern/kern_tc.c	2010-09-10 16:21:19.000000000 +1000
 @@ -11,6 +11,7 @@
  __FBSDID("$FreeBSD: src/sys/kern/kern_tc.c,v 1.183.2.1.2.1 2009/10/25 01:10:29 kensmith Exp $");
  
@@ -762,7 +1013,7 @@ diff -aur --unidirectional-new-file sys/kern/kern_tc.c FreeBSD-8.0/kern/kern_tc.
  
  static struct timehands *volatile timehands = &th0;
  struct timecounter *timecounter = &dummy_timecounter;
-@@ -161,6 +192,38 @@
+@@ -161,6 +192,47 @@
   * the comment in <sys/time.h> for a description of these 12 functions.
   */
  
@@ -771,6 +1022,15 @@ diff -aur --unidirectional-new-file sys/kern/kern_tc.c FreeBSD-8.0/kern/kern_tc.
 +SYSCTL_INT(_kern_timecounter, OID_AUTO, passthrough, CTLFLAG_RW,
 +	&sysctl_kern_timecounter_passthrough, 0,
 +	"Select universal Feed-Forward timecounter for OS virtualization");
++
++
++static __inline uint64_t
++tc_get_timecount_fake64(struct timecounter *tc)
++{
++	u_int count;
++	count = tc->tc_get_timecount(tc);
++	return (uint64_t) count;
++}
 +
 +vcounter_t
 +read_vcounter(void)
@@ -783,7 +1043,7 @@ diff -aur --unidirectional-new-file sys/kern/kern_tc.c FreeBSD-8.0/kern/kern_tc.
 +	if ( sysctl_kern_timecounter_passthrough )
 +	{
 +		tc = timehands->th_counter;
-+		return tc->tc_get_timecount(tc);
++		return tc->tc_get_timecount_64(tc);
 +	}
 +	else {
 +		do{
@@ -801,7 +1061,22 @@ diff -aur --unidirectional-new-file sys/kern/kern_tc.c FreeBSD-8.0/kern/kern_tc.
  void
  binuptime(struct bintime *bt)
  {
-@@ -438,6 +501,11 @@
+@@ -323,7 +395,13 @@
+ 		    tc->tc_name, (uintmax_t)tc->tc_frequency,
+ 		    tc->tc_quality);
+ 	}
+-
++#ifdef RADCLOCK
++	/* XXX this is a very ugly but good enough to cover my back */
++	if ( (strcmp(tc->tc_name, "TSC") != 0) && (strcmp(tc->tc_name, "ixen") != 0) )
++	{
++		tc->tc_get_timecount_64 = &tc_get_timecount_fake64;
++	}
++#endif
+ 	tc->tc_next = timecounters;
+ 	timecounters = tc;
+ 	/*
+@@ -438,6 +516,11 @@
  		ncount = timecounter->tc_get_timecount(timecounter);
  	else
  		ncount = 0;
@@ -813,7 +1088,7 @@ diff -aur --unidirectional-new-file sys/kern/kern_tc.c FreeBSD-8.0/kern/kern_tc.
  	th->th_offset_count += delta;
  	th->th_offset_count &= th->th_counter->tc_counter_mask;
  	bintime_addx(&th->th_offset, th->th_scale * delta);
-@@ -482,6 +550,9 @@
+@@ -482,6 +565,9 @@
  	if (th->th_counter != timecounter) {
  		th->th_counter = timecounter;
  		th->th_offset_count = ncount;
@@ -823,7 +1098,7 @@ diff -aur --unidirectional-new-file sys/kern/kern_tc.c FreeBSD-8.0/kern/kern_tc.
  	}
  
  	/*-
-@@ -590,6 +661,10 @@
+@@ -590,6 +676,10 @@
  {
  	pps_params_t *app;
  	struct pps_fetch_args *fapi;
@@ -834,7 +1109,7 @@ diff -aur --unidirectional-new-file sys/kern/kern_tc.c FreeBSD-8.0/kern/kern_tc.
  #ifdef PPS_SYNC
  	struct pps_kcbind_args *kapi;
  #endif
-@@ -623,6 +698,19 @@
+@@ -623,6 +713,19 @@
  		pps->ppsinfo.current_mode = pps->ppsparam.mode;
  		fapi->pps_info_buf = pps->ppsinfo;
  		return (0);
@@ -854,7 +1129,7 @@ diff -aur --unidirectional-new-file sys/kern/kern_tc.c FreeBSD-8.0/kern/kern_tc.
  	case PPS_IOC_KCBIND:
  #ifdef PPS_SYNC
  		kapi = (struct pps_kcbind_args *)data;
-@@ -675,6 +763,12 @@
+@@ -675,6 +778,12 @@
  	u_int tcount, *pcount;
  	int foff, fhard;
  	pps_seq_t *pseq;
@@ -867,7 +1142,7 @@ diff -aur --unidirectional-new-file sys/kern/kern_tc.c FreeBSD-8.0/kern/kern_tc.
  
  	KASSERT(pps != NULL, ("NULL pps pointer in pps_event"));
  	/* If the timecounter was wound up underneath us, bail out. */
-@@ -689,6 +783,11 @@
+@@ -689,6 +798,11 @@
  		fhard = pps->kcmode & PPS_CAPTUREASSERT;
  		pcount = &pps->ppscount[0];
  		pseq = &pps->ppsinfo.assert_sequence;
@@ -879,7 +1154,7 @@ diff -aur --unidirectional-new-file sys/kern/kern_tc.c FreeBSD-8.0/kern/kern_tc.
  	} else {
  		tsp = &pps->ppsinfo.clear_timestamp;
  		osp = &pps->ppsparam.clear_offset;
-@@ -696,6 +795,11 @@
+@@ -696,6 +810,11 @@
  		fhard = pps->kcmode & PPS_CAPTURECLEAR;
  		pcount = &pps->ppscount[1];
  		pseq = &pps->ppsinfo.clear_sequence;
@@ -891,7 +1166,7 @@ diff -aur --unidirectional-new-file sys/kern/kern_tc.c FreeBSD-8.0/kern/kern_tc.
  	}
  
  	/*
-@@ -712,6 +816,9 @@
+@@ -712,6 +831,9 @@
  	/* Convert the count to a timespec. */
  	tcount = pps->capcount - pps->capth->th_offset_count;
  	tcount &= pps->capth->th_counter->tc_counter_mask;
@@ -901,7 +1176,7 @@ diff -aur --unidirectional-new-file sys/kern/kern_tc.c FreeBSD-8.0/kern/kern_tc.
  	bt = pps->capth->th_offset;
  	bintime_addx(&bt, pps->capth->th_scale * tcount);
  	bintime_add(&bt, &boottimebin);
-@@ -724,6 +831,11 @@
+@@ -724,6 +846,11 @@
  	*pcount = pps->capcount;
  	(*pseq)++;
  	*tsp = ts;
@@ -915,7 +1190,7 @@ diff -aur --unidirectional-new-file sys/kern/kern_tc.c FreeBSD-8.0/kern/kern_tc.
  		timespecadd(tsp, osp);
 diff -aur --unidirectional-new-file sys/kern/radclock.c FreeBSD-8.0/kern/radclock.c
 --- sys/kern/radclock.c	1970-01-01 10:00:00.000000000 +1000
-+++ FreeBSD-8.0/kern/radclock.c	2010-09-08 16:00:02.000000000 +1000
++++ FreeBSD-8.0/kern/radclock.c	2010-09-10 16:21:19.000000000 +1000
 @@ -0,0 +1,171 @@
 +/*
 + * System calls to access the cumulative virtual timecounter
@@ -1090,28 +1365,18 @@ diff -aur --unidirectional-new-file sys/kern/radclock.c FreeBSD-8.0/kern/radcloc
 +
 diff -aur --unidirectional-new-file sys/modules/Makefile FreeBSD-8.0/modules/Makefile
 --- sys/modules/Makefile	2009-10-25 12:10:29.000000000 +1100
-+++ FreeBSD-8.0/modules/Makefile	2010-09-08 16:00:03.000000000 +1000
-@@ -2,7 +2,7 @@
- 
- .include <bsd.own.mk>
- 
--SUBDIR=	${_3dfx} \
-+SUBDIR= radclock 	${_3dfx} \
- 	${_3dfx_linux} \
- 	${_aac} \
- 	accf_data \
-@@ -599,7 +599,7 @@
- .endif
- 
- .if defined(MODULES_OVERRIDE) && !defined(ALL_MODULES)
--SUBDIR=${MODULES_OVERRIDE}
-+SUBDIR= radclock ${MODULES_OVERRIDE}
- .endif
- 
- .for reject in ${WITHOUT_MODULES}
++++ FreeBSD-8.0/modules/Makefile	2010-09-10 16:21:18.000000000 +1000
+@@ -226,6 +226,7 @@
+ 	pseudofs \
+ 	${_pst} \
+ 	puc \
++	radclock \
+ 	ral \
+ 	ralfw \
+ 	${_random} \
 diff -aur --unidirectional-new-file sys/modules/radclock/Makefile FreeBSD-8.0/modules/radclock/Makefile
 --- sys/modules/radclock/Makefile	1970-01-01 10:00:00.000000000 +1000
-+++ FreeBSD-8.0/modules/radclock/Makefile	2010-09-08 16:00:03.000000000 +1000
++++ FreeBSD-8.0/modules/radclock/Makefile	2010-09-10 16:21:18.000000000 +1000
 @@ -0,0 +1,15 @@
 +# This make file creates the .ko module for retrieving the vitual counter through syscall.
 +
@@ -1130,7 +1395,7 @@ diff -aur --unidirectional-new-file sys/modules/radclock/Makefile FreeBSD-8.0/mo
 +.include <bsd.kmod.mk>
 diff -aur --unidirectional-new-file sys/net/bpf.c FreeBSD-8.0/net/bpf.c
 --- sys/net/bpf.c	2009-10-25 12:10:29.000000000 +1100
-+++ FreeBSD-8.0/net/bpf.c	2010-09-08 16:00:00.000000000 +1000
++++ FreeBSD-8.0/net/bpf.c	2010-09-10 16:21:19.000000000 +1000
 @@ -108,9 +108,16 @@
  static void	bpf_timed_out(void *);
  static __inline void
@@ -1551,7 +1816,7 @@ diff -aur --unidirectional-new-file sys/net/bpf.c FreeBSD-8.0/net/bpf.c
  	hdr.bh_caplen = totlen - hdrlen;
 diff -aur --unidirectional-new-file sys/net/bpf.h FreeBSD-8.0/net/bpf.h
 --- sys/net/bpf.h	2009-10-25 12:10:29.000000000 +1100
-+++ FreeBSD-8.0/net/bpf.h	2010-09-08 16:00:00.000000000 +1000
++++ FreeBSD-8.0/net/bpf.h	2010-09-10 16:21:19.000000000 +1000
 @@ -37,9 +37,57 @@
   * $FreeBSD: src/sys/net/bpf.h,v 1.54.2.1.2.1 2009/10/25 01:10:29 kensmith Exp $
   */
@@ -1704,7 +1969,7 @@ diff -aur --unidirectional-new-file sys/net/bpf.h FreeBSD-8.0/net/bpf.h
  		bpf_tap((_ifp)->if_bpf, (_pkt), (_pktlen));	\
 diff -aur --unidirectional-new-file sys/net/bpfdesc.h FreeBSD-8.0/net/bpfdesc.h
 --- sys/net/bpfdesc.h	2009-10-25 12:10:29.000000000 +1100
-+++ FreeBSD-8.0/net/bpfdesc.h	2010-09-08 16:00:01.000000000 +1000
++++ FreeBSD-8.0/net/bpfdesc.h	2010-09-10 16:21:19.000000000 +1000
 @@ -97,6 +97,9 @@
  	u_int64_t	bd_wfcount;	/* number of packets that matched write filter */
  	u_int64_t	bd_wdcount;	/* number of packets dropped during a write */
@@ -1717,7 +1982,7 @@ diff -aur --unidirectional-new-file sys/net/bpfdesc.h FreeBSD-8.0/net/bpfdesc.h
  /* Values for bd_state */
 diff -aur --unidirectional-new-file sys/net/if_ethersubr.c FreeBSD-8.0/net/if_ethersubr.c
 --- sys/net/if_ethersubr.c	2009-10-25 12:10:29.000000000 +1100
-+++ FreeBSD-8.0/net/if_ethersubr.c	2010-09-08 16:00:01.000000000 +1000
++++ FreeBSD-8.0/net/if_ethersubr.c	2010-09-10 16:21:19.000000000 +1000
 @@ -37,6 +37,7 @@
  #include "opt_netgraph.h"
  #include "opt_carp.h"
@@ -1774,7 +2039,7 @@ diff -aur --unidirectional-new-file sys/net/if_ethersubr.c FreeBSD-8.0/net/if_et
  	 * If the CRC is still on the packet, trim it off. We do this once
 diff -aur --unidirectional-new-file sys/sys/time.h FreeBSD-8.0/sys/time.h
 --- sys/sys/time.h	2009-10-25 12:10:29.000000000 +1100
-+++ FreeBSD-8.0/sys/time.h	2010-09-08 16:00:02.000000000 +1000
++++ FreeBSD-8.0/sys/time.h	2010-09-10 16:21:19.000000000 +1000
 @@ -304,6 +304,11 @@
  void	getnanotime(struct timespec *tsp);
  void	getmicrotime(struct timeval *tvp);
@@ -1789,7 +2054,7 @@ diff -aur --unidirectional-new-file sys/sys/time.h FreeBSD-8.0/sys/time.h
  int	itimerfix(struct timeval *tv);
 diff -aur --unidirectional-new-file sys/sys/timepps.h FreeBSD-8.0/sys/timepps.h
 --- sys/sys/timepps.h	2009-10-25 12:10:29.000000000 +1100
-+++ FreeBSD-8.0/sys/timepps.h	2010-09-08 16:00:02.000000000 +1000
++++ FreeBSD-8.0/sys/timepps.h	2010-09-10 16:21:19.000000000 +1000
 @@ -15,6 +15,8 @@
  #ifndef _SYS_TIMEPPS_H_
  #define _SYS_TIMEPPS_H_
@@ -1897,3 +2162,30 @@ diff -aur --unidirectional-new-file sys/sys/timepps.h FreeBSD-8.0/sys/timepps.h
  static __inline int
  time_pps_kcbind(pps_handle_t handle, const int kernel_consumer,
  	const int edge, const int tsformat)
+diff -aur --unidirectional-new-file sys/sys/timetc.h FreeBSD-8.0/sys/timetc.h
+--- sys/sys/timetc.h	2009-10-25 12:10:29.000000000 +1100
++++ FreeBSD-8.0/sys/timetc.h	2010-09-10 16:21:19.000000000 +1000
+@@ -16,6 +16,8 @@
+ #error "no user-serviceable parts inside"
+ #endif
+ 
++#include "opt_radclock.h"
++
+ /*-
+  * `struct timecounter' is the interface between the hardware which implements
+  * a timecounter and the MI code which uses this to keep track of time.
+@@ -62,6 +64,14 @@
+ 		/* Pointer to the timecounter's private parts. */
+ 	struct timecounter	*tc_next;
+ 		/* Pointer to the next timecounter. */
++#ifdef RADCLOCK
++	uint64_t (*tc_get_timecount_64) (struct timecounter *);
++		/*
++		 * This function reads the counter and return a 64 bit unsigned int.
++		 * It is used for the passthrough mode, required by feed-forward
++		 * clocks in a virtual system (eg. Xen)
++		 */
++#endif 
+ };
+ 
+ extern struct timecounter *timecounter;

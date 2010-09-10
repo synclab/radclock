@@ -8,7 +8,7 @@
  */
 
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD: src/sys/kern/kern_tc.c,v 1.178.2.3.2.1 2009/04/15 03:14:26 kensmith Exp $");
+__FBSDID("$FreeBSD: src/sys/kern/kern_tc.c,v 1.178.2.3.4.1 2010/02/10 00:26:20 kensmith Exp $");
 
 #include "opt_ntp.h"
 #include "opt_radclock.h"
@@ -211,20 +211,43 @@ tc_delta(struct timehands *th)
  */
 
 #ifdef RADCLOCK
+static int sysctl_kern_timecounter_passthrough = 0;
+SYSCTL_INT(_kern_timecounter, OID_AUTO, passthrough, CTLFLAG_RW,
+	&sysctl_kern_timecounter_passthrough, 0,
+	"Select universal Feed-Forward timecounter for OS virtualization");
+
+
+static __inline uint64_t
+tc_get_timecount_fake64(struct timecounter *tc)
+{
+	u_int count;
+	count = tc->tc_get_timecount(tc);
+	return (uint64_t) count;
+}
+
 vcounter_t
 read_vcounter(void)
 {
+	struct timecounter *tc;
 	struct timehands *th;
 	u_int gen, delta;
 	vcounter_t vcount;
-	do{
-		th = timehands;
-		gen = th->th_generation;
-		delta = tc_delta(th);
-		vcount = th->vcounter_record;
-	} while ( gen == 0 || gen != th->th_generation);
 
-	return(vcount + delta);
+	if ( sysctl_kern_timecounter_passthrough )
+	{
+		tc = timehands->th_counter;
+		return tc->tc_get_timecount_64(tc);
+	}
+	else {
+		do{
+			th = timehands;
+			gen = th->th_generation;
+			delta = tc_delta(th);
+			vcount = th->vcounter_record;
+		} while ( gen == 0 || gen != th->th_generation);
+
+		return(vcount + delta);
+	}
 }
 #endif	/* RADCLOCK */
 
@@ -402,7 +425,13 @@ tc_init(struct timecounter *tc)
 		    tc->tc_name, (uintmax_t)tc->tc_frequency,
 		    tc->tc_quality);
 	}
-
+#ifdef RADCLOCK
+	/* XXX this is a very ugly but good enough to cover my back */
+	if ( (strcmp(tc->tc_name, "TSC") != 0) && (strcmp(tc->tc_name, "ixen") != 0) )
+	{
+		tc->tc_get_timecount_64 = &tc_get_timecount_fake64;
+	}
+#endif
 	tc->tc_next = timecounters;
 	timecounters = tc;
 	/*

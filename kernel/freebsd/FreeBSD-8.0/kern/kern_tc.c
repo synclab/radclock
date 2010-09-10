@@ -8,7 +8,7 @@
  */
 
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD: src/sys/kern/kern_tc.c,v 1.178.2.3.4.1 2010/02/10 00:26:20 kensmith Exp $");
+__FBSDID("$FreeBSD: src/sys/kern/kern_tc.c,v 1.183.2.1.2.1 2009/10/25 01:10:29 kensmith Exp $");
 
 #include "opt_ntp.h"
 #include "opt_radclock.h"
@@ -134,24 +134,6 @@ static int timestepwarnings;
 SYSCTL_INT(_kern_timecounter, OID_AUTO, stepwarnings, CTLFLAG_RW,
     &timestepwarnings, 0, "");
 
-#ifdef TC_COUNTERS
-#define TC_STATS(foo) \
-	static u_int foo; \
-	SYSCTL_UINT(_kern_timecounter, OID_AUTO, foo, CTLFLAG_RD, &foo, 0, "");\
-	struct __hack
-
-TC_STATS(nbinuptime);    TC_STATS(nnanouptime);    TC_STATS(nmicrouptime);
-TC_STATS(nbintime);      TC_STATS(nnanotime);      TC_STATS(nmicrotime);
-TC_STATS(ngetbinuptime); TC_STATS(ngetnanouptime); TC_STATS(ngetmicrouptime);
-TC_STATS(ngetbintime);   TC_STATS(ngetnanotime);   TC_STATS(ngetmicrotime);
-TC_STATS(nsetclock);
-
-#define	TC_COUNT(var)	var++
-#undef TC_STATS
-#else
-#define	TC_COUNT(var)	/* nothing */
-#endif /* TC_COUNTERS */
-
 static void tc_windup(void);
 static void cpu_tick_calibrate(int);
 
@@ -211,20 +193,43 @@ tc_delta(struct timehands *th)
  */
 
 #ifdef RADCLOCK
+static int sysctl_kern_timecounter_passthrough = 0;
+SYSCTL_INT(_kern_timecounter, OID_AUTO, passthrough, CTLFLAG_RW,
+	&sysctl_kern_timecounter_passthrough, 0,
+	"Select universal Feed-Forward timecounter for OS virtualization");
+
+
+static __inline uint64_t
+tc_get_timecount_fake64(struct timecounter *tc)
+{
+	u_int count;
+	count = tc->tc_get_timecount(tc);
+	return (uint64_t) count;
+}
+
 vcounter_t
 read_vcounter(void)
 {
+	struct timecounter *tc;
 	struct timehands *th;
 	u_int gen, delta;
 	vcounter_t vcount;
-	do{
-		th = timehands;
-		gen = th->th_generation;
-		delta = tc_delta(th);
-		vcount = th->vcounter_record;
-	} while ( gen == 0 || gen != th->th_generation);
 
-	return(vcount + delta);
+	if ( sysctl_kern_timecounter_passthrough )
+	{
+		tc = timehands->th_counter;
+		return tc->tc_get_timecount_64(tc);
+	}
+	else {
+		do{
+			th = timehands;
+			gen = th->th_generation;
+			delta = tc_delta(th);
+			vcount = th->vcounter_record;
+		} while ( gen == 0 || gen != th->th_generation);
+
+		return(vcount + delta);
+	}
 }
 #endif	/* RADCLOCK */
 
@@ -234,7 +239,6 @@ binuptime(struct bintime *bt)
 	struct timehands *th;
 	u_int gen;
 
-	TC_COUNT(nbinuptime);
 	do {
 		th = timehands;
 		gen = th->th_generation;
@@ -248,7 +252,6 @@ nanouptime(struct timespec *tsp)
 {
 	struct bintime bt;
 
-	TC_COUNT(nnanouptime);
 	binuptime(&bt);
 	bintime2timespec(&bt, tsp);
 }
@@ -258,7 +261,6 @@ microuptime(struct timeval *tvp)
 {
 	struct bintime bt;
 
-	TC_COUNT(nmicrouptime);
 	binuptime(&bt);
 	bintime2timeval(&bt, tvp);
 }
@@ -267,7 +269,6 @@ void
 bintime(struct bintime *bt)
 {
 
-	TC_COUNT(nbintime);
 	binuptime(bt);
 	bintime_add(bt, &boottimebin);
 }
@@ -277,7 +278,6 @@ nanotime(struct timespec *tsp)
 {
 	struct bintime bt;
 
-	TC_COUNT(nnanotime);
 	bintime(&bt);
 	bintime2timespec(&bt, tsp);
 }
@@ -287,7 +287,6 @@ microtime(struct timeval *tvp)
 {
 	struct bintime bt;
 
-	TC_COUNT(nmicrotime);
 	bintime(&bt);
 	bintime2timeval(&bt, tvp);
 }
@@ -298,7 +297,6 @@ getbinuptime(struct bintime *bt)
 	struct timehands *th;
 	u_int gen;
 
-	TC_COUNT(ngetbinuptime);
 	do {
 		th = timehands;
 		gen = th->th_generation;
@@ -312,7 +310,6 @@ getnanouptime(struct timespec *tsp)
 	struct timehands *th;
 	u_int gen;
 
-	TC_COUNT(ngetnanouptime);
 	do {
 		th = timehands;
 		gen = th->th_generation;
@@ -326,7 +323,6 @@ getmicrouptime(struct timeval *tvp)
 	struct timehands *th;
 	u_int gen;
 
-	TC_COUNT(ngetmicrouptime);
 	do {
 		th = timehands;
 		gen = th->th_generation;
@@ -340,7 +336,6 @@ getbintime(struct bintime *bt)
 	struct timehands *th;
 	u_int gen;
 
-	TC_COUNT(ngetbintime);
 	do {
 		th = timehands;
 		gen = th->th_generation;
@@ -355,7 +350,6 @@ getnanotime(struct timespec *tsp)
 	struct timehands *th;
 	u_int gen;
 
-	TC_COUNT(ngetnanotime);
 	do {
 		th = timehands;
 		gen = th->th_generation;
@@ -369,7 +363,6 @@ getmicrotime(struct timeval *tvp)
 	struct timehands *th;
 	u_int gen;
 
-	TC_COUNT(ngetmicrotime);
 	do {
 		th = timehands;
 		gen = th->th_generation;
@@ -402,7 +395,13 @@ tc_init(struct timecounter *tc)
 		    tc->tc_name, (uintmax_t)tc->tc_frequency,
 		    tc->tc_quality);
 	}
-
+#ifdef RADCLOCK
+	/* XXX this is a very ugly but good enough to cover my back */
+	if ( (strcmp(tc->tc_name, "TSC") != 0) && (strcmp(tc->tc_name, "ixen") != 0) )
+	{
+		tc->tc_get_timecount_64 = &tc_get_timecount_fake64;
+	}
+#endif
 	tc->tc_next = timecounters;
 	timecounters = tc;
 	/*
@@ -460,7 +459,6 @@ tc_setclock(struct timespec *ts)
 	struct bintime bt, bt2;
 
 	cpu_tick_calibrate(1);
-	TC_COUNT(nsetclock);
 	nanotime(&tbef);
 	timespec2bintime(ts, &bt);
 	binuptime(&bt2);
@@ -960,7 +958,7 @@ tc_cpu_ticks(void)
 }
 
 /*
- * This function gets called ever 16 seconds on only one designated
+ * This function gets called every 16 seconds on only one designated
  * CPU in the system from hardclock() via tc_ticktock().
  *
  * Whenever the real time clock is stepped we get called with reset=1
