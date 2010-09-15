@@ -1,4 +1,4 @@
-From 70675fdcb4f773d43e2170c05b83305cf63a1d6a Mon Sep 17 00:00:00 2001
+From 9adc0bb885e9e8e0d116b522a516559fe9570bbc Mon Sep 17 00:00:00 2001
 From: Julien Ridoux <julien@synclab.org>
 Date: Mon, 30 Aug 2010 20:26:18 +1000
 Subject: [PATCH RADclock 6/9] RADclock export of packet timestamps
@@ -248,5 +248,5 @@ index 7565536..10a5117 100644
  			err = sock->ops->ioctl(sock, cmd, arg);
  
 -- 
-1.6.0.4
+1.5.6.5
 

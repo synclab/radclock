@@ -1,4 +1,4 @@
-From 4badbed34fdb47a1f957f54c9eec3b3565dc4794 Mon Sep 17 00:00:00 2001
+From b31bfba5cc3856fd8383acc9adb185fad5b59d0b Mon Sep 17 00:00:00 2001
 From: Julien Ridoux <julien@synclab.org>
 Date: Mon, 30 Aug 2010 20:23:13 +1000
 Subject: [PATCH RADclock 5/9] Sock vcounter support
@@ -83,5 +83,5 @@ index 57737b8..49f3eb1 100644
  		err = sock_get_timestamp(sk, (struct timeval __user *)arg);
  		break;
 -- 
-1.6.0.4
+1.5.6.5
 

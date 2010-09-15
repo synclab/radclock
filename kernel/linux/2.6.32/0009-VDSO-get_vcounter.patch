@@ -1,4 +1,4 @@
-From a61bf69720025e8646e450662bae0dd22a88a433 Mon Sep 17 00:00:00 2001
+From 26023ce26f87588ae256c1adf67319090d9abc9c Mon Sep 17 00:00:00 2001
 From: Julien Ridoux <julien@synclab.org>
 Date: Mon, 30 Aug 2010 20:32:59 +1000
 Subject: [PATCH RADclock 9/9] VDSO get_vcounter
@@ -138,5 +138,5 @@ index ee55754..d1463c9 100644
 +
 +#endif  /* CONFIG_RADCLOCK */
 -- 
-1.6.0.4
+1.5.6.5
 

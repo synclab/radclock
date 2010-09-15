@@ -1,4 +1,4 @@
-From deb7df3ab8f281b94e2f04c358c7b4c49b74dd54 Mon Sep 17 00:00:00 2001
+From 639fde3f4eadd4cb351cb5fb5ec064525275843b Mon Sep 17 00:00:00 2001
 From: Julien Ridoux <julien@synclab.org>
 Date: Mon, 30 Aug 2010 20:09:27 +1000
 Subject: [PATCH RADclock 2/9] Clocksource raw virtual counter
@@ -12,9 +12,9 @@ Provides data structure supprot and access via the read_vcounter()
 function. The pass-through mode is tunable via sysfs
 ---
  include/linux/clocksource.h |   20 +++++
- kernel/time/clocksource.c   |  180 +++++++++++++++++++++++++++++++++++++++++++
+ kernel/time/clocksource.c   |  187 +++++++++++++++++++++++++++++++++++++++++++
  kernel/time/timekeeping.c   |   15 ++++
- 3 files changed, 215 insertions(+), 0 deletions(-)
+ 3 files changed, 222 insertions(+), 0 deletions(-)
 
 diff --git a/include/linux/clocksource.h b/include/linux/clocksource.h
 index df46a1a..bd4caa6 100644
@@ -53,7 +53,7 @@ index df46a1a..bd4caa6 100644
 +
  #endif /* _LINUX_CLOCKSOURCE_H */
 diff --git a/kernel/time/clocksource.c b/kernel/time/clocksource.c
-index 5e18c6a..61743df 100644
+index 5e18c6a..4f51563 100644
 --- a/kernel/time/clocksource.c
 +++ b/kernel/time/clocksource.c
 @@ -123,6 +123,72 @@ static DEFINE_MUTEX(clocksource_mutex);
@@ -129,7 +129,7 @@ index 5e18c6a..61743df 100644
  #ifdef CONFIG_CLOCKSOURCE_WATCHDOG
  static void clocksource_watchdog_work(struct work_struct *work);
  
-@@ -452,6 +518,24 @@ static void clocksource_select(void)
+@@ -452,6 +518,31 @@ static void clocksource_select(void)
  			best = cs;
  		break;
  	}
@@ -139,13 +139,20 @@ index 5e18c6a..61743df 100644
 +	 * Keep the current passthrough mode when changing clocksource.
 +	 * If curr_clocksource == best, it is a bit useless, but simple code.
 +	 */
-+	if (curr_clocksource->vcounter_passthrough == VCOUNTER_PT_YES)
++	if (curr_clocksource)
 +	{
-+		best->read_vcounter = &read_vcounter_passthrough;
-+		best->vcounter_passthrough = VCOUNTER_PT_YES;
++		if (curr_clocksource->vcounter_passthrough == VCOUNTER_PT_YES)
++		{
++			best->read_vcounter = &read_vcounter_passthrough;
++			best->vcounter_passthrough = VCOUNTER_PT_YES;
++		}
++		if (curr_clocksource->vcounter_passthrough == VCOUNTER_PT_NO)
++		{
++			best->read_vcounter = &read_vcounter_cumulative;
++			best->vcounter_passthrough = VCOUNTER_PT_NO;
++		}
 +	}
-+	if (curr_clocksource->vcounter_passthrough == VCOUNTER_PT_NO)
-+	{
++	else {
 +		best->read_vcounter = &read_vcounter_cumulative;
 +		best->vcounter_passthrough = VCOUNTER_PT_NO;
 +	}
@@ -154,7 +161,7 @@ index 5e18c6a..61743df 100644
  	if (curr_clocksource != best) {
  		printk(KERN_INFO "Switching to clocksource %s\n", best->name);
  		curr_clocksource = best;
-@@ -643,6 +727,90 @@ sysfs_show_available_clocksources(struct sys_device *dev,
+@@ -643,6 +734,90 @@ sysfs_show_available_clocksources(struct sys_device *dev,
  	return count;
  }
  
@@ -245,7 +252,7 @@ index 5e18c6a..61743df 100644
  /*
   * Sysfs setup bits:
   */
-@@ -652,6 +820,12 @@ static SYSDEV_ATTR(current_clocksource, 0644, sysfs_show_current_clocksources,
+@@ -652,6 +827,12 @@ static SYSDEV_ATTR(current_clocksource, 0644, sysfs_show_current_clocksources,
  static SYSDEV_ATTR(available_clocksource, 0444,
  		   sysfs_show_available_clocksources, NULL);
  
@@ -258,7 +265,7 @@ index 5e18c6a..61743df 100644
  static struct sysdev_class clocksource_sysclass = {
  	.name = "clocksource",
  };
-@@ -675,6 +849,12 @@ static int __init init_clocksource_sysfs(void)
+@@ -675,6 +856,12 @@ static int __init init_clocksource_sysfs(void)
  		error = sysdev_create_file(
  				&device_clocksource,
  				&attr_available_clocksource);
@@ -312,5 +319,5 @@ index c3a4e29..0014089 100644
  	 * case of lost or late ticks, it will accumulate correctly.
  	 */
 -- 
-1.6.0.4
+1.5.6.5
 
