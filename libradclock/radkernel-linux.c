@@ -197,6 +197,68 @@ int radclock_init_vcounter_syscall(struct radclock *handle)
 }
 
 
+/* 
+ * Check to see if we can use fast rdtsc() timestamping from userland.
+ * Otherwise fall back to syscalls
+ */
+int radclock_init_vcounter(struct radclock *handle)
+{
+	int	passthrough_counter = 0;
+	char clocksource[32];
+	FILE *fd = NULL;
+
+	fd = fopen ("/sys/devices/system/clocksource/clocksource0/passthrough_clocksource", "r");
+	if (!fd)
+	{
+		logger(RADLOG_ERR, "Cannot open passthrough_clocksource from sysfs");
+		return -1;
+	}
+	fscanf(fd, "%d", &passthrough_counter);
+	fclose(fd);
+
+	fd = fopen ("/sys/devices/system/clocksource/clocksource0/current_clocksource", "r");
+	if (!fd)
+	{
+		logger(RADLOG_ERR, "Cannot open current_clocksource from sysfs");
+		return -1;
+	}
+	fscanf(fd, "%s", &clocksource[0]);
+	fclose(fd);
+	logger(RADLOG_NOTICE, "Clocksource used is %s", clocksource);
+
+	if ( passthrough_counter == 0)
+	{
+		handle->get_vcounter = &radclock_get_vcounter_syscall;
+		logger(RADLOG_NOTICE, "Initialising radclock_get_vcounter with syscall.");
+		return 0;
+	}
+
+	if (strcmp(clocksource, "tsc") == 0)
+	{
+		handle->get_vcounter = &radclock_get_vcounter_rdtsc;
+		logger(RADLOG_NOTICE, "Initialising radclock_get_vcounter using rdtsc(). "
+						"* Make sure TSC is reliable *");
+	}
+	else
+	{
+		handle->get_vcounter = &radclock_get_vcounter_syscall;
+		logger(RADLOG_NOTICE, "Initialising radclock_get_vcounter using syscall.");
+	}
+
+	/* Last, a warning */
+	if ( passthrough_counter == 1)
+	{
+		if ( (strcmp(clocksource, "tsc") != 0) && (strcmp(clocksource, "xen") != 0) )
+			logger(RADLOG_ERR, "Passthrough mode in ON but the clocksource does not support it!!");
+	}
+
+	return 0;
+}
+
+
+
+
+
 int radclock_init_kernel_support(struct radclock *handle)
 {
 	PRIV_DATA(handle)->radclock_gnl_id = resolve_family(RADCLOCK_NAME);

@@ -37,6 +37,7 @@
 
 
 #if defined (__FreeBSD__)
+
 # ifdef HAVE_RDTSC
 #  ifdef HAVE_MACHINE_CPUFUNC_H
 #   include <machine/cpufunc.h>
@@ -52,50 +53,79 @@ rdtsc(void)
     return (low | ((u_int64_t)high << 32));
 }
 # endif
+
+inline
+vcounter_t radclock_readtsc(void) {
+	return rdtsc;
+}
+
 #endif
 
 
 
 #if defined (__linux__)
 
-#if defined (HAVE_RDTSCLL)
-/* if we have it, must be one of these headers */
-#if HAVE_ASM_MSR_H
+#if HAVE_RDTSCLL_ASM
 # include <asm/msr.h>
-#elif HAVE_ASM_X86_MSR_H
+#elif HAVE_RDTSCLL_ASM_X86
 # include <asm-x86/msr.h>
-#elif HAVE_ASM_X86_64_MSR_H
+#elif HAVE_RDTSCLL_ASM_X86_64
 # include <asm-x86_64/msr.h>
+#else 
+/* rdtscll not defined ... turn to black magic */
+# ifdef __x86_64__
+#  define rdtscll(val) do { \
+		unsigned int __a,__d; \
+		asm volatile("rdtsc" : "=a" (__a), "=d" (__d)); \
+		(val) = ((unsigned long)__a) | (((unsigned long)__d)<<32); \
+	} while(0)
+# endif
+# ifdef __i386__
+	#define rdtscll(val) __asm__ __volatile__("rdtsc" : "=A" (val))
+# endif
 #endif
-#ifndef rdtscll
-#error "rdtscll() exist but we didn't include the correct header?"
+
+inline 
+vcounter_t radclock_readtsc(void)
+{
+	vcounter_t val;
+    rdtscll(val);
+	return val;
+}
+
 #endif
-#define linux_rdtscll(val) rdtscll(val)
-
-#else /* HAVE_RDTSCLL not defined  */
 
 
-#ifdef __x86_64__
+#if defined(__APPLE__)
+#if defined(__ppc__)
+	#define rdtsca(val) do { \
+		u_int32_t _upper, _lower; \
+		__asm __volatile( \
+				"mftb %0\n" \
+				"mftbu %1" \
+				: "=r" (_lower), "=r" (_upper)); \
+		(val) = ((uint64_t)_lower) | (((uint64_t)_upper)<<32); \
+	} while(0)
+
+
+#elif defined (__i386__)
+	#define rdtsca(val) __asm__ __volatile__("rdtsc" : "=A" (val))
+
+#elif defined (__x86_64__)
 	/* So we 64 bits machine and no header ... black magic area */
-	#define linux_rdtscll(val) do { \
+	#define rdtsca(val) do { \
 		unsigned int __a,__d; \
 		asm volatile("rdtsc" : "=a" (__a), "=d" (__d)); \
 		(val) = ((unsigned long)__a) | (((unsigned long)__d)<<32); \
 	} while(0)
 #endif
 
-# ifdef __i386__
-	#define linux_rdtscll(val) __asm__ __volatile__("rdtsc" : "=A" (val))
-#endif
-
-#endif
-
-uint64_t
-rdtsc(void)
+inline 
+vcounter_t radclock_readtsc(void)
 {
-    uint64_t val;
-    linux_rdtscll(val);
-    return val;
+	vcounter_t val;
+    rdtsca(val);
+	return val;
 }
 
 #endif
@@ -110,9 +140,9 @@ int radclock_get_vcounter(struct radclock *handle, vcounter_t *vcount)
 }
 
 
-int radclock_get_vcounter_rdtsc(struct radclock *handle, vcounter_t *vcount)
+inline int radclock_get_vcounter_rdtsc(struct radclock *handle, vcounter_t *vcount)
 {
-	*vcount = rdtsc();
+	*vcount = radclock_readtsc();
 	return 0;
 }
 
@@ -146,67 +176,4 @@ int radclock_get_vcounter_latency(struct radclock *handle, vcounter_t *vcount, v
 	}
 	return 0;
 }
-
-
-
-
-// TODO: all stuff below should go ... one day XXX
-
-
-/*
- * - WARNING -
- * This file is a mess for a lot of reasons:
- *    different architectures: PPC, i386, x86_64, ...
- *    different OS with different include files
- *    different distributions that provide or not the rdtsc calls
- *
- * There are also some uncertainties ... why does rdtscll on linux returns crazy results?
- * There is work to do to have a complete coverage of all possibilities ...
- */
-
-
-/* We first want to define the rdtsc function for OS or distro that do not provide one.
- * Also, some distributions replaced the asm-i385/msr.h by the asm-x86_64/msr.h version.
- * In such case the rdtscll macro is broken if not run on 64 bits architecture.
- */
-#if defined(__APPLE__)
-#if defined(__ppc__)
-	#define rdtsc(val) do { \
-		u_int32_t _upper, _lower; \
-		__asm __volatile( \
-				"mftb %0\n" \
-				"mftbu %1" \
-				: "=r" (_lower), "=r" (_upper)); \
-		(val) = ((uint64_t)_lower) | (((uint64_t)_upper)<<32); \
-	} while(0)
-
-
-#elif defined (__i386__)
-	#define rdtsc(val) __asm__ __volatile__("rdtsc" : "=A" (val))
-
-#elif defined (__x86_64__)
-	/* So we 64 bits machine and no header ... black magic area */
-	#define rdtsc(val) do { \
-		unsigned int __a,__d; \
-		asm volatile("rdtsc" : "=a" (__a), "=d" (__d)); \
-		(val) = ((unsigned long)__a) | (((unsigned long)__d)<<32); \
-	} while(0)
-#endif
-#endif
-
-
-
-tsc_t radclock_readtsc(void) {
-	tsc_t val;
-#ifdef linux
-	linux_rdtscll(val);
-#elif defined(__APPLE__)
-	rdtsc(val);
-#else
-	/* FreeBSD ... nice guys ... :) */
-	val = rdtsc();
-#endif
-	return val;
-}
-
 

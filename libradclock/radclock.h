@@ -72,7 +72,7 @@ struct radclock;
  * Read the tsc value from the cpu register. 
  * @return the current value of the TSC register
  */
-tsc_t radclock_readtsc(void);
+vcounter_t radclock_readtsc(void);
 
 /**
  * Read the vcounter value based on the current clocksource/timecounter selected. 

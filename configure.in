@@ -146,9 +146,31 @@ case $target_os in
 		)
 		;;
 
+dnl 3 headers to test in Linux, but seems it is not available anymore anyway
 	linux*)
-		echo "Something do do in here !!"
-		AC_CHECK_HEADERS([ asm/msr.h asm-x86_64/msr.h asm-x86/msr.h ])
+		AC_CHECK_HEADER([asm/msr.h])
+		if test "$ac_cv_header_asm_msr_h" = "yes"; then
+			AC_CHECK_DECL([rdtscll],
+			[AC_DEFINE([HAVE_RDTSCLL_ASM], [1],
+					   [Define to 1 if you have rdtscll() in asm/msr.h])],
+			[], [#include <asm/msr.h>])
+		fi
+
+		AC_CHECK_HEADER([asm-x86/msr.h])
+		if test "$ac_cv_header_asm_x86_msr_h" = "yes"; then
+			AC_CHECK_DECL([rdtscll],
+			[AC_DEFINE([HAVE_RDTSCLL_ASM_X86], [1],
+					   [Define to 1 if you have rdtscll() in asm-x86/msr.h])],
+			[], [#include <asm-x86/msr.h>])
+		fi
+
+		AC_CHECK_HEADER([asm-x86_64/msr.h])
+		if test "$ac_cv_header_asm_x86_64_msr_h" = "yes"; then
+			AC_CHECK_DECL([rdtscll],
+			[AC_DEFINE([HAVE_RDTSCLL_ASM_X86_64], [1],
+					   [Define to 1 if you have rdtscll() in asm-x86_64/msr.h])],
+			[], [#include <asm-x86_64/msr.h>])
+		fi
 	 ;;
 
 	*)
@@ -177,21 +199,28 @@ AC_CHECK_FUNCS(pcap_activate)
 dnl ===========================================================================
 dnl Conditional for the testbed apps that may require these guys
 dnl ===========================================================================
-AC_CHECK_HEADER(dagapi.h, [AM_CONDITIONAL([HAVE_DAG_API], [test 1 = 1])], [AM_CONDITIONAL([HAVE_DAG_API], [test 0 = 1])])
+AC_CHECK_HEADER(dagapi.h, 
+				[AM_CONDITIONAL([HAVE_DAG_API], [test 1 = 1])], 
+				[AM_CONDITIONAL([HAVE_DAG_API], [test 0 = 1])])
 
 
 
 dnl ===========================================================================
 dnl pps api ? Freebsd only so far
 dnl ===========================================================================
-AC_CHECK_HEADER(sys/timepps.h, [AM_CONDITIONAL([HAVE_PPS_API], [test 1 = 1])], [AM_CONDITIONAL([HAVE_PPS_API], [test 0 = 1])])
+AC_CHECK_HEADER(sys/timepps.h, 
+				[AM_CONDITIONAL([HAVE_PPS_API], [test 1 = 1])], 
+				[AM_CONDITIONAL([HAVE_PPS_API], [test 0 = 1])])
 
 
 
 dnl ===========================================================================
 dnl Xen??
 dnl ===========================================================================
-AC_CHECK_LIB(xenstore, xs_domain_open, [AM_CONDITIONAL([HAVE_XEN_API], [test 1 = 1]) AC_DEFINE([WITH_XENSTORE],[1],[Define to 1 if compiling with xenstore]) ], [AM_CONDITIONAL([HAVE_XEN_API], [test 0 = 1])])
+AC_CHECK_LIB(xenstore, xs_domain_open,
+			 [AM_CONDITIONAL([HAVE_XEN_API], [test 1 = 1])
+			 	AC_DEFINE([WITH_XENSTORE],[1],[Define to 1 if compiling with xenstore]) ],
+			 [AM_CONDITIONAL([HAVE_XEN_API], [test 0 = 1])])
 
 
 
@@ -297,6 +326,11 @@ esac
 AC_SUBST([LIBRADCLOCK_LIBS])
 
 
+
+
+dnl ===========================================================================
+dnl Initialise IOCTLs
+dnl ===========================================================================
 
 ioctlcount=0
 syscall_get_vcounter_number=0
@@ -435,6 +469,10 @@ fi
 
 
 
+
+dnl ===========================================================================
+dnl Summary of all we have done so far
+dnl ===========================================================================
 
 AC_OUTPUT
 

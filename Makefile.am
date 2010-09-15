@@ -45,13 +45,15 @@ dist-hook:
 	@echo "Copying the python module and wall clock into the tarball"
 	cp $(srcdir)/python-gui/tscclock_wallclock.py $(distdir)/python-module/
 	cp -R $(srcdir)/python-gui/img $(distdir)/python-module/
+	rm -rf $(distdir)/python-module/img/.svn
 	@echo "Copying kernel patches into the tarball"
 	mkdir $(distdir)/kernel-patches
 	mkdir $(distdir)/kernel-patches/freebsd
 	mkdir $(distdir)/kernel-patches/linux
 	cp -p `find ./kernel/freebsd/ -name *\.patch -print` $(distdir)/kernel-patches/freebsd/
 	cp -Rp $(srcdir)/kernel/linux/* $(distdir)/kernel-patches/linux/
-	find $(distdir)/kernel-patches/linux/ -name ".svn" | xargs rm -rf
+	@echo "Cleaning release from svn infos"
+	find $(distdir) -t d -name ".svn" | xargs rm -rf
 	@echo ""
 	@echo "------------------------------------------------------"
 	@echo "*         You made a release distribution"

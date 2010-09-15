@@ -237,6 +237,13 @@ int radclock_init_vcounter(struct radclock *handle)
 		logger(RADLOG_NOTICE, "Initialising radclock_get_vcounter using syscall.");
 	}
 
+	/* Last, a warning */
+	if ( passthrough_counter == 1)
+	{
+		if ( (strcmp(timecounter, "TSC") != 0) && (strcmp(timecounter, "ixen") != 0) )
+			logger(RADLOG_ERR, "Passthrough mode in ON but the timecounter does not support it!!");
+	}
+
 	return 0;
 }
 
