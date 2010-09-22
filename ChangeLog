@@ -3,10 +3,17 @@
 ## 
 
 
+- Version 0.3.0
+	* September 2010
+	* Add support for Xen and Clock Dependent mode 
+	* "Passthrough" mode to access clocksource / timecounter
+
+
 - Version 0.2.4
 	* July 2010
 	* Bug correction 
 	* Rotating log file with newsyslog / logrotate 
+
 
 - Version 0.2.3
 	* April 2010
