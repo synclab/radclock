@@ -64,7 +64,7 @@ dist-hook:
 	@echo "*   Did you tag the SVN repository?"
 	@echo "*   Did you run make distcheck?"
 	@echo "*   Are the kernel patches up-to-date?"
-	@echo "*   Are the kernel patches set to the right version? 
+	@echo "*   Are the kernel patches set to the right version?"
 	@echo "------------------------------------------------------"
 	@echo ""
 endif
