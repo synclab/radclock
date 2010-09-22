@@ -201,12 +201,17 @@ int radclock_init_vcounter(struct radclock *handle)
 	char timecounter[32];
 	size_t size_ctl;
 
-	size_ctl = sizeof(passthrough_counter);
-	ret = sysctlbyname("kern.timecounter.passthrough", &passthrough_counter, &size_ctl, NULL, 0);
-	if (ret == -1)
+	if ( handle->kernel_version < 1 )
+		passthrough_counter = 0;
+	else
 	{
-		logger(RADLOG_ERR, "Cannot find kern.timecounter.passthrough in sysctl");
-		return -1;
+		size_ctl = sizeof(passthrough_counter);
+		ret = sysctlbyname("kern.timecounter.passthrough", &passthrough_counter, &size_ctl, NULL, 0);
+		if (ret == -1)
+		{
+			logger(RADLOG_ERR, "Cannot find kern.timecounter.passthrough in sysctl");
+			return -1;
+		}
 	}
 
 	size_ctl = sizeof(timecounter);

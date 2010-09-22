@@ -206,15 +206,20 @@ int radclock_init_vcounter(struct radclock *handle)
 	int	passthrough_counter = 0;
 	char clocksource[32];
 	FILE *fd = NULL;
-
-	fd = fopen ("/sys/devices/system/clocksource/clocksource0/passthrough_clocksource", "r");
-	if (!fd)
+	
+	if ( handle->kernel_version < 1 )
+		passthrough_counter = 0;
+	else
 	{
-		logger(RADLOG_ERR, "Cannot open passthrough_clocksource from sysfs");
-		return -1;
+		fd = fopen ("/sys/devices/system/clocksource/clocksource0/passthrough_clocksource", "r");
+		if (!fd)
+		{
+			logger(RADLOG_ERR, "Cannot open passthrough_clocksource from sysfs");
+			return -1;
+		}
+		fscanf(fd, "%d", &passthrough_counter);
+		fclose(fd);
 	}
-	fscanf(fd, "%d", &passthrough_counter);
-	fclose(fd);
 
 	fd = fopen ("/sys/devices/system/clocksource/clocksource0/current_clocksource", "r");
 	if (!fd)
