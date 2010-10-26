@@ -1016,11 +1016,6 @@ int main (int argc, char *argv[])
 	/* Print out last good phat value */
 	verbose(LOG_NOTICE, "Last estimate of the clock source period: %12.10lg", RAD_DATA(clock_handle)->phat);
 	
-
-	// TODO:  all the destructors have to be re-written
-	destroy_source(clock_handle, (struct stampsource *)(clock_handle->stamp_source));
-	radclock_destroy(clock_handle);
-	
 	/* Say bye and close syslog */
 	verbose(LOG_NOTICE, "RADclock stopped");
 	if ( clock_handle->is_daemon ) {
@@ -1033,6 +1028,10 @@ int main (int argc, char *argv[])
 		write(daemon_pid_fd, "", 0);
 		lockf(daemon_pid_fd, F_ULOCK, 0);
 	}
+	
+        // TODO:  all the destructors have to be re-written
+	destroy_source(clock_handle, (struct stampsource *)(clock_handle->stamp_source));
+	radclock_destroy(clock_handle);
 	
 	exit(EXIT_SUCCESS);
 }
