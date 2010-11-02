@@ -39,7 +39,7 @@
 
 
 #ifdef WITH_RADKERNEL_NONE
-int update_system_clock(struct radclock *clock_handle) {}
+int update_system_clock(struct radclock *clock_handle) { return 0; }
 #else
 
 #ifdef WITH_RADKERNEL_FBSD
