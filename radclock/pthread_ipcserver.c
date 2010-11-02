@@ -22,6 +22,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <net/if.h>
@@ -58,7 +59,7 @@ void* thread_ipc_server(void *c_handle)
 	clock_handle = (struct radclock*) c_handle;
 	
 	/* Local valid till, vcount, to regulate virtual store updates */
-	vcounter_t valid_till_snooze, vcount;
+	vcounter_t valid_till_snooze = 0, vcount = 0;
 
 	/* Exchanged messages */
 	struct ipc_request request;
