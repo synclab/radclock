@@ -833,7 +833,7 @@ em_mq_start_locked(struct ifnet *ifp, struct tx_ring *txr, struct mbuf *m)
 	while (next != NULL) {
 // jrid
 //		if ((err = em_xmit(txr, &next)) != 0) {
-		if ((error = em_xmit(txr, &next, ifp)) != 0) {
+		if ((err = em_xmit(txr, &next, ifp)) != 0) {
                         if (next != NULL)
                                 err = drbr_enqueue(ifp, txr->br, next);
                         break;
