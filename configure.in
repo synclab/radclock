@@ -352,6 +352,11 @@ case "$target_os" in
 			8*)
 				ioctlcount=131
 				;;
+			# Sysctl for 9.x kernels 
+## XXX TODO this should disappear with kernel version > 1 once we get read of IOCTL 
+			9*)
+				ioctlcount=133
+				;;
 			*)
 				ioctlcount=0
 				;;
