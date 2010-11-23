@@ -540,10 +540,6 @@ void end_warmup_RTT( struct bidir_peer *peer, struct bidir_stamp *stamp)
 
 	RTT_tmp = history_find(&peer->RTT_hist, history_min(&peer->RTT_hist, peer->shift_end, peer->stamp_i) );
 	peer->RTThat_shift  = *RTT_tmp;
-
-	verbose(VERB_CONTROL, "Upward shift detection activated, threshold set at %llu [vcounter] "
-			"(%4.0lf [mus])", peer->RTThat_shift_thres, peer->RTThat_shift_thres * peer->phat*1000000);
-
 }
 
 
@@ -685,6 +681,10 @@ void parameters_calibration( struct bidir_peer *peer)
 		 */
 		peer->Eoffset_qual = 6 * peer->Eoffset;
 	}
+
+	verbose(VERB_CONTROL, "Upward shift detection activated, threshold set at %llu [vcounter] "
+			"(%4.0lf [mus])", peer->RTThat_shift_thres, peer->RTThat_shift_thres * peer->phat*1000000);
+
 	verbose(VERB_CONTROL, "Adjusted Eoffset_qual %3.1lg [ms] (Eoffset %3.1lg [ms])", 
 			1000*peer->Eoffset_qual, 1000*peer->Eoffset);
 }
