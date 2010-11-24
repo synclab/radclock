@@ -851,6 +851,13 @@ int process_phat_warmup (struct bidir_peer* peer, vcounter_t RTT, unsigned int w
 	long double DelTb; 	// Time between j and i based on each NTP timestamp
 	double phat;			// period estimate for current stamp
 
+	long near_i = 0;
+	long far_i = 0;
+
+	near_i = peer->near_i;
+	far_i = peer->far_i;
+
+
 	/* Select indices for new estimate
 	 * Indices taken from a far window: stamps [0 wwidth-1],  and near window:  [i-wwidth+1 i]
 	 * Still works if poll_period changed, but rate increase of end windows can be different
@@ -889,7 +896,9 @@ int process_phat_warmup (struct bidir_peer* peer, vcounter_t RTT, unsigned int w
 	/* Clock correction
 	 * correct C to keep C(t) continuous at time of last stamp
 	 */
-	if ( peer->phat != phat ) {
+//	if ( peer->phat != phat ) {
+	if ( (near_i != peer->near_i) || (far_i != peer->far_i) )
+	{
 		peer->C += peer->stamp.Ta * (long double) (peer->phat - phat);
 		verbose(VERB_SYNC, "i=%lu: phat update (far,near)=(%lu,%lu), "
 				"(phat, rel diff, perr): %.10g , %.10g, %.10g, C: %7.4Lf",
@@ -1358,24 +1367,26 @@ void process_thetahat_warmup (struct bidir_peer* peer, struct radclock* clock_ha
 	/* errTa - thetahat should be -ve */
 	errTa = (double)((long double)stamp->Ta * peer->phat + peer->C - (long double) stamp->Tb);
 	if ( errTa > peer->thetahat ) {
-		verbose(VERB_CAUSALITY, "i=%lu: causality error on C(Ta), errTa = %6.4lg [ms], "
-				"thetahat = %6.4lg [ms], diff  %6.4lg [ms] ",
+		verbose(VERB_CAUSALITY, "i=%lu: causality error on C(Ta), errTa = %5.3lf [ms], "
+				"thetahat = %5.3lf [ms], diff = %5.3lf [ms] ",
 				peer->stamp_i, 1000*errTa, 1000*peer->thetahat, 1000*(errTa-peer->thetahat));
 	}
 
 	/* errTf - thetahat should be +ve */
 	errTf = (double)((long double)stamp->Tf * peer->phat + peer->C - (long double) stamp->Te);
 	if ( errTf < peer->thetahat ) {
-		verbose(VERB_CAUSALITY, "i=%lu: causality error on C(Tf), errTf = %6.4lg [ms], "
-				"thetahat = %6.4lg [ms], diff  %6.4lg [ms] ",
+		verbose(VERB_CAUSALITY, "i=%lu: causality error on C(Tf), errTf = %5.3lf [ms], "
+				"thetahat = %5.3lf [ms], diff = %5.3lf [ms] ",
 				peer->stamp_i, 1000*errTf, 1000*peer->thetahat, 1000*(errTf-peer->thetahat));
 	}
 
 	/* warmup to warmup is to pass offset_win */
-	if ( (peer->stamp_i < peer->offset_win*2) || !(peer->stamp_i%50) ) {
-		verbose(VERB_SYNC, "i=%lu: th_naive: %6.3lg [ms], thetahat = %5.3lg [ms], wsum = %7.5lg, "
-				"minET = %5.3lg [ms] (RTThat/2 = %5.3lf)", 
-				peer->stamp_i, 1000*th_naive, 1000*thetahat, wsum,1000*minET,1000*peer->phat*peer->RTThat/2.);
+	if ( (peer->stamp_i < peer->offset_win*2) || !(peer->stamp_i%50) )
+	{
+		verbose(VERB_SYNC, "i=%lu: th_naive = %5.3lf [ms], thetahat = %5.3lf [ms], "
+				"wsum = %7.5lf, minET = %7.5lf [ms], RTThat/2 = %5.3lf [ms]", 
+				peer->stamp_i, 1000*th_naive, 1000*thetahat, wsum,
+				1000*minET, 1000*peer->phat*peer->RTThat/2.);
 	}
 
 
@@ -1601,15 +1612,15 @@ void process_thetahat_full (struct bidir_peer* peer, struct radclock* clock_hand
 	/* errTa - thetahat should be -ve */
 	errTa = (double)((long double)stamp->Ta * peer->phat + peer->C - (long double) stamp->Tb);
 	if ( errTa > peer->thetahat )
-		verbose(VERB_CAUSALITY, "i=%lu: causality error uncorrected on C(Ta), errTa = %6.4lg [ms], "
-				"thetahat = %6.4lg [ms], diff  %6.4lg [ms]",
+		verbose(VERB_CAUSALITY, "i=%lu: causality error uncorrected on C(Ta), errTa = %5.3lf [ms], "
+				"thetahat = %5.3lf [ms], diff = %5.3lf [ms]",
 				peer->stamp_i, 1000*errTa, 1000*thetahat, 1000*(errTa-thetahat));
 	
 	/* errTf - thetahat should be +ve */
 	errTf = (double)((long double)stamp->Tf * peer->phat + peer->C - (long double) stamp->Te);
 	if ( errTf < peer->thetahat )
-		verbose(VERB_CAUSALITY, "i=%lu: causality error uncorrected on C(Tf), errTf = %6.4lg [ms], "
-				"thetahat = %6.4lg [ms], diff  %6.4lg [ms]",
+		verbose(VERB_CAUSALITY, "i=%lu: causality error uncorrected on C(Tf), errTf = %5.3lf [ms], "
+				"thetahat = %5.3lf [ms], diff = %5.3lf [ms]",
 				peer->stamp_i, 1000*errTf, 1000*thetahat,1000*(errTf-thetahat));
 
 	/* Apply Sanity Check 
@@ -1650,10 +1661,12 @@ void process_thetahat_full (struct bidir_peer* peer, struct radclock* clock_hand
 		DEL_STATUS(clock_handle, STARAD_OFFSET_SANITY);
 	}
 
-	if ( !(peer->stamp_i % (int)(6 * 3600 / peer->poll_period)) ) {
-		verbose(VERB_SYNC, "i=%lu, th_naive: %6.4lg [ms], thetahat = %6.4lg [ms], "
-				"wsum = %7.5lg, minET = %5.3lg [ms] (RTThat/2 = %5.3lf)", 
-				peer->stamp_i, 1000*th_naive, 1000*peer->thetahat, wsum,1000*minET, 1000*peer->phat*peer->RTThat/2.);
+	if ( !(peer->stamp_i % (int)(6 * 3600 / peer->poll_period)) )
+	{
+		verbose(VERB_SYNC, "i=%lu: th_naive = %5.3lf [ms], thetahat = %5.3lf [ms], "
+				"wsum = %7.5lf, minET = %7.5lf [ms], RTThat/2 = %5.3lf [ms]", 
+				peer->stamp_i, 1000*th_naive, 1000*thetahat, wsum,
+				1000*minET, 1000*peer->phat*peer->RTThat/2.);
 	}
 
 	/* Fill output data structure to print internal local variables */
