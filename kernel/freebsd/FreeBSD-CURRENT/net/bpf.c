@@ -90,8 +90,13 @@ MALLOC_DEFINE(M_BPF, "BPF", "BPF data");
 
 #define PRINET  26			/* interruptible */
 
+#ifdef RADCLOCK
+#define	SIZEOF_BPF_HDR(type)	\
+    (offsetof(type, vcount_stamp) + sizeof(((type *)0)->vcount_stamp))
+#else
 #define	SIZEOF_BPF_HDR(type)	\
     (offsetof(type, bh_hdrlen) + sizeof(((type *)0)->bh_hdrlen))
+#endif	/* RADCLOCK */
 
 #ifdef COMPAT_FREEBSD32
 #include <sys/mount.h>
@@ -2129,7 +2134,7 @@ radclock_vcount2bintime(vcounter_t *vcount, struct bintime *bt)
 	countdiff = *vcount - radclock_fp.vcount;
 	if (countdiff & ~((1ll << (radclock_fp.countdiff_maxbits +1)) -1))
 		printf("RADclock: warning stamp may overflow timeval at %llu!\n",
-				(long long unsigned) vcount);
+				(long long unsigned) *vcount);
 
 	/* Add the counter delta in second to the recorded fixed point time */
 	time_f 	= radclock_fp.time_int
@@ -2224,6 +2229,11 @@ catchpacket(struct bpf_d *d, u_char *pkt, u_int pktlen, u_int snaplen,
 	int do_timestamp;
 	int tstype;
 
+// XXX RADCLOCK DEBUG XXX	
+	struct bpf_if *bp;
+	bp = d->bd_bif;
+// XXX RADCLOCK DEBUG XXX	
+
 	BPFD_LOCK_ASSERT(d);
 
 	/*
@@ -2314,6 +2324,12 @@ catchpacket(struct bpf_d *d, u_char *pkt, u_int pktlen, u_int snaplen,
 			hdr32_old.bh_datalen = pktlen;
 			hdr32_old.bh_hdrlen = hdrlen;
 			hdr32_old.bh_caplen = caplen;
+
+// XXX RADCLOCK DEBUG XXX
+if_printf(bp->bif_ifp, "radcatch: hdr32_old with hdrlen= %d, vcount= %llu\n",
+	   	hdrlen, (long long unsigned) *vcount);
+// XXX RADCLOCK DEBUG XXX
+
 			bpf_append_bytes(d, d->bd_sbuf, curlen, &hdr32_old,
 			    sizeof(hdr32_old));
 			goto copy;
@@ -2330,6 +2346,12 @@ catchpacket(struct bpf_d *d, u_char *pkt, u_int pktlen, u_int snaplen,
 		hdr_old.bh_datalen = pktlen;
 		hdr_old.bh_hdrlen = hdrlen;
 		hdr_old.bh_caplen = caplen;
+
+// XXX RADCLOCK DEBUG XXX
+if_printf(bp->bif_ifp, "radcatch: hdr_old with hdrlen= %d, vcount= %llu\n",
+	   	hdrlen, (long long unsigned) *vcount);
+// XXX RADCLOCK DEBUG XXX
+
 		bpf_append_bytes(d, d->bd_sbuf, curlen, &hdr_old,
 		    sizeof(hdr_old));
 		goto copy;
@@ -2353,6 +2375,12 @@ catchpacket(struct bpf_d *d, u_char *pkt, u_int pktlen, u_int snaplen,
 	hdr.bh_datalen = pktlen;
 	hdr.bh_hdrlen = hdrlen;
 	hdr.bh_caplen = caplen;
+
+// XXX RADCLOCK DEBUG XXX
+if_printf(bp->bif_ifp, "radcatch: xhdr with hdrlen= %d, vcount= %llu\n",
+	   	hdrlen, (long long unsigned) *vcount);
+// XXX RADCLOCK DEBUG XXX
+
 	bpf_append_bytes(d, d->bd_sbuf, curlen, &hdr, sizeof(hdr));
 
 	/*
