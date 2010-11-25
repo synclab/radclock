@@ -119,7 +119,8 @@ static void adjust_warmup_win(index_t i, struct bidir_peer *p, unsigned int ploc
 		WU_dur = (double) (win * p->poll_period);
 		p->warmup_win = (index_t) ceil(WU_dur / p->poll_period) + i;
 		verbose(VERB_CONTROL, 
-				"After adjustment, %4.1lf [sec] of warmup left to serve, or %lu stamps. Warmup window now %lu", 
+				"After adjustment, %4.1lf [sec] of warmup left to serve, or %lu stamps. "
+				"Warmup window now %lu", 
 				WU_dur, (index_t) ceil(WU_dur / p->poll_period), p->warmup_win);
 	}
 
@@ -127,7 +128,8 @@ static void adjust_warmup_win(index_t i, struct bidir_peer *p, unsigned int ploc
 	if ( p->warmup_win + p->shift_win > p->top_win/2 ) {
 		/* can neglect history window in warmup phase */
 		verbose(VERB_CONTROL,
-				"Warmup + shift window hits history half window, increasing history window from %lu to %lu", 
+				"Warmup + shift window hits history half window, increasing history "
+				"window from %lu to %lu", 
 				p->top_win, (p->warmup_win + p->shift_win ) * 2 + 1);
 		/* small history is bad, make is 3* the minimum possible */
 		p->top_win = 3*( (p->warmup_win + p->shift_win) * 2 + 1 );
@@ -163,8 +165,9 @@ static void init_plocal(struct bidir_peer *peer, unsigned int plocal_winratio, i
 	lhs = i - peer->wwidth + 1;
 	rhs = i;
 	peer->near_i = history_min(&peer->RTT_hist, lhs, rhs);
-	verbose(VERB_CONTROL, "Initializing full plocal algo, wwidth= %lu, (far_i,near_i) = (%lu,%lu)",
-			peer->wwidth, peer->far_i, peer->near_i);
+	verbose(VERB_CONTROL, "i=%lu: Initializing full plocal algo, wwidth= %lu, "
+			"(far_i,near_i) = (%lu,%lu)",
+			peer->stamp_i, peer->wwidth, peer->far_i, peer->near_i);
 }
 
 
@@ -302,11 +305,12 @@ void init_peer( struct radclock *clock_handle, struct radclock_phyparam *phypara
 	memset(&peer->stamp, 0, sizeof(struct bidir_stamp));
 
 	/* Print the first timestamp tuple obtained */
-	verbose(VERB_SYNC, "Stamp read check: %llu %22.10Lf %22.10Lf %llu",
-			stamp->Ta, stamp->Tb, stamp->Te, stamp->Tf);
+	verbose(VERB_SYNC, "i=%lu: Beginning Warmup Phase. Stamp read check: %llu %22.10Lf %22.10Lf %llu",
+			peer->stamp_i, stamp->Ta, stamp->Tb, stamp->Te, stamp->Tf);
 
-	verbose(VERB_SYNC, "Assuming 1Ghz oscillator, 1st vcounter stamp is %5.3lf [days] "
+	verbose(VERB_SYNC, "i=%lu: Assuming 1Ghz oscillator, 1st vcounter stamp is %5.3lf [days] "
 			"(%5.1lf [min]) since reset, RTT is %5.3lf [ms], SD %5.3Lf [mus]",
+			peer->stamp_i,
 			(double) stamp->Ta * 1e-9/3600/24, (double) stamp->Ta * 1e-9/60, 
 			(double) (stamp->Tf - stamp->Ta) * 1e-9*1000, (stamp->Te - stamp->Tb) * 1e6);
 
@@ -348,7 +352,7 @@ void init_peer( struct radclock *clock_handle, struct radclock_phyparam *phypara
 	/* C now determined.  For now C(t) = t_init */
 	peer->C = stamp->Tb - (long double) (stamp->Ta * peer->phat);
 	verbose(VERB_SYNC, "i=%lu: After initialisation: (far,near)=(%lu,%lu), "
-			"phat = %12.10lg, perr=%5.3lg, C: %7.4Lf",
+			"phat = %.10lg, perr = %5.3lg, C = %7.4Lf",
 			peer->stamp_i, 0, 0, peer->phat, peer->perr, peer->C);
 
 	/* plocal algo 
@@ -583,8 +587,8 @@ void end_warmup_phat(struct bidir_peer *peer, struct bidir_stamp *stamp)
 
 	/* Reinitialise sanity count at the end of warmup */
 	peer->phat_sanity_count = 0;
-	verbose(VERB_CONTROL, "Initializing full phat algo, pstamp_i=%lu, perr= %10.3lg",
-		   	peer->pstamp_i, peer->perr);
+	verbose(VERB_CONTROL, "i=%lu: Initializing full phat algo, pstamp_i=%lu, perr= %10.3lg",
+		   	peer->stamp_i, peer->pstamp_i, peer->perr);
 }
 
 
@@ -642,9 +646,9 @@ void end_warmup_thetahat(struct bidir_peer *peer, struct bidir_stamp *stamp)
 // XXX TODO we should probably track the correct stamp in warmup instead of this
 // bogus one ...
 	copystamp(stamp, &peer->thetastamp);
-	verbose(VERB_CONTROL, "Switching to full thetahat algo, RTThat_hist set to RTThat=%llu, "
-			"current est'd minimum error= %5.3lg [ms]", 
-			peer->RTThat, 1000*peer->minET);
+	verbose(VERB_CONTROL, "i=%lu: Switching to full thetahat algo, RTThat_hist "
+			"set to RTThat=%llu, current est'd minimum error= %5.3lg [ms]", 
+			peer->stamp_i, peer->RTThat, 1000*peer->minET);
 }
 
 
@@ -659,7 +663,8 @@ void parameters_calibration( struct bidir_peer *peer)
 	 * Let's create a function for that when we have a list of them
 	 */
 	if ( peer->RTThat < (3e-3 / peer->phat) ) {
-		verbose(VERB_CONTROL, "Detected close server based on minimum RTT");
+		verbose(VERB_CONTROL, "i=%lu: Detected close server based on minimum RTT",
+				peer->stamp_i);
 		/* make RTThat_shift_thres constant to avoid possible phat dynamics */
 		peer->RTThat_shift_thres = (vcounter_t) ceil( peer->Eshift/peer->phat );
 		/* Decoupling Eoffset and Eoffset_qual .. , for nearby servers, the
@@ -668,7 +673,8 @@ void parameters_calibration( struct bidir_peer *peer)
 		peer->Eoffset_qual = 3 * peer->Eoffset;
 	}
 	else {
-		verbose(VERB_CONTROL, "Detected far away server based on minimum RTT");
+		verbose(VERB_CONTROL, "i=%lu: Detected far away server based on minimum RTT",
+				peer->stamp_i);
 		peer->RTThat_shift_thres = (vcounter_t) ceil( 3*peer->Eshift/peer->phat );
 
 		/* Decoupling Eoffset and Eoffset_qual .. , for far away servers, increase the number
@@ -682,11 +688,13 @@ void parameters_calibration( struct bidir_peer *peer)
 		peer->Eoffset_qual = 6 * peer->Eoffset;
 	}
 
-	verbose(VERB_CONTROL, "Upward shift detection activated, threshold set at %llu [vcounter] "
-			"(%4.0lf [mus])", peer->RTThat_shift_thres, peer->RTThat_shift_thres * peer->phat*1000000);
+	verbose(VERB_CONTROL, "i=%lu: Upward shift detection activated, "
+			"threshold set at %llu [vcounter] (%4.0lf [mus])",
+		   	peer->stamp_i, peer->RTThat_shift_thres, 
+			peer->RTThat_shift_thres * peer->phat*1000000);
 
-	verbose(VERB_CONTROL, "Adjusted Eoffset_qual %3.1lg [ms] (Eoffset %3.1lg [ms])", 
-			1000*peer->Eoffset_qual, 1000*peer->Eoffset);
+	verbose(VERB_CONTROL, "i=%lu: Adjusted Eoffset_qual %3.1lg [ms] (Eoffset %3.1lg [ms])", 
+			peer->stamp_i, 1000*peer->Eoffset_qual, 1000*peer->Eoffset);
 }
 
 
@@ -757,7 +765,9 @@ void process_RTT_full (struct bidir_peer *peer, vcounter_t RTT)
 	if ( peer->RTThat_shift > (peer->RTThat + peer->RTThat_shift_thres) ) { 
 		lastshift = peer->stamp_i - peer->shift_win + 1;
 		verbose(VERB_SYNC, "Upward shift of %5.1lf [mus] triggered when i = %lu ! "
-				"shift detected at stamp %lu", (peer->RTThat_shift-peer->RTThat)*peer->phat*1.e6, peer->stamp_i, lastshift);
+				"shift detected at stamp %lu",
+				(peer->RTThat_shift-peer->RTThat)*peer->phat*1.e6,
+				peer->stamp_i, lastshift);
 		/* Recalc from [i-lastshift+1 i] 
 		 * - note by design, won't run into last history change 
 		 */
@@ -790,8 +800,8 @@ void process_RTT_full (struct bidir_peer *peer, vcounter_t RTT)
 			RTThat_ptr = history_find(&peer->RTThat_hist, j);
 			*RTThat_ptr = peer->RTThat;
 		}
-		verbose(VERB_SYNC, "Recalc necessary for RTThat for %lu stamps back to i=%lu",
-				peer->shift_win, lastshift);
+		verbose(VERB_SYNC, "i=%lu: Recalc necessary for RTThat for %lu stamps back to i=%lu",
+				peer->stamp_i, peer->shift_win, lastshift);
 	}
 }
 
@@ -823,7 +833,8 @@ double compute_phat (struct bidir_peer* peer, struct bidir_stamp* far, struct bi
 	 * Log a major error and hope someone will call us
 	 */
 	if ( ( DelTa <= 0 ) || ( DelTb <= 0 ) || (DelTe <= 0 ) || (DelTf <= 0) ) {
-		verbose(LOG_ERR, "i=%lu we picked up the same i and j stamp. Contact developer.", peer->stamp_i);
+		verbose(LOG_ERR, "i=%lu we picked up the same i and j stamp. Contact developer.",
+			peer->stamp_i);
 		return 0;
 	}
 
@@ -901,7 +912,7 @@ int process_phat_warmup (struct bidir_peer* peer, vcounter_t RTT, unsigned int w
 	{
 		peer->C += peer->stamp.Ta * (long double) (peer->phat - phat);
 		verbose(VERB_SYNC, "i=%lu: phat update (far,near)=(%lu,%lu), "
-				"(phat, rel diff, perr): %.10g , %.10g, %.10g, C: %7.4Lf",
+				"phat = %.10g, rel diff = %.10g, perr = %.10g, C = %7.4Lf",
 				peer->stamp_i, peer->far_i, peer->near_i,
 				phat, (phat - peer->phat)/phat, peer->perr, peer->C);
 		peer->phat = phat;
@@ -1148,7 +1159,7 @@ int process_plocal_full(struct bidir_peer* peer, struct radclock* clock_handle,
 	if ( fabs(plocalerr) >= peer->Eplocal_qual )
 	{
 		verbose(VERB_QUALITY, "i=%lu: plocal quality low,  (far_i,near_i) = (%lu,%lu), "
-				"not updating plocalerr = %5.3lg,  Eplocal_qual= %5.3lg ",
+				"not updating plocalerr = %5.3lg,  Eplocal_qual = %5.3lg ",
 				peer->stamp_i, peer->far_i, peer->near_i, peer->plocalerr, peer->Eplocal_qual);
 		ADD_STATUS(clock_handle, STARAD_PERIOD_QUALITY);
 		return 0;
@@ -1163,8 +1174,8 @@ int process_plocal_full(struct bidir_peer* peer, struct radclock* clock_handle,
 	if ( (fabs(peer->plocal-plocal)/peer->plocal > peer->Eplocal_sanity) || qual_warning) {
 		if (qual_warning)  
 			verbose(VERB_QUALITY, "qual_warning received, i=%lu, following sanity check for plocal", peer->stamp_i);
-		verbose(VERB_SANITY, "plocal update at i=%lu fails sanity check: relative "
-				"difference is: %5.3lg estimated error was  %5.3lg",
+		verbose(VERB_SANITY, "i=%lu: plocal update fails sanity check: relative "
+				"difference is: %5.3lg estimated error was %5.3lg",
 				peer->stamp_i, fabs(peer->plocal-plocal)/peer->plocal, plocalerr);
 		ADD_STATUS(clock_handle, STARAD_PERIOD_SANITY);
 		peer->plocal_sanity_count++;
@@ -1340,7 +1351,7 @@ void process_thetahat_warmup (struct bidir_peer* peer, struct radclock* clock_ha
 		}
 		/* if result looks insane, give warning */
 		if ( fabs(peer->thetahat - thetahat) > (peer->Eoffset_sanity_min + peer->Eoffset_sanity_rate * gapsize) ) {
-			verbose(VERB_SANITY, "thetahat update at i=%lu fails sanity check: "
+			verbose(VERB_SANITY, "i=%lu: thetahat update fails sanity check: "
 					"difference is: %5.3lg [ms], estimated error was  %5.3lg [ms]",
 					peer->stamp_i, 1000*(thetahat-peer->thetahat), 1000*minET);
 			peer->offset_sanity_count++;
@@ -1356,8 +1367,8 @@ void process_thetahat_warmup (struct bidir_peer* peer, struct radclock* clock_ha
 
 	}
 	else {
-		verbose(VERB_QUALITY, "thetahat: quality over offset window at i=%lu very poor (%5.3lg [ms]), "
-				"repeating current value", peer->stamp_i, 1000*minET);
+		verbose(VERB_QUALITY, "i=%lu: thetahat quality over offset window very poor "
+				"(%5.3lg [ms]), repeating current value", peer->stamp_i, 1000*minET);
 		ADD_STATUS(clock_handle, STARAD_OFFSET_QUALITY);
 	}
 
@@ -1459,7 +1470,7 @@ void process_thetahat_full (struct bidir_peer* peer, struct radclock* clock_hand
 
 	/* gapsize is in [sec], but here looking for loss events */
 	if ( gapsize > (double) peer->poll_period * 4.5 ) {
-		verbose(VERB_SYNC, "i=%lu, Non-trivial gap found: gapsize = %5.1lf stamps or %5.3lg [sec]", 
+		verbose(VERB_SYNC, "i=%lu: Non-trivial gap found: gapsize = %5.1lf stamps or %5.3lg [sec]", 
 				peer->stamp_i, gapsize/peer->poll_period, gapsize);
 		if ( gapsize > (double) phyparam->SKM_SCALE ) {
 			/* note that are in `big gap' mode, mistrust plocal and trust local th more */
@@ -1585,7 +1596,7 @@ void process_thetahat_full (struct bidir_peer* peer, struct radclock* clock_hand
 		 * else safe to normalise
 		 */
 		if ( wsum==0 ) {
-			verbose(VERB_QUALITY, "i=%lu, quality looks good (minET = %lg) yet wsum=0! "
+			verbose(VERB_QUALITY, "i=%lu: quality looks good (minET = %lg) yet wsum=0! "
 					"Eoffset_qual = %lg may be too large", peer->stamp_i, minET,peer->Eoffset_qual);
 			thetahat = peer->thetahat;
 		}
@@ -1599,8 +1610,8 @@ void process_thetahat_full (struct bidir_peer* peer, struct radclock* clock_hand
 	else {
 		/* if this executes, sanity can't be triggered! quality so bad, simply can't update */
 		thetahat = peer->thetahat;
-		verbose(VERB_QUALITY, "thetahat: quality very poor at i=%lu. [wsum;curr err,old]: "
-				"[%5.3lg,%5.3lg,%5.3lg]  This pt-err: [%5.3lg] [ms]", 
+		verbose(VERB_QUALITY, "i=%lu: thetahat quality very poor. wsum = %5.3lg, "
+				"curr err = %5.3lg, old = %5.3lg, this pt-err = [%5.3lg] [ms]", 
 				peer->stamp_i, wsum, 1000*minET, 1000*peer->minET, 1000*ET);  
 		peer->offset_quality_count++;
 		ADD_STATUS(clock_handle, STARAD_OFFSET_QUALITY);
@@ -1632,10 +1643,12 @@ void process_thetahat_full (struct bidir_peer* peer, struct radclock* clock_hand
 			|| qual_warning)
 	{
 		if (qual_warning)
-			verbose(VERB_QUALITY, "i=%lu qual_warning received, following sanity check for thetahat", peer->stamp_i);
-		verbose(VERB_SANITY, "i=%lu: thetahat update fails sanity check: diff= %5.3lg [ms], "
-				"est''d err= %5.3lg [ms], sanity level: %5.3lg [ms] with total gapsize = %7.0lf [sec]",
-				peer->stamp_i, 1000*(thetahat-peer->thetahat), 1000*minET, 1000*(peer->Eoffset_sanity_min+peer->Eoffset_sanity_rate*gapsize), gapsize);
+			verbose(VERB_QUALITY, "i=%lu: qual_warning received, following sanity check for thetahat",
+				   	peer->stamp_i);
+		verbose(VERB_SANITY, "i=%lu: thetahat update fails sanity check. diff= %5.3lg [ms], "
+				"est''d err= %5.3lg [ms], sanity level: %5.3lg [ms] with total gapsize = %.0lf [sec]",
+				peer->stamp_i, 1000*(thetahat-peer->thetahat), 1000*minET, 
+				1000*(peer->Eoffset_sanity_min+peer->Eoffset_sanity_rate*gapsize), gapsize);
 		peer->offset_sanity_count++;
 		ADD_STATUS(clock_handle, STARAD_OFFSET_SANITY);
 	}
@@ -1790,20 +1803,23 @@ int process_bidir_stamp(struct radclock *clock_handle, struct bidir_peer *peer, 
 // TODO This may go one day, but will break regression test		
 		OUTPUT(clock_handle, best_Tf) 	= stamp->Tf;
 
+		/* Set the status of the clock to STARAD_WARMUP */
+		ADD_STATUS(clock_handle, STARAD_WARMUP);
+		ADD_STATUS(clock_handle, STARAD_UNSYNC);
 
 		goto output_results;
 	}
 
 
 
-	/* On second packet, i=1, let's get things started */
-	if ( peer->stamp_i == 1 )
-	{
-		/* Set the status of the clock to STARAD_WARMUP */
-		verbose(VERB_CONTROL, "Beginning Warmup Phase");
-		ADD_STATUS(clock_handle, STARAD_WARMUP);
-		ADD_STATUS(clock_handle, STARAD_UNSYNC);
-	}
+//	/* On second packet, i=1, let's get things started */
+//	if ( peer->stamp_i == 1 )
+//	{
+//		/* Set the status of the clock to STARAD_WARMUP */
+//		verbose(VERB_CONTROL, "Beginning Warmup Phase");
+//		ADD_STATUS(clock_handle, STARAD_WARMUP);
+//		ADD_STATUS(clock_handle, STARAD_UNSYNC);
+//	}
 
 
 	/* Arbitrarily, need at least 25 packets to clear UNSYNC status but this should
@@ -1998,11 +2014,9 @@ int process_bidir_stamp(struct radclock *clock_handle, struct bidir_peer *peer, 
 // TODO why is it done in here ??
 		peer->top_win_half = peer->top_win - 1;
 
-
-
-		verbose(VERB_CONTROL, "i=%lu: Stamp read check: %llu %22.10Lf %22.10Lf %llu",
+		verbose(VERB_CONTROL, "i=%lu: End of Warmup Phase. Stamp read check: "
+				"%llu %22.10Lf %22.10Lf %llu",
 				peer->stamp_i, stamp->Ta,stamp->Tb,stamp->Te,stamp->Tf);
-		verbose(VERB_CONTROL, "End of Warmup Phase");
 
 		/* Remove STARAD_WARMUP from the clock's status */
 		DEL_STATUS(clock_handle, STARAD_WARMUP);
