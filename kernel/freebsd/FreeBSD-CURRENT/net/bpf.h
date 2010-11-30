@@ -44,50 +44,6 @@
 #define _NET_BPF_H_
 
 
-#ifdef RADCLOCK
-/* RADclock synchronisation structure.
- * TODO: this should not be defined in here and not stored on the BPF device
- * but historically, we use the BPF device to set/get timestamping modes and
- * RADclock data
- */
-
-#include <sys/time.h>
-
-struct radclock_data {
-	double 		phat;
-	double 		phat_err;
-	double 		phat_local;
-	double 		phat_local_err;
-	long double	ca;
-	double 		ca_err;
-	uint32_t	status;
-	vcounter_t	last_changed;
-	vcounter_t	valid_till;
-};
-
-struct radclock_fixedpoint
-{
-	/* phat as an int shifted phat_shift to the left */
-	uint64_t phat_int;
-	/* Record of last time update from synchronization algorithm as an int */
-	uint64_t time_int;
-	/* The counter value to convert in seconds */
-	vcounter_t vcount;
-	/* the shift amount for phat_int */
-	uint8_t phat_shift;
-	/* the shift amount for time_int */
-	uint8_t time_shift;
-	/* Warn if stamp is over this many bits */
-	uint8_t countdiff_maxbits;
-};
-
-/* RADclock timestamping modes */
-#define RADCLOCK_TSMODE_SYSCLOCK		0x0001  /* return SW timeval (normal behavior) and raw vcounter */
-#define RADCLOCK_TSMODE_RADCLOCK		0x0002  /* return timeval based on RADclock and raw vcounter */
-#define RADCLOCK_TSMODE_FAIRCOMPARE 	0x0003  /* return SW timeval and raw vcounter read back to back */
-#endif /* RADCLOCK */
-
-
 /* BSD style release date */
 #define	BPF_RELEASE 199606
 
@@ -201,11 +157,14 @@ struct bpf_zbuf {
 #define	BIOCSSEESENT	BIOCSDIRECTION
 
 #ifdef RADCLOCK
-#define BIOCSRADCLOCKDATA	_IOW('B',133, struct radclock_data)  /* Set RADclock data */
-#define BIOCGRADCLOCKDATA	_IOR('B',134, struct radclock_data)  /* Get RADclock data */
-#define BIOCSRADCLOCKTSMODE	_IOW('B',135, int8_t) /* Set timestamping mode for this device) */
-#define BIOCGRADCLOCKTSMODE	_IOR('B',136, int8_t) /* Get timestamping  mode for this device */
-#define BIOCSRADCLOCKFIXED	_IOW('B',137, struct radclock_fixedpoint)  /* Set RADclock fixedpoint data */
+// TODO: merge with BPF_T_ symbols??
+/* RADclock timestamping modes */
+//#define RADCLOCK_TSMODE_SYSCLOCK		0x0001  /* return SW timeval (normal behavior) and raw vcounter */
+//#define RADCLOCK_TSMODE_RADCLOCK		0x0002  /* return timeval based on RADclock and raw vcounter */
+//#define RADCLOCK_TSMODE_FAIRCOMPARE 	0x0003  /* return SW timeval and raw vcounter read back to back */
+
+//#define BIOCSRADCLOCKTSMODE	_IOW('B',133, int8_t) /* Set timestamping mode for this device) */
+//#define BIOCGRADCLOCKTSMODE	_IOR('B',134, int8_t) /* Get timestamping  mode for this device */
 #endif /* RADCLOCK */
 
 /* Packet directions */
@@ -225,7 +184,12 @@ enum bpf_direction {
 #define	BPF_T_FAST		0x0100
 #define	BPF_T_MONOTONIC		0x0200
 #define	BPF_T_MONOTONIC_FAST	(BPF_T_FAST | BPF_T_MONOTONIC)
+#ifdef RADCLOCK
+#define	BPF_T_FFCLOCK		0x0400
+#define	BPF_T_FLAG_MASK		0x0700
+#else
 #define	BPF_T_FLAG_MASK		0x0300
+#endif
 #define	BPF_T_FORMAT(t)		((t) & BPF_T_FORMAT_MASK)
 #define	BPF_T_FLAG(t)		((t) & BPF_T_FLAG_MASK)
 #define	BPF_T_VALID(t)						\
@@ -241,6 +205,11 @@ enum bpf_direction {
 #define	BPF_T_MICROTIME_MONOTONIC_FAST	(BPF_T_MICROTIME | BPF_T_MONOTONIC_FAST)
 #define	BPF_T_NANOTIME_MONOTONIC_FAST	(BPF_T_NANOTIME | BPF_T_MONOTONIC_FAST)
 #define	BPF_T_BINTIME_MONOTONIC_FAST	(BPF_T_BINTIME | BPF_T_MONOTONIC_FAST)
+#ifdef RADCLOCK
+#define BPF_T_MICROTIME_FFCLOCK		(BPF_T_MICROTIME | BPF_T_FFCLOCK)
+#define BPF_T_NANOTIME_FFCLOCK		(BPF_T_NANOTIME | BPF_T_FFCLOCK)
+#define BPF_T_BINTIME_FFCLOCK		(BPF_T_BINTIME | BPF_T_FFCLOCK)
+#endif
 
 /*
  * Structure prepended to each packet.

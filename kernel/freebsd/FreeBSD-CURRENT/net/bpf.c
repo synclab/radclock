@@ -188,9 +188,9 @@ SYSCTL_INT(_net_bpf, OID_AUTO, zerocopy_enable, CTLFLAG_RW,
 SYSCTL_NODE(_net_bpf, OID_AUTO, stats, CTLFLAG_MPSAFE | CTLFLAG_RW,
     bpf_stats_sysctl, "bpf statistics portal");
 #ifdef RADCLOCK
-static int bpf_radclock_tsmode = RADCLOCK_TSMODE_SYSCLOCK;
-SYSCTL_INT(_net_bpf, OID_AUTO, bpf_radclock_tsmode, CTLFLAG_RW,
-	&bpf_radclock_tsmode, 0, "Default RADclock timestamping mode");
+static int bpf_tstamp_ffclock = 0; 
+SYSCTL_INT(_net_bpf, OID_AUTO, bpf_tstamp_ffclock, CTLFLAG_RW,
+	&bpf_tstamp_ffclock, 0, "BPF default timestamps use Feed-Forward clock");
 #endif /* RADCLOCK */
 
 static	d_open_t	bpfopen;
@@ -217,13 +217,6 @@ static struct filterops bpfread_filtops = {
 	.f_event = filt_bpfread,
 };
 
-#ifdef RADCLOCK
-/* Global data structure containing clock calibration data 
- * rough guess of 1Ghz beats zero 
- */ 
-static struct radclock_data radclock = {1e-9,0,0,0,0,0,0,0,0};
-static struct radclock_fixedpoint radclock_fp = {0,0,0,0,0,0};
-#endif /* RADCLOCK */
 /*
  * Wrapper functions for various buffering methods.  If the set of buffer
  * modes expands, we will probably want to introduce a switch data structure
@@ -726,8 +719,11 @@ bpfopen(struct cdev *dev, int flags, int fmt, struct thread *td)
 	knlist_init_mtx(&d->bd_sel.si_note, &d->bd_mtx);
 
 #ifdef RADCLOCK
-	/* Timestamping mode for this device, default is use SYSCLOCK */
-	d->radclock_tsmode = bpf_radclock_tsmode;
+	/* Timestamping mode for this device, default is use the system clock */
+	if (bpf_tstamp_ffclock)
+		d->bd_tstamp = d->bd_tstamp | BPF_T_FFCLOCK;
+	else
+		d->bd_tstamp = d->bd_tstamp & ~BPF_T_FFCLOCK;
 #endif /* RADCLOCK */
 
 	return (0);
@@ -1542,48 +1538,24 @@ bpfioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags,
 	case BIOCROTZBUF:
 		error = bpf_ioctl_rotzbuf(td, d, (struct bpf_zbuf *)addr);
 		break;
-#ifdef RADCLOCK
-	/* Set RADclock data */
-	case BIOCSRADCLOCKDATA:
-		{
-			BPFD_LOCK(d);
-			radclock = *(struct radclock_data *)addr;
-			BPFD_UNLOCK(d);
-			break;
-		}
-	/* Get RADclock data */
-	case BIOCGRADCLOCKDATA:
-		{
-			BPFD_LOCK(d);
-			*(struct radclock_data *)addr = radclock;
-			BPFD_UNLOCK(d);
-			break;
-		}
-	/* Set RADclock timestamping mode for this device) */
-	case BIOCSRADCLOCKTSMODE:
-		{
-			BPFD_LOCK(d);
-			d->radclock_tsmode = *(int8_t *)addr;  
-			BPFD_UNLOCK(d);
-			break;
-		}
-	/* Get RADclock timestamping mode for this device) */
-	case BIOCGRADCLOCKTSMODE:
-		{
-			BPFD_LOCK(d);
-			*(int8_t *)addr = d->radclock_tsmode;
-			BPFD_UNLOCK(d);
-			break;
-		}
-	/* Set RADclock fixedpoint data */
-	case BIOCSRADCLOCKFIXED:
-		{
-			BPFD_LOCK(d);
-			radclock_fp = *(struct radclock_fixedpoint *)addr;
-			BPFD_UNLOCK(d);
-			break;
-		}
-#endif /* RADCLOCK */
+//#ifdef RADCLOCK
+//	/* Set RADclock timestamping mode for this device) */
+//	case BIOCSRADCLOCKTSMODE:
+//		{
+//			BPFD_LOCK(d);
+//			d->radclock_tsmode = *(int8_t *)addr;  
+//			BPFD_UNLOCK(d);
+//			break;
+//		}
+//	/* Get RADclock timestamping mode for this device) */
+//	case BIOCGRADCLOCKTSMODE:
+//		{
+//			BPFD_LOCK(d);
+//			*(int8_t *)addr = d->radclock_tsmode;
+//			BPFD_UNLOCK(d);
+//			break;
+//		}
+//#endif /* RADCLOCK */
 	}
 	CURVNET_RESTORE();
 	return (error);
@@ -2109,63 +2081,6 @@ bpf_hdrlen(struct bpf_d *d)
 	return (hdrlen - d->bd_bif->bif_hdrlen);
 }
 
-#ifdef RADCLOCK
-static void
-radclock_vcount2bintime(vcounter_t *vcount, struct bintime *bt)
-{
-	vcounter_t countdiff;
-//	struct timeval tval;
-	uint64_t time_f;
-	uint64_t frac;
-
-	/* Synchronization algorithm (userland) should update the fixed point data
-	 * often enough to make sure the timeval does not overflow. If no sync algo
-	 * updates the data, we loose precision, but in that case, nobody is tracking
-	 * the clock drift anyway ... so send warning and stop worrying.
-	 */
-
-	/* XXX: So far we are called from catchpacket() only, that ia called from
-	 * one of the *tap functions, each of them holding the BPFD_LOCK(bd) lock.
-	 * ioctl ops are conditioned by the same lock, ensuring the consistency of
-	 * the fixedpoint data. If we move away from the BPF code (and we should),
-	 * we should lock in here.
-	 */
-
-	countdiff = *vcount - radclock_fp.vcount;
-	if (countdiff & ~((1ll << (radclock_fp.countdiff_maxbits +1)) -1))
-		printf("RADclock: warning stamp may overflow timeval at %llu!\n",
-				(long long unsigned) *vcount);
-
-	/* Add the counter delta in second to the recorded fixed point time */
-	time_f 	= radclock_fp.time_int
-			  + ((radclock_fp.phat_int * countdiff) >> (radclock_fp.phat_shift - radclock_fp.time_shift)) ;
-
-	bt->sec  = time_f >> radclock_fp.time_shift;
-
-// gives me headaches again
-// frac * ( 2^64 - 2^time_shift) ... that should be the correct resolution
-	frac = time_f - ((uint64_t) bt->sec << radclock_fp.time_shift);
-	bt->frac = frac * ((uint64_t) 1LL << (64 - radclock_fp.time_shift));
-
-
-//	tval.tv_sec = time_f >> radclock_fp.time_shift;
-//
-//	frac = (time_f - ((uint64_t)tval.tv_sec << radclock_fp.time_shift));
-//	tval.tv_usec = (frac * 1000000LL)  >> radclock_fp.time_shift;
-//	/* tv.tv_usec truncates at the nano-second digit, so check for next digit rounding */
-//	if ( ((frac * 10000000LL) >> radclock_fp.time_shift) >= (tval.tv_usec * 10LL + 5) )
-//	{
-//		tval.tv_usec++;
-//	}
-//
-//	/* Push the built timeval */
-//	*time = tval;
-	
-	/* XXX: If not called with BPFD_LOCK(bd), then should release the fixedpoint data
-	 * lock in here
-	 */
-}
-#endif
 
 static void
 bpf_bintime2ts(struct bintime *bt, struct bpf_ts *ts, int tstype)
@@ -2306,7 +2221,7 @@ catchpacket(struct bpf_d *d, u_char *pkt, u_int pktlen, u_int snaplen,
 		{
 #ifdef RADCLOCK
 			/* If asked, use the RADclock to generate the bintime timestamp */
-			if (d->radclock_tsmode == RADCLOCK_TSMODE_RADCLOCK)
+			if ( (d->bd_tstamp & BPF_T_FFCLOCK) == BPF_T_FFCLOCK )
 				radclock_vcount2bintime(vcount, bt);
 #endif	/* RADCLOCK */
 			bpf_bintime2ts(bt, &ts, tstype);
@@ -2367,7 +2282,7 @@ if_printf(bp->bif_ifp, "radcatch: hdr_old with hdrlen= %d, vcount= %llu\n",
 	{
 #ifdef RADCLOCK
 		hdr.vcount_stamp = *vcount;  // In all cases, store the vcount read previously
-		if (d->radclock_tsmode == RADCLOCK_TSMODE_RADCLOCK)
+		if ( (d->bd_tstamp & BPF_T_FFCLOCK) == BPF_T_FFCLOCK )
 			radclock_vcount2bintime(vcount, bt);
 #endif	/* RADCLOCK */
 		bpf_bintime2ts(bt, &hdr.bh_tstamp, tstype);

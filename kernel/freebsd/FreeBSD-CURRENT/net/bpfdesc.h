@@ -99,9 +99,9 @@ struct bpf_d {
 	u_int64_t	bd_wdcount;	/* number of packets dropped during a write */
 	u_int64_t	bd_zcopy;	/* number of zero copy operations */
 	u_char		bd_compat32;	/* 32-bit stream on LP64 system */
-#ifdef RADCLOCK
-	int8_t	radclock_tsmode;	/* Timestamping mode for the RADclock */
-#endif /* RADCLOCK */
+//#ifdef RADCLOCK
+//	int8_t	radclock_tsmode;	/* Timestamping mode for the RADclock */
+//#endif /* RADCLOCK */
 };
 
 /* Values for bd_state */

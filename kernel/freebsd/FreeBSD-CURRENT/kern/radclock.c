@@ -4,6 +4,8 @@
 
 #include <sys/types.h>
 #include <sys/param.h>
+#include <sys/lock.h>
+#include <sys/mutex.h>
 #include <sys/proc.h>
 #include <sys/module.h>
 #include <sys/sysent.h>
@@ -15,10 +17,14 @@
 #include <sys/sysctl.h>
 
 
+extern struct feedfwd_clock ffclock;
+
+static struct mtx ffclock_mtx;	/* lock against concurrent updates of the ffclock estimates */
+
 /*
  * Sysctl
  */
-static int sysctl_version = 1;
+static int sysctl_version = 2;
 
 SYSCTL_NODE(_kern, OID_AUTO, ffclock, CTLFLAG_RW, 0, "Feed-Forward Clock Support");
 SYSCTL_INT(_kern_ffclock, OID_AUTO, version, CTLFLAG_RD, &sysctl_version, 0, "Version of Feed-Forward Clock Support");
@@ -209,6 +215,113 @@ static moduledata_t get_vcounter_latency_mod = {
 };
 
 DECLARE_MODULE(get_vcounter_latency, get_vcounter_latency_mod, SI_SUB_SYSCALLS, SI_ORDER_MIDDLE);
+
+
+
+
+/*
+ * System call to push clock parameters to the kernel 
+ */
+
+struct set_ffclock_args {
+	struct radclock_fixedpoint *clock_fp;
+};
+
+
+/*
+ * Write down the clock estimates passed from userland. Hold ffclock_mtx to
+ * prevent several instances to update concurrently.
+ */
+static int
+set_ffclock(struct proc *td, void *syscall_args)
+{
+	int error = 0;
+	uint8_t gen;
+	struct set_ffclock_args *uap;
+
+	uap = (struct set_ffclock_args *) syscall_args;
+	if ( uap->clock_fp == NULL )
+		return -1;
+
+	mtx_lock(&ffclock_mtx);
+
+	gen = ffclock.generation;
+	error = copyin(uap->clock_fp, ffclock.estimate_old, sizeof(ffclock.estimate_old));
+
+	ffclock.tmp = ffclock.estimate;
+
+	if (++gen == 0)
+		gen = 1;
+	
+	ffclock.estimate = ffclock.estimate_old;
+	ffclock.generation = gen;
+	ffclock.estimate_old = ffclock.tmp;
+	ffclock.tmp = NULL;
+		
+	mtx_unlock(&ffclock_mtx);
+
+	return(error);
+}
+
+
+static struct sysent set_ffclock_sysent = {
+	1,
+	(sy_call_t *) set_ffclock,
+	AUE_NULL, 
+	NULL, 
+	0, 
+	0 
+};
+
+
+static int set_ffclock_offset = NO_SYSCALL;
+
+static int
+set_ffclock_load (struct module *module, int cmd, void *arg)
+{
+	int error = 0;
+	switch (cmd) {
+		case MOD_LOAD :
+			mtx_init(&ffclock_mtx, "ffclock lock", NULL, MTX_DEF);
+			printf("set_ffclock syscall loaded at %d \n", set_ffclock_offset);
+		break;
+		case MOD_UNLOAD :
+			mtx_destroy(&ffclock_mtx);
+			printf("set_ffclock syscall unloaded from %d\n", set_ffclock_offset);
+		break;
+		default :
+			error = EINVAL;
+		break;
+	}
+	return error;
+}
+
+/*
+ * XXX we used to call SYSCALL_MODULE to help us with declaring the modules.
+ * Starting with FreeBSD 8.1, the module name was prepended with "sys/" in the
+ * moduledata_t structure. To avoid yet another naming issues, we do
+ * SYSCALL_MODULE's work instead and overwrite this convention.
+ * See /usr/src/sys/sys/sysent.h for the details.
+ *
+ * Hopefully, this will disappear once we go mainstream
+ */
+//SYSCALL_MODULE(get_vcounter, &get_vcounter_offset, &get_vcounter_sysent, get_vcounter_load, NULL);
+
+static struct syscall_module_data set_ffclock_syscall_mod = {
+	set_ffclock_load,
+	NULL,
+	&set_ffclock_offset,
+	&set_ffclock_sysent,
+	{ 0, NULL, AUE_NULL}
+};
+
+static moduledata_t set_ffclock_mod = {
+	"set_ffclock",
+	syscall_module_handler,
+	&set_ffclock_syscall_mod
+};
+
+DECLARE_MODULE(set_ffclock, set_ffclock_mod, SI_SUB_SYSCALLS, SI_ORDER_MIDDLE);
 
 
 

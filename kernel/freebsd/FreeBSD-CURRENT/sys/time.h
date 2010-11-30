@@ -326,8 +326,52 @@ void	getmicrotime(struct timeval *tvp);
 
 /* RADCLOCK specific */
 typedef uint64_t vcounter_t;
+
+/* RADclock synchronisation structure */
+
+//struct radclock_data {
+//	double 		phat;
+//	double 		phat_err;
+//	double 		phat_local;
+//	double 		phat_local_err;
+//	long double	ca;
+//	double 		ca_err;
+//	uint32_t	status;
+//	vcounter_t	last_changed;
+//	vcounter_t	valid_till;
+//};
+
+struct radclock_fixedpoint
+{
+	/* phat as an int shifted phat_shift to the left */
+	uint64_t phat_int;
+	/* Record of last time update from synchronization algorithm as an int */
+	uint64_t time_int;
+	/* The counter value to convert in seconds */
+	vcounter_t vcount;
+	/* the shift amount for phat_int */
+	uint8_t phat_shift;
+	/* the shift amount for time_int */
+	uint8_t time_shift;
+	/* Warn if stamp is over this many bits */
+	uint8_t countdiff_maxbits;
+};
+
+
+struct feedfwd_clock
+{
+	uint8_t generation;
+	struct radclock_fixedpoint *estimate;
+	struct radclock_fixedpoint *estimate_old;
+	struct radclock_fixedpoint *tmp;
+};
+
+
+
 vcounter_t read_vcounter(void);
+void radclock_vcount2bintime(vcounter_t *vcount, struct bintime *bt);
 /* RADCLOCK */
+
 
 /* Other functions */
 int	itimerdecr(struct itimerval *itp, int usec);

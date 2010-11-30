@@ -21,6 +21,99 @@ __FBSDID("$FreeBSD: src/sys/kern/kern_tc.c,v 1.191 2010/09/21 08:02:02 mav Exp $
 #include <sys/timetc.h>
 #include <sys/timex.h>
 
+
+
+#ifdef RADCLOCK
+#include <sys/time.h>
+#include <sys/types.h>
+#include <sys/malloc.h>
+/* Global data structure containing clock estimates */ 
+static struct feedfwd_clock ffclock;
+
+MALLOC_DECLARE(M_FFCLOCK);
+MALLOC_DEFINE(M_FFCLOCK, "FFCLOCK", "Feed-Forward Clock estimates");
+
+
+// TODO should pass first timecounter frequency estimate here to get something
+// consistent at startup
+static void
+initffclock(struct feedfwd_clock *ffclock)
+{
+	ffclock->generation = 0;
+	ffclock->estimate = (struct radclock_fixedpoint *) malloc(sizeof(struct radclock_fixedpoint), M_FFCLOCK, M_WAITOK | M_ZERO);
+	ffclock->estimate_old = (struct radclock_fixedpoint *) malloc(sizeof(struct radclock_fixedpoint), M_FFCLOCK, M_WAITOK | M_ZERO);
+	ffclock->tmp = NULL;
+}
+
+
+
+void
+radclock_vcount2bintime(vcounter_t *vcount, struct bintime *bt)
+{
+	vcounter_t countdiff;
+//	struct timeval tval;
+	uint64_t time_f;
+	uint64_t frac;
+	struct radclock_fixedpoint *clock_fp;
+	uint8_t gen;
+
+	/* Synchronization algorithm (userland) should update the fixed point data
+	 * often enough to make sure the timeval does not overflow. If no sync algo
+	 * updates the data, we loose precision, but in that case, nobody is tracking
+	 * the clock drift anyway ... so send warning and stop worrying.
+	 */
+
+	/* XXX: So far we are called from catchpacket() only, that ia called from
+	 * one of the *tap functions, each of them holding the BPFD_LOCK(bd) lock.
+	 * ioctl ops are conditioned by the same lock, ensuring the consistency of
+	 * the fixedpoint data. If we move away from the BPF code (and we should),
+	 * we should lock in here.
+	 */
+	do {
+		clock_fp = ffclock.estimate;
+		gen = ffclock.generation;
+
+		countdiff = *vcount - clock_fp->vcount;
+		if (countdiff & ~((1ll << (clock_fp->countdiff_maxbits +1)) -1))
+			printf("RADclock: warning stamp may overflow timeval at %llu!\n",
+					(long long unsigned) *vcount);
+
+		/* Add the counter delta in second to the recorded fixed point time */
+		time_f 	= clock_fp->time_int
+				  + ((clock_fp->phat_int * countdiff) >> (clock_fp->phat_shift - clock_fp->time_shift)) ;
+
+		bt->sec  = time_f >> clock_fp->time_shift;
+
+		// gives me headaches again
+		// frac * ( 2^64 - 2^time_shift) ... that should be the correct resolution
+		frac = time_f - ((uint64_t) bt->sec << clock_fp->time_shift);
+		bt->frac = frac * ((uint64_t) 1LL << (64 - clock_fp->time_shift));
+
+	} while (gen == 0 || gen != ffclock.generation);
+
+
+	
+//	tval.tv_sec = time_f >> clock_fp.time_shift;
+//
+//	frac = (time_f - ((uint64_t)tval.tv_sec << clock_fp.time_shift));
+//	tval.tv_usec = (frac * 1000000LL)  >> clock_fp.time_shift;
+//	/* tv.tv_usec truncates at the nano-second digit, so check for next digit rounding */
+//	if ( ((frac * 10000000LL) >> clock_fp.time_shift) >= (tval.tv_usec * 10LL + 5) )
+//	{
+//		tval.tv_usec++;
+//	}
+//
+//	/* Push the built timeval */
+//	*time = tval;
+	
+	/* XXX: If not called with BPFD_LOCK(bd), then should release the fixedpoint data
+	 * lock in here
+	 */
+}
+
+#endif /* RADCLOCK */
+
+
 /*
  * A large step happens on boot.  This constant detects such steps.
  * It is relatively small so that ntp_update_second gets called enough
@@ -932,6 +1025,10 @@ inittimecounter(void *dummy)
 	(void)timecounter->tc_get_timecount(timecounter);
 	(void)timecounter->tc_get_timecount(timecounter);
 	tc_windup();
+
+#ifdef RADCLOCK
+	initffclock(&ffclock);
+#endif
 }
 
 SYSINIT(timecounter, SI_SUB_CLOCKS, SI_ORDER_SECOND, inittimecounter, NULL);
