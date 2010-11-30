@@ -43,7 +43,10 @@
 
 
 
-/* Configure detects FreeBSD version */ 
+/* Old kernel patches for feed-forward support versions 0 and 1.
+ * Used to add more IOCTL to the BPF device. The actual IOCTL number depends on
+ * the OS version, detected in configure script.
+ */ 
 /* for setting global clock data */ 
 #ifndef BIOCSRADCLOCKDATA 
 #define BIOCSRADCLOCKDATA	_IOW('B', FREEBSD_RADCLOCK_IOCTL, struct radclock_data)
@@ -68,6 +71,30 @@
 #ifndef BIOCSRADCLOCKFIXED 
 #define BIOCSRADCLOCKFIXED	_IOW('B', FREEBSD_RADCLOCK_IOCTL + 4, struct radclock_fixedpoint)
 #endif
+
+
+/* Kernel patches version 2 set the timestamping mode with new IOCTL calls.
+ * This is based on CURRENT, but should be standard soon for standard header
+ * inclusion, and avoid repeating everything in here.
+ */
+//#ifndef BIOCGTSTAMP
+#define	BIOCGTSTAMP	_IOR('B', 131, u_int)
+#define	BIOCSTSTAMP	_IOW('B', 132, u_int)
+
+
+#define	BPF_T_MICROTIME		0x0000
+#define	BPF_T_NANOTIME		0x0001
+#define	BPF_T_BINTIME		0x0002
+#define	BPF_T_NONE		0x0003
+#define	BPF_T_NORMAL		0x0000
+#define	BPF_T_FAST		0x0100
+#define	BPF_T_MONOTONIC		0x0200
+#define	BPF_T_MONOTONIC_FAST	(BPF_T_FAST | BPF_T_MONOTONIC)
+#define	BPF_T_FFCLOCK		0x0400
+
+//#endif
+
+
 
 /* Redefinition of the BPF header as in bpf.h Just to avoid to have to include
  * the file again and define the RADCLOCK symbol at compilation time.  Changed
@@ -356,24 +383,91 @@ int radclock_read_kernelclock(struct radclock *handle)
 }
 
 
-int descriptor_set_tsmode(pcap_t *p_handle, int kmode)
+int descriptor_set_tsmode(struct radclock *handle, pcap_t *p_handle, int kmode)
 {
-	if (ioctl(pcap_fileno(p_handle), BIOCSRADCLOCKTSMODE, (caddr_t)&kmode) == -1) 
+	u_int bd_tstamp = 0; 
+
+	switch (handle->kernel_version)
 	{
-		logger(LOG_ERR, "Setting capture mode failed");
+
+	case 0:
+	case 1:
+		if (ioctl(pcap_fileno(p_handle), BIOCSRADCLOCKTSMODE, (caddr_t)&kmode) == -1) 
+		{
+			logger(LOG_ERR, "Setting capture mode failed");
+			return -1;
+		}
+		break;
+
+	case 2:
+		/* No more Faircompare mode in kernel version 2, it is identical to
+		 * SYSCLOCK
+		 */
+		switch ( kmode )
+		{
+			case RADCLOCK_TSMODE_SYSCLOCK:
+			case RADCLOCK_TSMODE_FAIRCOMPARE:
+				bd_tstamp = BPF_T_MICROTIME;
+				break;
+			case RADCLOCK_TSMODE_RADCLOCK:
+				bd_tstamp = BPF_T_MICROTIME | BPF_T_FFCLOCK;
+				break;
+			default:
+				logger(LOG_ERR, "descriptor_set_tsmode: Unknown timestamping mode.");
+				return -1;
+		}
+
+		if (ioctl(pcap_fileno(p_handle), BIOCSTSTAMP, (caddr_t)&bd_tstamp) == -1) 
+		{
+			logger(LOG_ERR, "Setting capture mode failed");
+			return -1;
+		}
+
+		break;
+
+	default:
+		logger(LOG_ERR, "Unknown kernel version");
 		return -1;
+
 	}
 	return 0;
 }
 
 
-int descriptor_get_tsmode(pcap_t *p_handle, int *kmode)
+int descriptor_get_tsmode(struct radclock *handle, pcap_t *p_handle, int *kmode)
 {
-	if (ioctl(pcap_fileno(p_handle), BIOCGRADCLOCKTSMODE, (caddr_t)kmode) == -1)
+	u_int bd_tstamp = 0; 
+
+	switch (handle->kernel_version)
 	{
-		logger(LOG_ERR, "Getting timestamping mode failed");
+
+	case 0:
+	case 1:
+		if (ioctl(pcap_fileno(p_handle), BIOCGRADCLOCKTSMODE, (caddr_t)kmode) == -1)
+		{
+			logger(LOG_ERR, "Getting timestamping mode failed");
+			return -1;
+		}
+		break;
+
+	case 2:
+		if (ioctl(pcap_fileno(p_handle), BIOCGTSTAMP, (caddr_t)(&bd_tstamp)) == -1)
+		{
+			logger(LOG_ERR, "Getting timestamping mode failed");
+			return -1;
+		}
+
+		if ( (bd_tstamp & BPF_T_FFCLOCK) == BPF_T_FFCLOCK)
+			*kmode = RADCLOCK_TSMODE_RADCLOCK;
+		else
+			*kmode = RADCLOCK_TSMODE_SYSCLOCK;
+		break;
+
+	default:
+		logger(LOG_ERR, "Unknown kernel version");
 		return -1;
 	}
+	
 	return 0;
 }
 

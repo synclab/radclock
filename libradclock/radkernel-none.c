@@ -86,13 +86,13 @@ int radclock_read_kernelclock(struct radclock *handle)
 }
 
 
-int descriptor_set_tsmode(pcap_t *p_handle, int kmode)
+int descriptor_set_tsmode(struct radclock *handle, pcap_t *p_handle, int kmode)
 {
 	return -ENOENT;
 }
 
 
-int descriptor_get_tsmode(pcap_t *p_handle, int *kmode)
+int descriptor_get_tsmode(struct radclock *handle, pcap_t *p_handle, int *kmode)
 {
 	return -ENOENT;
 }

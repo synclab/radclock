@@ -323,25 +323,25 @@ int radclock_set_kernelclock(struct radclock *handle);
  * @param  req_type Type of IPC request 
  * @return 0 on success, non-zero on failure
  */ 
-int radclock_check_outdated(struct radclock* handle, vcounter_t *vc, int req_type);
+int radclock_check_outdated(struct radclock *handle, vcounter_t *vc, int req_type);
+
+
+/**
+ * System specific call for getting the capture mode on the pcap capture device.
+ */
+int descriptor_get_tsmode(struct radclock *handle, pcap_t *p_handle, int *kmode);
 
 
 /**
  * System specific call for setting the capture mode on the pcap capture device.
  */
-int descriptor_set_tsmode(pcap_t *p_handle, int kmode);
+int descriptor_set_tsmode(struct radclock *handle, pcap_t *p_handle, int kmode);
 
 
 /**
  * Set fixedpoint data in the kernel for computing timestamps there 
  */
 inline int set_kernel_fixedpoint(struct radclock *handle, struct radclock_fixedpoint *fpdata);
-
-
-/**
- * System specific call for getting the capture mode on the pcap capture device.
- */
-int descriptor_get_tsmode(pcap_t *p_handle, int *kmode);
 
 
 /**

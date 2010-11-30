@@ -69,7 +69,7 @@ int radclock_set_tsmode(struct radclock *handle, pcap_t *p_handle, radclock_tsmo
 	}
 
 	/* Call to system specific method to set the mode */
-	if (descriptor_set_tsmode(p_handle, kmode) == -1)
+	if (descriptor_set_tsmode(handle, p_handle, kmode) == -1)
 		return -1;
 
 	return 0;
@@ -87,7 +87,7 @@ int radclock_get_tsmode(struct radclock *handle, pcap_t *p_handle, radclock_tsmo
 	}
 	
 	/* Call to system specific method to get the mode */
-	if (descriptor_get_tsmode(p_handle, &kmode) == -1)
+	if (descriptor_get_tsmode(handle, p_handle, &kmode) == -1)
 		return -1;
 
 	//TODO align enum with kernel modes

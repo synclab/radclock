@@ -655,7 +655,7 @@ errout:
 
 
 
-int descriptor_set_tsmode(pcap_t *p_handle, int kmode)
+int descriptor_set_tsmode(struct radclock *handle, pcap_t *p_handle, int kmode)
 {
 	/* int and long imay have different size on 32bit and 64bit architectures.
 	 * the kernel expects a long based on IOCTL definition
@@ -671,7 +671,7 @@ int descriptor_set_tsmode(pcap_t *p_handle, int kmode)
 }
 
 
-int descriptor_get_tsmode(pcap_t *p_handle, int *kmode)
+int descriptor_get_tsmode(struct radclock *handle, pcap_t *p_handle, int *kmode)
 {
 	/* int and long imay have different size on 32bit and 64bit architectures.
 	 * the kernel expects a long based on IOCTL definition
