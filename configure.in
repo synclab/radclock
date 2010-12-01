@@ -23,7 +23,7 @@
 dnl Check for autoconf version
 AC_PREREQ(2.57)
 
-AC_INIT(radclock, 0.3.0, [julien@synclab.org], radclock)
+AC_INIT(radclock, 0.3.1, [julien@synclab.org], radclock)
 
 dnl This should set the target_cpu, target_os and target_vendor variables
 AC_CANONICAL_TARGET
