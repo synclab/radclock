@@ -110,6 +110,10 @@ int extract_vcount_stamp(
 
 
 /* ** Clock Data Routines ** */
+
+// TODO the 3 following functions should be redesigned.
+
+
 /* Set radclock data. */
 int radclock_set_kernelclock(struct radclock *handle) 
 {

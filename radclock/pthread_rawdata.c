@@ -459,10 +459,16 @@ int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 	/* Update calibration using new stamp */ 
 	process_bidir_stamp(clock_handle, peer, BST(&stamp), stamp.qual_warning);
 
+
+// XXX The following hasn't been used since r885 when we moved to fixed point
+// arithmetic. A single syscall for updating all data should be enough anyway.
+// TODO: all of this should be nuked, including os specific functions 
 	/* Update the radclock i.e. the global data 
 	 * Done only in the case of reading from a live device and if 
 	 * the update flag is on.
 	 */
+if (0)
+{
 	if ( (clock_handle->run_mode == RADCLOCK_SYNC_LIVE) && (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER) ) 
 	{
 		// Update any virtual machine store if configured
@@ -492,6 +498,9 @@ int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 			radclock_destroy(tmp_clock);
 		}
 	}
+}
+// XXX nuke till here
+
 
 	/* To improve data accuracy, we kick a fixed point data update just after we
 	 * have preocessed a new stamp. Locking is handled by the kernel so we should

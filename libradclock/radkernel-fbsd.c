@@ -160,7 +160,7 @@ int has_vm_vcounter(void)
 int found_ffwd_kernel_version (void) 
 {
 	int ret;
-	int	version;
+	int	version = -1;
 	size_t size_ctl;
 
 	size_ctl = sizeof(version);
@@ -169,23 +169,38 @@ int found_ffwd_kernel_version (void)
 	if ( ret == 0 )
 	{
 		logger(RADLOG_NOTICE, "Feed-Forward kernel support detected (version: %d)", version);
-		return version;
+	}
+	else {
+		/* This is the old way we used before explicit versioning. */
+		ret = sysctlbyname("net.bpf.bpf_radclock_tsmode", &version, &size_ctl, NULL, 0);
+		if (ret == 0) 
+		{
+			logger(RADLOG_NOTICE, "Feed-Forward kernel support detected (version 0)");
+			version = 0;
+		}
+		else
+			version = -1;
 	}
 
-	/* This is the old way we used before explicit versioning */
-	ret = sysctlbyname("net.bpf.bpf_radclock_tsmode", &version, &size_ctl, NULL, 0);
-	if (ret == 0) 
+	/* A quick reminder for the administrator. */	
+	switch ( version )
 	{
-		logger(RADLOG_NOTICE, "Feed-Forward kernel support detected (version 0)");
-		return 0;
+		case 2:
+			break;	
+
+		case 1:
+		case 0:
+			logger(RADLOG_WARNING, "The Feed-Forward kernel support is a bit old. "
+					"You should update your kernel.");
+			break;
+
+		case -1:
+		default:
+			logger(RADLOG_NOTICE, "No Feed-Forward kernel support detected");
+		break;
 	}
-	else
-	{
-		logger(RADLOG_NOTICE, "No Feed-Forward kernel support detected");
-		return -1;
-	}
+	return version;
 }
-
 
 
 int radclock_init_vcounter_syscall(struct radclock *handle)
@@ -283,33 +298,64 @@ int radclock_init_vcounter(struct radclock *handle)
 
 
 
-// XXX XXX XXX XXX XXX XXX XXX XXX XXX XXX 
-// This is super ugly, we open a second BPF to write the clock data, generic or fixed point.
-// TODO fix the kernel to have the clock stored somewhere else and remove that stupid code
 int radclock_init_kernel_support(struct radclock *handle)
 {
-	int fd;
+	/* Kernel version 0 and 1 variables */
+	int fd = -1;
 	int devnum;
 	char fname[30];
 
-	for (devnum=0; devnum <255; devnum++)
-	{
-		sprintf(fname, "/dev/bpf%d", devnum);
-		fd = open(fname, O_RDONLY);
-		if (fd != -1) {
-			logger(RADLOG_NOTICE, "Found bpf descriptor on /dev/bpf%d", devnum);
-			goto done;
-		}
-	}
-	logger(RADLOG_ERR, "Cannot open a bpf descriptor");
-	return -1;
-done:
-	{
-		PRIV_DATA(handle)->dev_fd =  fd;
+	/* Kernel version 2 variables */
+	int err;
+	struct module_stat stat;
 
-		logger(RADLOG_NOTICE, "Feed-Forward Kernel initialised");
-		return 0;
+	switch (handle->kernel_version)
+	{
+
+	case 0:
+	case 1:
+		/* This is super ugly, we open a second BPF to write the clock data,
+		 * generic or fixed point. That's the very old way
+		 */
+		for (devnum=0; devnum < 255; devnum++)
+		{
+			sprintf(fname, "/dev/bpf%d", devnum);
+			fd = open(fname, O_RDONLY);
+			if (fd != -1) {
+				logger(RADLOG_NOTICE, "Found bpf descriptor on /dev/bpf%d", devnum);
+				break;
+			}
+		}
+		if ( devnum == 254 )
+		{
+			logger(RADLOG_ERR, "Cannot open a bpf descriptor");
+			return -1;
+		}
+		PRIV_DATA(handle)->dev_fd = fd;
+		break;
+
+	case 2:
+		/* Use radclock module syscall to update clock data */
+		stat.version = sizeof(stat);
+		err = modstat(modfind("set_ffclock"), &stat);
+		if (err < 0 ) {
+			logger(RADLOG_ERR, "Error on modstat (set_ffclock syscall): %s", strerror(errno));
+			logger(RADLOG_ERR, "Is the radclock kernel module loaded?");
+			return -1;
+		}
+		handle->syscall_set_ffclock = stat.data.intval;
+		logger(RADLOG_NOTICE, "Registered set_ffclock syscall at %d", handle->syscall_set_ffclock);
+		break;
+
+
+	default:
+		logger(LOG_ERR, "Unknown kernel version");
+		return -1;
 	}
+
+
+	logger(RADLOG_NOTICE, "Feed-Forward Kernel initialised");
+	return 0;
 }
 
 
@@ -317,13 +363,40 @@ done:
 /*
  * Clock Data Routines
  */
+// TODO the 3 following functions should be redesigned.
+// we need to one call to set the clock data
+// and possibly one call to read them -- only way I see a use for this is if the
+// timecounter has changed
+
 inline int set_kernel_fixedpoint(struct radclock *handle, struct radclock_fixedpoint *fpdata)
 {
-	if (ioctl(PRIV_DATA(handle)->dev_fd, BIOCSRADCLOCKFIXED, (caddr_t)fpdata) == -1) 
+	int err;
+	switch (handle->kernel_version)
 	{
-		logger(LOG_ERR, "Setting fixedpoint data failed");
+
+	case 0:
+	case 1:
+		err = ioctl(PRIV_DATA(handle)->dev_fd, BIOCSRADCLOCKFIXED, (caddr_t)fpdata);
+		if ( err < 0 ) 
+		{
+			logger(LOG_ERR, "Setting fixedpoint data failed");
+			return -1;
+		}
+		break;
+
+	case 2:	
+		err = syscall(handle->syscall_set_ffclock, fpdata);
+		if ( err < 0 ) {
+			logger(RADLOG_ERR, "error on syscall set_ffclock: %s", strerror(errno));
+			return -1;
+		}
+		break;
+
+	default:
+		logger(LOG_ERR, "Unknown kernel version");
 		return -1;
 	}
+
 	return 0;
 }
 

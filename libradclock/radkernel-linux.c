@@ -151,12 +151,7 @@ int has_vm_vcounter(void)
 
 int found_ffwd_kernel_version (void) 
 {
-	/* 
-	 * It seems the sysctl inteface is quite broken in Linux
-	 * Let's do it this way.
-	 * TODO: improve/ correct the use of the proc filesystem in the future
-	 */
-	int version = 0;
+	int version = -1;
 	FILE *fd = NULL;
 
 	fd = fopen ("/sys/devices/system/ffclock/ffclock0/version", "r");
@@ -165,22 +160,38 @@ int found_ffwd_kernel_version (void)
 		fscanf(fd, "%d", &version);
 		fclose(fd);
 		logger(RADLOG_NOTICE, "Feed-Forward kernel support detected (version: %d)", version);
-		return version;
+	}
+	else {
+
+		/* This is the old way we used before explicit versioning */
+		fd = fopen ("/proc/sys/net/core/radclock_default_tsmode", "r");
+		if (fd)
+		{
+			fclose(fd);	
+			logger(RADLOG_NOTICE, "Feed-Forward kernel support detected (version 0)");
+			version = 0;
+		}
+		else 
+			version = -1;
 	}
 
-	/* This is the old way we used before explicit versioning */
-	fd = fopen ("/proc/sys/net/core/radclock_default_tsmode", "r");
-	if (fd)
+	/* A quick reminder for the administrator. */	
+	switch ( version )
 	{
-		fclose(fd);	
-		logger(RADLOG_NOTICE, "Feed-Forward kernel support detected (version 0)");
-		return 0;
+		case 1:
+			break;	
+
+		case 0:
+			logger(RADLOG_WARNING, "The Feed-Forward kernel support is a bit old. "
+					"You should update your kernel.");
+			break;
+
+		case -1:
+		default:
+			logger(RADLOG_NOTICE, "No Feed-Forward kernel support detected");
+		break;
 	}
-	else 
-	{
-		logger(RADLOG_NOTICE, "No Feed-Forward kernel support detected");
-		return -1;
-	}
+	return version;
 }
 
 
@@ -575,6 +586,12 @@ errout:
 /*
  * Clock Data Routines
  */
+
+// TODO the 3 following functions should be redesigned.
+// we need to one call to set the clock data
+// and possibly one call to read them -- Should check what it would be used for
+// on Linux 
+
 
 inline int set_kernel_fixedpoint(struct radclock *handle, struct radclock_fixedpoint *fpdata)
 {

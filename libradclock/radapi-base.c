@@ -88,6 +88,7 @@ struct radclock * radclock_create(void)
 	clock->server_data 	= NULL;
 
 	/* Syscall */
+	clock->syscall_set_ffclock = 0;
 	clock->syscall_get_vcounter = 0;
 	clock->syscall_get_vcounter_latency = 0;
 
@@ -230,6 +231,9 @@ int radclock_init(struct radclock *clock_handle)
 		logger(RADLOG_ERR, "The clock handle is NULL and can't be initialised");
 		return -1;
 	}
+
+	/* Make sure we have detected the version of the kernel we are running on */
+	clock_handle->kernel_version = found_ffwd_kernel_version();
 
 	err = radclock_init_vcounter_syscall(clock_handle);
 	if ( err < 0 )

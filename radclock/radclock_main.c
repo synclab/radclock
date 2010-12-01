@@ -434,21 +434,7 @@ int radclock_init_specific (struct radclock *clock_handle)
 
 	JDEBUG
 
-	/* Open input file from which to read TS data */   
-	stamp_source = create_source(clock_handle);
-	if (!stamp_source)
-	{
-		verbose(LOG_ERR, "Error creating stamp source, exiting");
-		exit(EXIT_FAILURE);
-	}
-	/* Hang stamp source on the handler */
-	clock_handle->stamp_source = (void *) stamp_source;
 
-	/* Open output files */ 
-	open_output_stamp(clock_handle);
-	open_output_matlab(clock_handle);
-
-	
 	/* Clock has been init', set the pointer to the clock */
 	set_verbose(clock_handle, clock_handle->is_daemon, clock_handle->conf->verbose_level);
 	set_logger(logger_verbose_bridge);
@@ -485,7 +471,21 @@ int radclock_init_specific (struct radclock *clock_handle)
 		}
 	}
 
+	/* Open input file from which to read TS data */   
+	stamp_source = create_source(clock_handle);
+	if (!stamp_source)
+	{
+		verbose(LOG_ERR, "Error creating stamp source, exiting");
+		exit(EXIT_FAILURE);
+	}
+	/* Hang stamp source on the handler */
+	clock_handle->stamp_source = (void *) stamp_source;
 
+	/* Open output files */ 
+	open_output_stamp(clock_handle);
+	open_output_matlab(clock_handle);
+
+	
 	return 0;
 }
 
@@ -789,24 +789,6 @@ int main (int argc, char *argv[])
 		clock_handle->autoupdate_mode = RADCLOCK_UPDATE_NEVER;
 	}
 	else {
-		/* We are running live so should make sure we have some kernel support here */	
-		clock_handle->kernel_version = found_ffwd_kernel_version();
-		switch ( clock_handle->kernel_version )
-		{
-			case 1:
-				break;	
-
-			case 0:
-				verbose(LOG_WARNING, "The Feed-Forward kernel support is a bit old. "
-						"You should update your kernel.");
-				break;
-
-			case -1:
-			default:
-				verbose(LOG_ERR, "The RADclock does not run live without "
-						"Feed-Forward kernel support");
-				return 1;
-		}
 
 		/* Passed kernel support and version check */
 		clock_handle->run_mode = RADCLOCK_SYNC_LIVE;
@@ -829,6 +811,14 @@ int main (int argc, char *argv[])
 		if (radclock_init(clock_handle))
 		{
 			verbose(LOG_ERR, "Could not initialise the RADclock");
+			return 1;
+		}
+
+		/* Make sure we are doing the right thing */
+		if (clock_handle->kernel_version < 0)
+		{
+			verbose(LOG_ERR, "The RADclock does not run live without "
+						"Feed-Forward kernel support");
 			return 1;
 		}
 	}

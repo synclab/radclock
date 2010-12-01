@@ -192,7 +192,8 @@ struct radclock
 	/* Pcap handler for the RADclock only */
 	pcap_t *pcap_handle;
 
-	/* Syscall */
+	/* Syscalls */
+	int syscall_set_ffclock;	/* FreeBSD specific, so far */
 	int syscall_get_vcounter;
 	int syscall_get_vcounter_latency;
 
