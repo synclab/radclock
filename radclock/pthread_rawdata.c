@@ -471,9 +471,6 @@ if (0)
 {
 	if ( (clock_handle->run_mode == RADCLOCK_SYNC_LIVE) && (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER) ) 
 	{
-		// Update any virtual machine store if configured
-		RAD_VM(clock_handle)->push_data(clock_handle);
-
 		// Use the clock we just created to update the global data
 		if ( (radclock_set_kernelclock(clock_handle)) < 0) {
 			verbose(LOG_ERR, "Could not SET global data to the kernel clock");
@@ -501,6 +498,11 @@ if (0)
 }
 // XXX nuke till here
 
+	/* Update any virtual machine store if configured */
+	if ( (clock_handle->run_mode == RADCLOCK_SYNC_LIVE) && (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER) ) 
+	{
+		RAD_VM(clock_handle)->push_data(clock_handle);
+	}
 
 	/* To improve data accuracy, we kick a fixed point data update just after we
 	 * have preocessed a new stamp. Locking is handled by the kernel so we should
