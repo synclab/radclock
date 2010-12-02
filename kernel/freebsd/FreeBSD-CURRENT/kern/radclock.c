@@ -246,7 +246,7 @@ set_ffclock(struct proc *td, void *syscall_args)
 	mtx_lock(&ffclock_mtx);
 
 	gen = ffclock.generation;
-	error = copyin(uap->clock_fp, ffclock.estimate_old, sizeof(ffclock.estimate_old));
+	error = copyin(uap->clock_fp, ffclock.estimate_old, sizeof(struct radclock_fixedpoint));
 
 	ffclock.tmp = ffclock.estimate;
 
@@ -257,7 +257,7 @@ set_ffclock(struct proc *td, void *syscall_args)
 	ffclock.generation = gen;
 	ffclock.estimate_old = ffclock.tmp;
 	ffclock.tmp = NULL;
-		
+
 	mtx_unlock(&ffclock_mtx);
 
 	return(error);

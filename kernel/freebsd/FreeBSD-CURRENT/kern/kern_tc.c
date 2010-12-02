@@ -63,11 +63,8 @@ radclock_vcount2bintime(vcounter_t *vcount, struct bintime *bt)
 	 * the clock drift anyway ... so send warning and stop worrying.
 	 */
 
-	/* XXX: So far we are called from catchpacket() only, that ia called from
-	 * one of the *tap functions, each of them holding the BPFD_LOCK(bd) lock.
-	 * ioctl ops are conditioned by the same lock, ensuring the consistency of
-	 * the fixedpoint data. If we move away from the BPF code (and we should),
-	 * we should lock in here.
+	/* No locking to prevent clock data to be updated. Check that the generation
+	 * has not changed instead.
 	 */
 	do {
 		clock_fp = ffclock.estimate;
@@ -75,14 +72,24 @@ radclock_vcount2bintime(vcounter_t *vcount, struct bintime *bt)
 
 		countdiff = *vcount - clock_fp->vcount;
 		if (countdiff & ~((1ll << (clock_fp->countdiff_maxbits +1)) -1))
-			printf("RADclock: warning stamp may overflow timeval at %llu!\n",
-					(long long unsigned) *vcount);
+		{
+			printf("ffclock: warning stamp may overflow timeval at %llu! "
+					"(countdiff = %llu, maxbits = %u)\n", 
+					(long long unsigned) *vcount,
+					(long long unsigned) countdiff,
+					clock_fp->countdiff_maxbits);
 
+		}
 		/* Add the counter delta in second to the recorded fixed point time */
 		time_f 	= clock_fp->time_int
 				  + ((clock_fp->phat_int * countdiff) >> (clock_fp->phat_shift - clock_fp->time_shift)) ;
 
 		bt->sec  = time_f >> clock_fp->time_shift;
+
+		printf("ffclock: vcount = %llu bt->sec = %llu, time_int = %llu\n",
+				(long long unsigned) *vcount,
+			   	(long long unsigned) bt->sec, 
+				(long long unsigned) (clock_fp->time_int >> clock_fp->time_shift));
 
 		// gives me headaches again
 		// frac * ( 2^64 - 2^time_shift) ... that should be the correct resolution

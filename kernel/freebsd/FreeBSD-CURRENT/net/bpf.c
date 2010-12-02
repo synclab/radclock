@@ -188,9 +188,9 @@ SYSCTL_INT(_net_bpf, OID_AUTO, zerocopy_enable, CTLFLAG_RW,
 SYSCTL_NODE(_net_bpf, OID_AUTO, stats, CTLFLAG_MPSAFE | CTLFLAG_RW,
     bpf_stats_sysctl, "bpf statistics portal");
 #ifdef RADCLOCK
-static int bpf_tstamp_ffclock = 0; 
-SYSCTL_INT(_net_bpf, OID_AUTO, bpf_tstamp_ffclock, CTLFLAG_RW,
-	&bpf_tstamp_ffclock, 0, "BPF default timestamps use Feed-Forward clock");
+static int bpf_ffclock_tstamp = 0; 
+SYSCTL_INT(_net_bpf, OID_AUTO, ffclock_tstamp, CTLFLAG_RW,
+	&bpf_ffclock_tstamp, 0, "Set BPF to timestamp using Feed-Forward clock by default");
 #endif /* RADCLOCK */
 
 static	d_open_t	bpfopen;
@@ -719,9 +719,13 @@ bpfopen(struct cdev *dev, int flags, int fmt, struct thread *td)
 	knlist_init_mtx(&d->bd_sel.si_note, &d->bd_mtx);
 
 #ifdef RADCLOCK
-	/* Timestamping mode for this device, default is use the system clock */
-	if (bpf_tstamp_ffclock)
-		d->bd_tstamp = d->bd_tstamp | BPF_T_FFCLOCK;
+	/* Timestamping mode for this device, default is use the system clock.
+	 * Need monotonic to avoid bpf_bintime2ts to add bootime.
+	 */
+	// XXX Not sure the logic for the else case makes sense at all. Think about
+	// scenarios
+	if (bpf_ffclock_tstamp)
+		d->bd_tstamp = d->bd_tstamp | BPF_T_FFCLOCK | BPF_T_MONOTONIC;
 	else
 		d->bd_tstamp = d->bd_tstamp & ~BPF_T_FFCLOCK;
 #endif /* RADCLOCK */
@@ -2093,6 +2097,8 @@ bpf_bintime2ts(struct bintime *bt, struct bpf_ts *ts, int tstype)
 		bt2 = *bt;
 		bintime_add(&bt2, &boottimebin);
 		bt = &bt2;
+// XXX RADCLOCK DEBUG XXX
+printf(" ***** added bootimebin ****\n");
 	}
 	switch (BPF_T_FORMAT(tstype)) {
 	case BPF_T_MICROTIME:
@@ -2144,9 +2150,9 @@ catchpacket(struct bpf_d *d, u_char *pkt, u_int pktlen, u_int snaplen,
 	int do_timestamp;
 	int tstype;
 
-// XXX RADCLOCK DEBUG XXX	
-	struct bpf_if *bp;
-	bp = d->bd_bif;
+// XXX RADCLOCK DEBUG XXX
+//	struct bpf_if *bp;
+//	bp = d->bd_bif;
 // XXX RADCLOCK DEBUG XXX	
 
 	BPFD_LOCK_ASSERT(d);
@@ -2221,10 +2227,18 @@ catchpacket(struct bpf_d *d, u_char *pkt, u_int pktlen, u_int snaplen,
 		{
 #ifdef RADCLOCK
 			/* If asked, use the RADclock to generate the bintime timestamp */
-			if ( (d->bd_tstamp & BPF_T_FFCLOCK) == BPF_T_FFCLOCK )
+			if ( (tstype & BPF_T_FFCLOCK) == BPF_T_FFCLOCK )
 				radclock_vcount2bintime(vcount, bt);
 #endif	/* RADCLOCK */
 			bpf_bintime2ts(bt, &ts, tstype);
+
+			// XXX RADCLOCK DEBUG XXX
+			printf("     bt: sec = %llu, frac = %llu\n", 
+					(long long unsigned) bt->sec,
+					(long long unsigned) bt->frac);
+			printf("     ts: sec = %lu, usec = %lu\n", 
+					(long unsigned) ts.bt_sec,
+					(long unsigned) ts.bt_frac);
 		}
 #ifdef COMPAT_FREEBSD32
 		if (d->bd_compat32) {
@@ -2241,8 +2255,8 @@ catchpacket(struct bpf_d *d, u_char *pkt, u_int pktlen, u_int snaplen,
 			hdr32_old.bh_caplen = caplen;
 
 // XXX RADCLOCK DEBUG XXX
-if_printf(bp->bif_ifp, "radcatch: hdr32_old with hdrlen= %d, vcount= %llu\n",
-	   	hdrlen, (long long unsigned) *vcount);
+//if_printf(bp->bif_ifp, "radcatch: hdr32_old with hdrlen= %d, vcount= %llu\n",
+//	   	hdrlen, (long long unsigned) *vcount);
 // XXX RADCLOCK DEBUG XXX
 
 			bpf_append_bytes(d, d->bd_sbuf, curlen, &hdr32_old,
@@ -2263,8 +2277,8 @@ if_printf(bp->bif_ifp, "radcatch: hdr32_old with hdrlen= %d, vcount= %llu\n",
 		hdr_old.bh_caplen = caplen;
 
 // XXX RADCLOCK DEBUG XXX
-if_printf(bp->bif_ifp, "radcatch: hdr_old with hdrlen= %d, vcount= %llu\n",
-	   	hdrlen, (long long unsigned) *vcount);
+//if_printf(bp->bif_ifp, "radcatch: hdr_old with hdrlen= %d, vcount= %llu\n",
+//	   	hdrlen, (long long unsigned) *vcount);
 // XXX RADCLOCK DEBUG XXX
 
 		bpf_append_bytes(d, d->bd_sbuf, curlen, &hdr_old,
@@ -2282,7 +2296,7 @@ if_printf(bp->bif_ifp, "radcatch: hdr_old with hdrlen= %d, vcount= %llu\n",
 	{
 #ifdef RADCLOCK
 		hdr.vcount_stamp = *vcount;  // In all cases, store the vcount read previously
-		if ( (d->bd_tstamp & BPF_T_FFCLOCK) == BPF_T_FFCLOCK )
+		if ( (tstype & BPF_T_FFCLOCK) == BPF_T_FFCLOCK )
 			radclock_vcount2bintime(vcount, bt);
 #endif	/* RADCLOCK */
 		bpf_bintime2ts(bt, &hdr.bh_tstamp, tstype);
@@ -2292,8 +2306,8 @@ if_printf(bp->bif_ifp, "radcatch: hdr_old with hdrlen= %d, vcount= %llu\n",
 	hdr.bh_caplen = caplen;
 
 // XXX RADCLOCK DEBUG XXX
-if_printf(bp->bif_ifp, "radcatch: xhdr with hdrlen= %d, vcount= %llu\n",
-	   	hdrlen, (long long unsigned) *vcount);
+//if_printf(bp->bif_ifp, "radcatch: xhdr with hdrlen= %d, vcount= %llu\n",
+//	   	hdrlen, (long long unsigned) *vcount);
 // XXX RADCLOCK DEBUG XXX
 
 	bpf_append_bytes(d, d->bd_sbuf, curlen, &hdr, sizeof(hdr));
