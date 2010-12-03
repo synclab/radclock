@@ -47,9 +47,9 @@ typedef struct {
 
 
 #ifdef RADCLOCK
-typedef union pps_vcounteru {
-	vcounter_t vcount;
-} pps_vcounteru_t;
+typedef union pps_ffcounteru {
+	ffcounter_t ffcounter;
+} pps_ffcounteru_t;
 
 typedef struct {
 	pps_seq_t	assert_sequence;	/* assert event seq # */
@@ -57,9 +57,9 @@ typedef struct {
 	pps_timeu_t	assert_tu;
 	pps_timeu_t	clear_tu;
 	int		current_mode;		/* current mode bits */
-	pps_vcounteru_t  assert_vcu;
-	pps_vcounteru_t  clear_vcu;
-} radclock_pps_info_t;
+	pps_ffcounteru_t  assert_vcu;
+	pps_ffcounteru_t  clear_vcu;
+} ffclock_pps_info_t;
 #endif	/* RADCLOCK */
 
 
@@ -70,8 +70,8 @@ typedef struct {
 #define clear_timestamp_ntpfp   clear_tu.ntpfp
 
 #ifdef RADCLOCK
-#define assert_vcount		assert_vcu.vcount
-#define clear_vcount		clear_vcu.vcount
+#define assert_ffcounter	assert_vcu.ffcounter
+#define clear_ffcounter		clear_vcu.ffcounter
 #endif 	/* RADCLOCK */
 
 typedef struct {
@@ -115,9 +115,9 @@ struct pps_fetch_args {
 };
 
 #ifdef RADCLOCK
-struct radclock_pps_fetch_args {
+struct ffclock_pps_fetch_args {
 	int tsformat;
-	radclock_pps_info_t	pps_info_buf;
+	ffclock_pps_info_t	pps_info_buf;
 	struct timespec	timeout;
 };
 #endif	/* RADCLOCK */
@@ -136,7 +136,7 @@ struct pps_kcbind_args {
 #define PPS_IOC_FETCH		_IOWR('1', 6, struct pps_fetch_args)
 #define PPS_IOC_KCBIND		_IOW('1', 7, struct pps_kcbind_args)
 #ifdef RADCLOCK
-#define RADCLOCK_PPS_IOC_FETCH		_IOWR('1', 8, struct radclock_pps_fetch_args)
+#define RADCLOCK_PPS_IOC_FETCH		_IOWR('1', 8, struct ffclock_pps_fetch_args)
 #endif 	/* RADCLOCK */
 
 #ifdef _KERNEL
@@ -151,7 +151,7 @@ struct pps_state {
 	pps_params_t	ppsparam;
 	pps_info_t	ppsinfo;
 #ifdef RADCLOCK
-	radclock_pps_info_t	radclock_ppsinfo;
+	ffclock_pps_info_t	ffclock_ppsinfo;
 #endif 	/* RADCLOCK */
 	int		kcmode;
 	int		ppscap;
@@ -224,11 +224,11 @@ time_pps_fetch(pps_handle_t handle, const int tsformat,
 
 #ifdef RADCLOCK
 static __inline int
-radclock_pps_fetch(pps_handle_t handle, const int tsformat,
-	radclock_pps_info_t *ppsinfobuf, const struct timespec *timeout)
+ffclock_pps_fetch(pps_handle_t handle, const int tsformat,
+	ffclock_pps_info_t *ppsinfobuf, const struct timespec *timeout)
 {
 	int error;
-	struct radclock_pps_fetch_args arg;
+	struct ffclock_pps_fetch_args arg;
 
 	arg.tsformat = tsformat;
 	if (timeout == NULL) {

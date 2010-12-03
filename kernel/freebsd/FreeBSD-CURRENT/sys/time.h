@@ -325,30 +325,18 @@ void	getnanotime(struct timespec *tsp);
 void	getmicrotime(struct timeval *tvp);
 
 /* RADCLOCK specific */
-typedef uint64_t vcounter_t;
+typedef uint64_t ffcounter_t;
 
 /* RADclock synchronisation structure */
 
-//struct radclock_data {
-//	double 		phat;
-//	double 		phat_err;
-//	double 		phat_local;
-//	double 		phat_local_err;
-//	long double	ca;
-//	double 		ca_err;
-//	uint32_t	status;
-//	vcounter_t	last_changed;
-//	vcounter_t	valid_till;
-//};
-
-struct radclock_fixedpoint
+struct ffclock_estimate
 {
 	/* phat as an int shifted phat_shift to the left */
 	uint64_t phat_int;
 	/* Record of last time update from synchronization algorithm as an int */
 	uint64_t time_int;
 	/* The counter value to convert in seconds */
-	vcounter_t vcount;
+	ffcounter_t ffcounter;
 	/* the shift amount for phat_int */
 	uint8_t phat_shift;
 	/* the shift amount for time_int */
@@ -358,18 +346,19 @@ struct radclock_fixedpoint
 };
 
 
-struct feedfwd_clock
+/* Current estimate and old one, no locking on the timestamping side */
+struct feedforward_clock
 {
 	uint8_t generation;
-	struct radclock_fixedpoint *estimate;
-	struct radclock_fixedpoint *estimate_old;
-	struct radclock_fixedpoint *tmp;
+	struct ffclock_estimate *cest;
+	struct ffclock_estimate *ocest;
+	struct ffclock_estimate *tmp;
 };
 
 
 
-vcounter_t read_vcounter(void);
-void radclock_vcount2bintime(vcounter_t *vcount, struct bintime *bt);
+ffcounter_t read_ffcounter(void);
+void ffcounter2bintime(ffcounter_t *ffcounter, struct bintime *bt);
 /* RADCLOCK */
 
 

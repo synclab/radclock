@@ -28,7 +28,7 @@ __FBSDID("$FreeBSD: src/sys/kern/kern_tc.c,v 1.191 2010/09/21 08:02:02 mav Exp $
 #include <sys/types.h>
 #include <sys/malloc.h>
 /* Global data structure containing clock estimates */ 
-static struct feedfwd_clock ffclock;
+static struct feedforward_clock ffclock;
 
 MALLOC_DECLARE(M_FFCLOCK);
 MALLOC_DEFINE(M_FFCLOCK, "FFCLOCK", "Feed-Forward Clock estimates");
@@ -37,24 +37,25 @@ MALLOC_DEFINE(M_FFCLOCK, "FFCLOCK", "Feed-Forward Clock estimates");
 // TODO should pass first timecounter frequency estimate here to get something
 // consistent at startup
 static void
-initffclock(struct feedfwd_clock *ffclock)
+initffclock(struct feedforward_clock *ffclock)
 {
+	unsigned long sz;
+	sz = sizeof(struct ffclock_estimate);
 	ffclock->generation = 0;
-	ffclock->estimate = (struct radclock_fixedpoint *) malloc(sizeof(struct radclock_fixedpoint), M_FFCLOCK, M_WAITOK | M_ZERO);
-	ffclock->estimate_old = (struct radclock_fixedpoint *) malloc(sizeof(struct radclock_fixedpoint), M_FFCLOCK, M_WAITOK | M_ZERO);
+	ffclock->cest	= (struct ffclock_estimate *) malloc(sz, M_FFCLOCK, M_WAITOK | M_ZERO);
+	ffclock->ocest	= (struct ffclock_estimate *) malloc(sz, M_FFCLOCK, M_WAITOK | M_ZERO);
 	ffclock->tmp = NULL;
 }
 
 
 
 void
-radclock_vcount2bintime(vcounter_t *vcount, struct bintime *bt)
+ffcounter2bintime(ffcounter_t *ffcounter, struct bintime *bt)
 {
-	vcounter_t countdiff;
-//	struct timeval tval;
+	ffcounter_t countdiff;
 	uint64_t time_f;
 	uint64_t frac;
-	struct radclock_fixedpoint *clock_fp;
+	struct ffclock_estimate *cest;
 	uint8_t gen;
 
 	/* Synchronization algorithm (userland) should update the fixed point data
@@ -67,55 +68,40 @@ radclock_vcount2bintime(vcounter_t *vcount, struct bintime *bt)
 	 * has not changed instead.
 	 */
 	do {
-		clock_fp = ffclock.estimate;
+		cest = ffclock.cest;
 		gen = ffclock.generation;
 
-		countdiff = *vcount - clock_fp->vcount;
-		if (countdiff & ~((1ll << (clock_fp->countdiff_maxbits +1)) -1))
+		countdiff = *ffcounter - cest->ffcounter;
+		if (countdiff & ~((1ll << (cest->countdiff_maxbits +1)) - 1))
 		{
+// XXX RADCLOCK:
+// This is clearly not good enough, we overflow way too quickly if the radclock
+// dies. Need to push a mechanism to update ->time_int and corresponding ->ffcounter
 			printf("ffclock: warning stamp may overflow timeval at %llu! "
 					"(countdiff = %llu, maxbits = %u)\n", 
-					(long long unsigned) *vcount,
+					(long long unsigned) *ffcounter,
 					(long long unsigned) countdiff,
-					clock_fp->countdiff_maxbits);
+					cest->countdiff_maxbits);
 
 		}
 		/* Add the counter delta in second to the recorded fixed point time */
-		time_f 	= clock_fp->time_int
-				  + ((clock_fp->phat_int * countdiff) >> (clock_fp->phat_shift - clock_fp->time_shift)) ;
+		time_f 	= cest->time_int
+			+ ((cest->phat_int * countdiff) >> (cest->phat_shift - cest->time_shift));
 
-		bt->sec  = time_f >> clock_fp->time_shift;
+		bt->sec  = time_f >> cest->time_shift;
 
-		printf("ffclock: vcount = %llu bt->sec = %llu, time_int = %llu\n",
-				(long long unsigned) *vcount,
+/*
+		printf("ffclock: ffcounter = %llu bt->sec = %llu, time_int = %llu\n",
+				(long long unsigned) *ffcounter,
 			   	(long long unsigned) bt->sec, 
-				(long long unsigned) (clock_fp->time_int >> clock_fp->time_shift));
-
+				(long long unsigned) (cest->time_int >> cest->time_shift));
+*/
 		// gives me headaches again
 		// frac * ( 2^64 - 2^time_shift) ... that should be the correct resolution
-		frac = time_f - ((uint64_t) bt->sec << clock_fp->time_shift);
-		bt->frac = frac * ((uint64_t) 1LL << (64 - clock_fp->time_shift));
+		frac = time_f - ((uint64_t) bt->sec << cest->time_shift);
+		bt->frac = frac * ((uint64_t) 1LL << (64 - cest->time_shift));
 
 	} while (gen == 0 || gen != ffclock.generation);
-
-
-	
-//	tval.tv_sec = time_f >> clock_fp.time_shift;
-//
-//	frac = (time_f - ((uint64_t)tval.tv_sec << clock_fp.time_shift));
-//	tval.tv_usec = (frac * 1000000LL)  >> clock_fp.time_shift;
-//	/* tv.tv_usec truncates at the nano-second digit, so check for next digit rounding */
-//	if ( ((frac * 10000000LL) >> clock_fp.time_shift) >= (tval.tv_usec * 10LL + 5) )
-//	{
-//		tval.tv_usec++;
-//	}
-//
-//	/* Push the built timeval */
-//	*time = tval;
-	
-	/* XXX: If not called with BPFD_LOCK(bd), then should release the fixedpoint data
-	 * lock in here
-	 */
 }
 
 #endif /* RADCLOCK */
@@ -155,7 +141,7 @@ struct timehands {
 	u_int	 		th_offset_count;
 
 #ifdef RADCLOCK
-	vcounter_t		vcounter_record;
+	ffcounter_t		ffcounter_record;
 #endif
 
 	struct bintime		th_offset;
@@ -308,13 +294,13 @@ tc_get_timecount_fake64(struct timecounter *tc)
 	return (uint64_t) count;
 }
 
-vcounter_t
-read_vcounter(void)
+ffcounter_t
+read_ffcounter(void)
 {
 	struct timecounter *tc;
 	struct timehands *th;
 	u_int gen, delta;
-	vcounter_t vcount;
+	ffcounter_t ffcounter;
 
 	if ( sysctl_kern_timecounter_passthrough )
 	{
@@ -326,10 +312,10 @@ read_vcounter(void)
 			th = timehands;
 			gen = th->th_generation;
 			delta = tc_delta(th);
-			vcount = th->vcounter_record;
+			ffcounter = th->ffcounter_record;
 		} while ( gen == 0 || gen != th->th_generation);
 
-		return(vcount + delta);
+		return(ffcounter + delta);
 	}
 }
 #endif	/* RADCLOCK */
@@ -619,7 +605,7 @@ tc_windup(void)
 		ncount = 0;
 
 #ifdef RADCLOCK
-	th->vcounter_record += delta;
+	th->ffcounter_record += delta;
 #endif
 
 	th->th_offset_count += delta;
@@ -669,7 +655,7 @@ tc_windup(void)
 		tc_min_ticktock_freq = max(1, timecounter->tc_frequency /
 		    (((uint64_t)timecounter->tc_counter_mask + 1) / 3));
 		#ifdef RADCLOCK
-		th->vcounter_record = 0;
+		th->ffcounter_record = 0;
 		#endif
 	}
 
@@ -780,7 +766,7 @@ pps_ioctl(u_long cmd, caddr_t data, struct pps_state *pps)
 	pps_params_t *app;
 	struct pps_fetch_args *fapi;
 #ifdef RADCLOCK
-	struct radclock_pps_fetch_args *radclock_fapi;
+	struct ffclock_pps_fetch_args *ffclock_fapi;
 #endif
 
 #ifdef PPS_SYNC
@@ -819,13 +805,13 @@ pps_ioctl(u_long cmd, caddr_t data, struct pps_state *pps)
 
 #ifdef RADCLOCK
 	case RADCLOCK_PPS_IOC_FETCH:
-		radclock_fapi = (struct radclock_pps_fetch_args *)data;
-		if (radclock_fapi->tsformat && radclock_fapi->tsformat != PPS_TSFMT_TSPEC)
+		ffclock_fapi = (struct ffclock_pps_fetch_args *)data;
+		if (ffclock_fapi->tsformat && ffclock_fapi->tsformat != PPS_TSFMT_TSPEC)
 			return (EINVAL);
-		if (radclock_fapi->timeout.tv_sec || radclock_fapi->timeout.tv_nsec)
+		if (ffclock_fapi->timeout.tv_sec || ffclock_fapi->timeout.tv_nsec)
 			return (EOPNOTSUPP);
 		pps->ppsinfo.current_mode = pps->ppsparam.mode;
-		radclock_fapi->pps_info_buf = pps->radclock_ppsinfo;
+		ffclock_fapi->pps_info_buf = pps->ffclock_ppsinfo;
 		return (0);
 #endif 	/* RADCLOCK */
 
@@ -882,10 +868,10 @@ pps_event(struct pps_state *pps, int event)
 	int foff, fhard;
 	pps_seq_t *pseq;
 #ifdef RADCLOCK
-	struct timespec *radclock_tsp;
-	pps_seq_t *radclock_pseq;
-	vcounter_t *vcount;
-	vcounter_t vcounter_record;
+	struct timespec *ffclock_tsp;
+	pps_seq_t *ffclock_pseq;
+	ffcounter_t *ffcounter;
+	ffcounter_t ffcounter_record;
 #endif
 
 	KASSERT(pps != NULL, ("NULL pps pointer in pps_event"));
@@ -902,9 +888,9 @@ pps_event(struct pps_state *pps, int event)
 		pcount = &pps->ppscount[0];
 		pseq = &pps->ppsinfo.assert_sequence;
 #ifdef RADCLOCK
-		vcount = &pps->radclock_ppsinfo.assert_vcount;
-		radclock_tsp = &pps->radclock_ppsinfo.assert_timestamp;
-		radclock_pseq = &pps->radclock_ppsinfo.assert_sequence;
+		ffcounter = &pps->ffclock_ppsinfo.assert_ffcounter;
+		ffclock_tsp = &pps->ffclock_ppsinfo.assert_timestamp;
+		ffclock_pseq = &pps->ffclock_ppsinfo.assert_sequence;
 #endif
 	} else {
 		tsp = &pps->ppsinfo.clear_timestamp;
@@ -914,9 +900,9 @@ pps_event(struct pps_state *pps, int event)
 		pcount = &pps->ppscount[1];
 		pseq = &pps->ppsinfo.clear_sequence;
 #ifdef RADCLOCK
-		vcount = &pps->radclock_ppsinfo.clear_vcount;
-		radclock_tsp = &pps->radclock_ppsinfo.clear_timestamp;
-		radclock_pseq = &pps->radclock_ppsinfo.clear_sequence;
+		ffcounter = &pps->ffclock_ppsinfo.clear_ffcounter;
+		ffclock_tsp = &pps->ffclock_ppsinfo.clear_timestamp;
+		ffclock_pseq = &pps->ffclock_ppsinfo.clear_sequence;
 #endif
 	}
 
@@ -935,7 +921,7 @@ pps_event(struct pps_state *pps, int event)
 	tcount = pps->capcount - pps->capth->th_offset_count;
 	tcount &= pps->capth->th_counter->tc_counter_mask;
 #ifdef RADCLOCK
-	vcounter_record = pps->capth->vcounter_record;
+	ffcounter_record = pps->capth->ffcounter_record;
 #endif
 	bt = pps->capth->th_offset;
 	bintime_addx(&bt, pps->capth->th_scale * tcount);
@@ -950,9 +936,9 @@ pps_event(struct pps_state *pps, int event)
 	(*pseq)++;
 	*tsp = ts;
 #ifdef RADCLOCK
-	(*radclock_pseq)++;
-	*radclock_tsp = ts;
-	*vcount = (vcounter_record + tcount);
+	(*ffclock_pseq)++;
+	*ffclock_tsp = ts;
+	*ffcounter = (ffcounter_record + tcount);
 #endif
 
 	if (foff) {

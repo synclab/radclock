@@ -1,3 +1,33 @@
+/*-
+ * Copyright (C) 2010 University of Melbourne
+ * All rights reserved.
+ *
+ * This software was developed by the University of Melbourne under sponsorship from
+ * the FreeBSD Foundation.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer. 
+ * 2. Redistributions in binary form must reproduce the above copyright 
+ *    notice, this list of conditions and the following disclaimer in the 
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ */
+
+
 /*
  * System calls to access the cumulative virtual timecounter
  */
@@ -17,52 +47,52 @@
 #include <sys/sysctl.h>
 
 
-extern struct feedfwd_clock ffclock;
+extern struct feedforward_clock ffclock;
 
 static struct mtx ffclock_mtx;	/* lock against concurrent updates of the ffclock estimates */
 
 /*
  * Sysctl
  */
-static int sysctl_version = 2;
+static int ffclock_version = 2;
 
 SYSCTL_NODE(_kern, OID_AUTO, ffclock, CTLFLAG_RW, 0, "Feed-Forward Clock Support");
-SYSCTL_INT(_kern_ffclock, OID_AUTO, version, CTLFLAG_RD, &sysctl_version, 0, "Version of Feed-Forward Clock Support");
+SYSCTL_INT(_kern_ffclock, OID_AUTO, version, CTLFLAG_RD, &ffclock_version, 0, "Version of Feed-Forward Clock Support");
 
 
 /*
- * First system call is get_vcounter to retrieve the current value
+ * First system call is get_ffcounter to retrieve the current value
  * of the cumulative vritual counter from the timecounter interface
  */
 
-struct get_vcounter_args {
-	vcounter_t *vcount;
+struct get_ffcounter_args {
+	ffcounter_t *ffcounter;
 };
 
 static int
-get_vcounter(struct proc *td, void *syscall_args)
+get_ffcounter(struct proc *td, void *syscall_args)
 {
-	vcounter_t vcount = 0;
+	ffcounter_t ffcounter = 0;
 	int error = 0;
-	struct get_vcounter_args *uap;
+	struct get_ffcounter_args *uap;
 
-	uap = (struct get_vcounter_args *) syscall_args;
-	if ( uap->vcount == NULL )
+	uap = (struct get_ffcounter_args *) syscall_args;
+	if ( uap->ffcounter == NULL )
 		return -1;
 	
-	vcount = read_vcounter();
-	error = copyout(&vcount, uap->vcount, sizeof(vcounter_t));
+	ffcounter = read_ffcounter();
+	error = copyout(&ffcounter, uap->ffcounter, sizeof(ffcounter_t));
 	
-	if ( vcount == 0 ) 
+	if ( ffcounter == 0 ) 
 		error = -1;
 
 	return(error);
 }
 
 
-static struct sysent get_vcounter_sysent = {
+static struct sysent get_ffcounter_sysent = {
 	1,
-	(sy_call_t *) get_vcounter,
+	(sy_call_t *) get_ffcounter,
 	AUE_NULL, 
 	NULL, 
 	0, 
@@ -70,18 +100,18 @@ static struct sysent get_vcounter_sysent = {
 };
 
 
-static int get_vcounter_offset = NO_SYSCALL;
+static int get_ffcounter_offset = NO_SYSCALL;
 
 static int
-get_vcounter_load (struct module *module, int cmd, void *arg)
+get_ffcounter_load (struct module *module, int cmd, void *arg)
 {
 	int error = 0;
 	switch (cmd) {
 		case MOD_LOAD :
-			printf("get_vcounter syscall loaded at %d \n", get_vcounter_offset);
+			printf("get_ffcounter syscall loaded at %d \n", get_ffcounter_offset);
 		break;
 		case MOD_UNLOAD :
-			printf("get_vcounter syscall unloaded from %d\n", get_vcounter_offset);
+			printf("get_ffcounter syscall unloaded from %d\n", get_ffcounter_offset);
 		break;
 		default :
 			error = EINVAL;
@@ -99,50 +129,50 @@ get_vcounter_load (struct module *module, int cmd, void *arg)
  *
  * Hopefully, this will disappear once we go mainstream
  */
-//SYSCALL_MODULE(get_vcounter, &get_vcounter_offset, &get_vcounter_sysent, get_vcounter_load, NULL);
+//SYSCALL_MODULE(get_ffcounter, &get_ffcounter_offset, &get_ffcounter_sysent, get_ffcounter_load, NULL);
 
-static struct syscall_module_data get_vcounter_syscall_mod = {
-	get_vcounter_load,
+static struct syscall_module_data get_ffcounter_syscall_mod = {
+	get_ffcounter_load,
 	NULL,
-	&get_vcounter_offset,
-	&get_vcounter_sysent,
+	&get_ffcounter_offset,
+	&get_ffcounter_sysent,
 	{ 0, NULL, AUE_NULL}
 };
 
-static moduledata_t get_vcounter_mod = {
-	"get_vcounter",
+static moduledata_t get_ffcounter_mod = {
+	"get_ffcounter",
 	syscall_module_handler,
-	&get_vcounter_syscall_mod
+	&get_ffcounter_syscall_mod
 };
 
-DECLARE_MODULE(get_vcounter, get_vcounter_mod, SI_SUB_SYSCALLS, SI_ORDER_MIDDLE);
+DECLARE_MODULE(get_ffcounter, get_ffcounter_mod, SI_SUB_SYSCALLS, SI_ORDER_MIDDLE);
 
 
 
 
 /*
- * Second system call is get_vcounter_latency to compute the latency of
+ * Second system call is get_ffcounter_latency to compute the latency of
  * the timecounter interface from within the kernel
  *
  * XXX: of course this makes sense ONLY if we have a stable TSC
  * (i.e. no SMP, no power management, no frequency jumps etc.) 
  */
 
-struct get_vcounter_latency_args {
-	vcounter_t *vcount;
-	uint64_t *vcount_lat;
+struct get_ffcounter_latency_args {
+	ffcounter_t *ffcounter;
+	uint64_t *ffcounter_lat;
 	uint64_t *tsc_lat;
 };
 
 static int
-get_vcounter_latency(struct proc *td, void *syscall_args)
+get_ffcounter_latency(struct proc *td, void *syscall_args)
 {
-	uint64_t tsc1 = 0, tsc2 = 0, tsc3 = 0, vcount_lat = 0, tsc_lat = 0;
-	vcounter_t vcount;
+	uint64_t tsc1 = 0, tsc2 = 0, tsc3 = 0, ffcounter_lat = 0, tsc_lat = 0;
+	ffcounter_t ffcounter;
 	int error = 0;
-	struct get_vcounter_latency_args *uap;
+	struct get_ffcounter_latency_args *uap;
 
-	uap = (struct get_vcounter_latency_args *) syscall_args;
+	uap = (struct get_ffcounter_latency_args *) syscall_args;
 
 	/* One for fun and warmup */
 	tsc1 = rdtsc();
@@ -151,25 +181,25 @@ get_vcounter_latency(struct proc *td, void *syscall_args)
 	__asm __volatile("lfence" ::: "memory");
 	tsc2 = rdtsc();
 	__asm __volatile("lfence" ::: "memory");
-	vcount = read_vcounter();
+	ffcounter = read_ffcounter();
 	__asm __volatile("lfence" ::: "memory");
 	tsc3 = rdtsc();
 	__asm __volatile("lfence" ::: "memory");
 
 	tsc_lat = tsc2 - tsc1;
-	vcount_lat = tsc3 - tsc2;
+	ffcounter_lat = tsc3 - tsc2;
 
-	error += copyout(&vcount, uap->vcount, sizeof(vcounter_t));
-	error += copyout(&vcount_lat, uap->vcount_lat, sizeof(uint64_t));
+	error += copyout(&ffcounter, uap->ffcounter, sizeof(ffcounter_t));
+	error += copyout(&ffcounter_lat, uap->ffcounter_lat, sizeof(uint64_t));
 	error += copyout(&tsc_lat, uap->tsc_lat, sizeof(uint64_t));
 
 	return(error);
 }
 
 
-static struct sysent get_vcounter_latency_sysent = {
+static struct sysent get_ffcounter_latency_sysent = {
 	3,
-	(sy_call_t *) get_vcounter_latency,
+	(sy_call_t *) get_ffcounter_latency,
 	AUE_NULL, 
 	NULL, 
 	0, 
@@ -177,18 +207,18 @@ static struct sysent get_vcounter_latency_sysent = {
 };
 
 
-static int get_vcounter_latency_offset = NO_SYSCALL;
+static int get_ffcounter_latency_offset = NO_SYSCALL;
 
 static int
-get_vcounter_latency_load (struct module *module, int cmd, void *arg)
+get_ffcounter_latency_load (struct module *module, int cmd, void *arg)
 {
 	int error = 0;
 	switch (cmd) {
 		case MOD_LOAD :
-			printf("get_vcounter_latency syscall loaded at %d \n", get_vcounter_latency_offset);
+			printf("get_ffcounter_latency syscall loaded at %d \n", get_ffcounter_latency_offset);
 		break;
 		case MOD_UNLOAD :
-			printf("get_vcounter_latency syscall unloaded from %d\n", get_vcounter_latency_offset);
+			printf("get_ffcounter_latency syscall unloaded from %d\n", get_ffcounter_latency_offset);
 		break;
 		default :
 			error = EINVAL;
@@ -198,23 +228,23 @@ get_vcounter_latency_load (struct module *module, int cmd, void *arg)
 }
 
 /* See comment above for use of SYSCALL_MODULE before 8.1 */
-//SYSCALL_MODULE(get_vcounter_latency, &get_vcounter_latency_offset, &get_vcounter_latency_sysent, get_vcounter_latency_load, NULL);
+//SYSCALL_MODULE(get_ffcounter_latency, &get_ffcounter_latency_offset, &get_ffcounter_latency_sysent, get_ffcounter_latency_load, NULL);
 
-static struct syscall_module_data get_vcounter_latency_syscall_mod = {
-	get_vcounter_latency_load,
+static struct syscall_module_data get_ffcounter_latency_syscall_mod = {
+	get_ffcounter_latency_load,
 	NULL,
-	&get_vcounter_latency_offset,
-	&get_vcounter_latency_sysent,
+	&get_ffcounter_latency_offset,
+	&get_ffcounter_latency_sysent,
 	{ 0, NULL, AUE_NULL}
 };
 
-static moduledata_t get_vcounter_latency_mod = {
-	"get_vcounter_latency",
+static moduledata_t get_ffcounter_latency_mod = {
+	"get_ffcounter_latency",
 	syscall_module_handler,
-	&get_vcounter_latency_syscall_mod
+	&get_ffcounter_latency_syscall_mod
 };
 
-DECLARE_MODULE(get_vcounter_latency, get_vcounter_latency_mod, SI_SUB_SYSCALLS, SI_ORDER_MIDDLE);
+DECLARE_MODULE(get_ffcounter_latency, get_ffcounter_latency_mod, SI_SUB_SYSCALLS, SI_ORDER_MIDDLE);
 
 
 
@@ -224,7 +254,7 @@ DECLARE_MODULE(get_vcounter_latency, get_vcounter_latency_mod, SI_SUB_SYSCALLS, 
  */
 
 struct set_ffclock_args {
-	struct radclock_fixedpoint *clock_fp;
+	struct ffclock_estimate *cest;
 };
 
 
@@ -240,22 +270,22 @@ set_ffclock(struct proc *td, void *syscall_args)
 	struct set_ffclock_args *uap;
 
 	uap = (struct set_ffclock_args *) syscall_args;
-	if ( uap->clock_fp == NULL )
+	if ( uap->cest == NULL )
 		return -1;
 
 	mtx_lock(&ffclock_mtx);
 
 	gen = ffclock.generation;
-	error = copyin(uap->clock_fp, ffclock.estimate_old, sizeof(struct radclock_fixedpoint));
+	error = copyin(uap->cest, ffclock.ocest, sizeof(struct ffclock_estimate));
 
-	ffclock.tmp = ffclock.estimate;
+	ffclock.tmp = ffclock.cest;
 
 	if (++gen == 0)
 		gen = 1;
 	
-	ffclock.estimate = ffclock.estimate_old;
+	ffclock.cest = ffclock.ocest;
 	ffclock.generation = gen;
-	ffclock.estimate_old = ffclock.tmp;
+	ffclock.ocest = ffclock.tmp;
 	ffclock.tmp = NULL;
 
 	mtx_unlock(&ffclock_mtx);
@@ -305,7 +335,7 @@ set_ffclock_load (struct module *module, int cmd, void *arg)
  *
  * Hopefully, this will disappear once we go mainstream
  */
-//SYSCALL_MODULE(get_vcounter, &get_vcounter_offset, &get_vcounter_sysent, get_vcounter_load, NULL);
+//SYSCALL_MODULE(set_ffclock, &set_ffclock_offset, &set_ffclock_sysent, set_ffclock_load, NULL);
 
 static struct syscall_module_data set_ffclock_syscall_mod = {
 	set_ffclock_load,
@@ -322,6 +352,5 @@ static moduledata_t set_ffclock_mod = {
 };
 
 DECLARE_MODULE(set_ffclock, set_ffclock_mod, SI_SUB_SYSCALLS, SI_ORDER_MIDDLE);
-
 
 

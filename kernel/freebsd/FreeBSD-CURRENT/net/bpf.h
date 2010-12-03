@@ -156,17 +156,6 @@ struct bpf_zbuf {
 #define	BIOCGSEESENT	BIOCGDIRECTION
 #define	BIOCSSEESENT	BIOCSDIRECTION
 
-#ifdef RADCLOCK
-// TODO: merge with BPF_T_ symbols??
-/* RADclock timestamping modes */
-//#define RADCLOCK_TSMODE_SYSCLOCK		0x0001  /* return SW timeval (normal behavior) and raw vcounter */
-//#define RADCLOCK_TSMODE_RADCLOCK		0x0002  /* return timeval based on RADclock and raw vcounter */
-//#define RADCLOCK_TSMODE_FAIRCOMPARE 	0x0003  /* return SW timeval and raw vcounter read back to back */
-
-//#define BIOCSRADCLOCKTSMODE	_IOW('B',133, int8_t) /* Set timestamping mode for this device) */
-//#define BIOCGRADCLOCKTSMODE	_IOR('B',134, int8_t) /* Get timestamping  mode for this device */
-#endif /* RADCLOCK */
-
 /* Packet directions */
 enum bpf_direction {
 	BPF_D_IN,	/* See incoming packets */
@@ -227,7 +216,7 @@ struct bpf_xhdr {
 	u_short		bh_hdrlen;	/* length of bpf header (this struct
 					   plus alignment padding) */
 	u_short		padding;		/* padding to align the fields */
-	vcounter_t	vcount_stamp;	/* raw virtual timecounter timestamp for this packet */
+	ffcounter_t	ffcounter_stamp;	/* feed-forward counter timestamp */
 };
 #else
 struct bpf_xhdr {
@@ -248,7 +237,7 @@ struct bpf_hdr {
 	u_short		bh_hdrlen;	/* length of bpf header (this struct
 					   plus alignment padding) */
 	u_short		padding;		/* padding to align the fields */
-	vcounter_t	vcount_stamp;	/* raw virtual timecounter timestamp for this packet */
+	ffcounter_t	ffcounter_stamp;	/* feed-forward counter timestamp */
 };
 #else
 struct bpf_hdr {
