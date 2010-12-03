@@ -21,90 +21,11 @@ __FBSDID("$FreeBSD: src/sys/kern/kern_tc.c,v 1.191 2010/09/21 08:02:02 mav Exp $
 #include <sys/timetc.h>
 #include <sys/timex.h>
 
-
-
 #ifdef RADCLOCK
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/malloc.h>
-/* Global data structure containing clock estimates */ 
-static struct feedforward_clock ffclock;
-
-MALLOC_DECLARE(M_FFCLOCK);
-MALLOC_DEFINE(M_FFCLOCK, "FFCLOCK", "Feed-Forward Clock estimates");
-
-
-// TODO should pass first timecounter frequency estimate here to get something
-// consistent at startup
-static void
-initffclock(struct feedforward_clock *ffclock)
-{
-	unsigned long sz;
-	sz = sizeof(struct ffclock_estimate);
-	ffclock->generation = 0;
-	ffclock->cest	= (struct ffclock_estimate *) malloc(sz, M_FFCLOCK, M_WAITOK | M_ZERO);
-	ffclock->ocest	= (struct ffclock_estimate *) malloc(sz, M_FFCLOCK, M_WAITOK | M_ZERO);
-	ffclock->tmp = NULL;
-}
-
-
-
-void
-ffcounter2bintime(ffcounter_t *ffcounter, struct bintime *bt)
-{
-	ffcounter_t countdiff;
-	uint64_t time_f;
-	uint64_t frac;
-	struct ffclock_estimate *cest;
-	uint8_t gen;
-
-	/* Synchronization algorithm (userland) should update the fixed point data
-	 * often enough to make sure the timeval does not overflow. If no sync algo
-	 * updates the data, we loose precision, but in that case, nobody is tracking
-	 * the clock drift anyway ... so send warning and stop worrying.
-	 */
-
-	/* No locking to prevent clock data to be updated. Check that the generation
-	 * has not changed instead.
-	 */
-	do {
-		cest = ffclock.cest;
-		gen = ffclock.generation;
-
-		countdiff = *ffcounter - cest->ffcounter;
-		if (countdiff & ~((1ll << (cest->countdiff_maxbits +1)) - 1))
-		{
-// XXX RADCLOCK:
-// This is clearly not good enough, we overflow way too quickly if the radclock
-// dies. Need to push a mechanism to update ->time_int and corresponding ->ffcounter
-			printf("ffclock: warning stamp may overflow timeval at %llu! "
-					"(countdiff = %llu, maxbits = %u)\n", 
-					(long long unsigned) *ffcounter,
-					(long long unsigned) countdiff,
-					cest->countdiff_maxbits);
-
-		}
-		/* Add the counter delta in second to the recorded fixed point time */
-		time_f 	= cest->time_int
-			+ ((cest->phat_int * countdiff) >> (cest->phat_shift - cest->time_shift));
-
-		bt->sec  = time_f >> cest->time_shift;
-
-/*
-		printf("ffclock: ffcounter = %llu bt->sec = %llu, time_int = %llu\n",
-				(long long unsigned) *ffcounter,
-			   	(long long unsigned) bt->sec, 
-				(long long unsigned) (cest->time_int >> cest->time_shift));
-*/
-		// gives me headaches again
-		// frac * ( 2^64 - 2^time_shift) ... that should be the correct resolution
-		frac = time_f - ((uint64_t) bt->sec << cest->time_shift);
-		bt->frac = frac * ((uint64_t) 1LL << (64 - cest->time_shift));
-
-	} while (gen == 0 || gen != ffclock.generation);
-}
-
-#endif /* RADCLOCK */
+#endif	/* RADCLOCK */
 
 
 /*
@@ -286,6 +207,134 @@ SYSCTL_INT(_kern_timecounter, OID_AUTO, passthrough, CTLFLAG_RW,
 	"Select universal Feed-Forward timecounter for OS virtualization");
 
 
+/* Global data structure containing clock estimates */ 
+static struct feedforward_clock ffclock;
+
+MALLOC_DECLARE(M_FFCLOCK);
+MALLOC_DEFINE(M_FFCLOCK, "FFCLOCK", "Feed-Forward Clock estimates");
+
+
+// TODO should pass first timecounter frequency estimate here to get something
+// consistent at startup
+static void
+initffclock(struct feedforward_clock *ffclock)
+{
+	unsigned long sz;
+	sz = sizeof(struct ffclock_estimate);
+
+	ffclock->generation = 0;
+	ffclock->cest	= (struct ffclock_estimate *) malloc(sz, M_FFCLOCK, M_WAITOK | M_ZERO);
+	ffclock->ocest	= (struct ffclock_estimate *) malloc(sz, M_FFCLOCK, M_WAITOK | M_ZERO);
+	ffclock->tmp = NULL;
+}
+
+
+/* 
+ * We need to have a boot time from the RTC clock or the like to get 
+ * kickstarted. initffclock is called before inittodr(), so cannot put the code
+ * there. Need to be called from tc_setclock(), once only.
+ */
+static void
+setffclock(struct feedforward_clock *ffclock)
+{
+	struct ffclock_estimate *cest;
+
+	/* If we have been updated by the radclock daemon, do not interfere. Also
+	 * tc_setclock() may be called several times */
+	if (ffclock->generation > 0)
+		return;
+
+	/* XXX Technically, should lock, but if radclock module not loaded? */	
+	cest = ffclock->cest;
+
+	/* Strictly speaking, we should record the ffcounter when the RTC clock is
+	 * read from initoddr(), but not worse the trouble (is RTC trustworthy
+	 * anyway?). Let's keep it simple
+	 */ 
+	cest->ffcounter = read_ffcounter();
+
+	/* Numbers here are a bit magic */
+	// TODO should check these values ... again
+	cest->phat_shift = 58;
+	cest->time_shift = 32;
+	cest->countdiff_maxbits = 30;
+
+	cest->phat_int = ((1LL << 63) / tc_getfrequency()) >> (63 - cest->phat_shift); 
+
+	cest->time_int = (boottimebin.sec << cest->time_shift)
+		+ (boottimebin.frac >> (64 - cest->time_shift));
+
+	/* Make sure we do not pass in here twice */
+	ffclock->generation++;
+
+	printf("initffclock: %s - phat_int = %llu (%llu Hz), time_int = %llu (%llu.%llu s)\n",
+			timecounter->tc_name,
+			(long long unsigned) cest->phat_int,
+			(long long unsigned) tc_getfrequency(),
+			(long long unsigned) cest->time_int,
+			(long long unsigned) boottimebin.sec, 
+			(long long unsigned) boottimebin.frac);
+}
+
+
+
+void
+ffcounter2bintime(ffcounter_t *ffcounter, struct bintime *bt)
+{
+	ffcounter_t countdiff;
+	uint64_t time_f;
+	uint64_t frac;
+	struct ffclock_estimate *cest;
+	uint8_t gen;
+
+	/* Synchronization algorithm (userland) should update the fixed point data
+	 * often enough to make sure the timeval does not overflow. If no sync algo
+	 * updates the data, we loose precision, but in that case, nobody is tracking
+	 * the clock drift anyway ... so send warning and stop worrying.
+	 */
+
+	/* No locking to prevent clock data to be updated. Check that the generation
+	 * has not changed instead.
+	 */
+	do {
+		cest = ffclock.cest;
+		gen = ffclock.generation;
+
+		countdiff = *ffcounter - cest->ffcounter;
+		if (countdiff & ~((1ll << (cest->countdiff_maxbits +1)) - 1))
+		{
+// XXX RADCLOCK:
+// This is clearly not good enough, we overflow way too quickly if the radclock
+// dies. Need to push a mechanism to update ->time_int and corresponding ->ffcounter
+/*
+			printf("ffclock: warning stamp may overflow timeval at %llu! "
+					"(countdiff = %llu, maxbits = %u)\n", 
+					(long long unsigned) *ffcounter,
+					(long long unsigned) countdiff,
+					cest->countdiff_maxbits);
+*/
+		}
+		/* Add the counter delta in second to the recorded fixed point time */
+		time_f 	= cest->time_int
+			+ ((cest->phat_int * countdiff) >> (cest->phat_shift - cest->time_shift));
+
+		bt->sec  = time_f >> cest->time_shift;
+
+/*
+		printf("ffclock: ffcounter = %llu bt->sec = %llu, time_int = %llu\n",
+				(long long unsigned) *ffcounter,
+			   	(long long unsigned) bt->sec, 
+				(long long unsigned) (cest->time_int >> cest->time_shift));
+*/
+		// gives me headaches again
+		// frac * ( 2^64 - 2^time_shift) ... that should be the correct resolution
+		frac = time_f - ((uint64_t) bt->sec << cest->time_shift);
+		bt->frac = frac * ((uint64_t) 1LL << (64 - cest->time_shift));
+
+	} while (gen == 0 || gen != ffclock.generation);
+}
+
+
 static __inline uint64_t
 tc_get_timecount_fake64(struct timecounter *tc)
 {
@@ -293,6 +342,7 @@ tc_get_timecount_fake64(struct timecounter *tc)
 	count = tc->tc_get_timecount(tc);
 	return (uint64_t) count;
 }
+
 
 ffcounter_t
 read_ffcounter(void)
@@ -319,6 +369,7 @@ read_ffcounter(void)
 	}
 }
 #endif	/* RADCLOCK */
+
 
 void
 binuptime(struct bintime *bt)
@@ -553,6 +604,10 @@ tc_setclock(struct timespec *ts)
 	bintime_add(&bt2, &boottimebin);
 	boottimebin = bt;
 	bintime2timeval(&bt, &boottime);
+
+#ifdef RADCLOCK
+	setffclock(&ffclock);
+#endif	/* RADCLOCK */
 
 	/* XXX fiddle all the little crinkly bits around the fiords... */
 	tc_windup();
