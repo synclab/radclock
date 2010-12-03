@@ -27,6 +27,8 @@
 #include "../config.h"
 #include "radclock.h"
 #include "radclock-private.h"
+#include "sync_algo.h"
+#include "proto_ntp.h"
 #include "fixedpoint.h"
 #include "verbose.h"
 #include "jdebug.h"
@@ -122,6 +124,13 @@ int update_kernel_fixed(struct radclock *handle)
 	vcounter_t vcount;
 	long double time;
 	int err;
+
+	/* If we are starting (or restarting), the last estimate in the kernel
+	 * may be better than ours after the very first stamp. Let's make sure we do
+	 * not push something too stupid
+	 */
+	if ( OUTPUT(handle, n_stamps) < NTP_BURST )
+		return 0;
 
 	memset(&fpdata,0,sizeof(fpdata));
 
