@@ -349,7 +349,7 @@ struct ffclock_estimate
 /* Current estimate and old one, no locking on the timestamping side */
 struct feedforward_clock
 {
-	uint8_t generation;
+	volatile uint8_t generation;
 	struct ffclock_estimate *cest;
 	struct ffclock_estimate *ocest;
 	struct ffclock_estimate *tmp;

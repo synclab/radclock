@@ -214,10 +214,8 @@ MALLOC_DECLARE(M_FFCLOCK);
 MALLOC_DEFINE(M_FFCLOCK, "FFCLOCK", "Feed-Forward Clock estimates");
 
 
-// TODO should pass first timecounter frequency estimate here to get something
-// consistent at startup
 static void
-initffclock(struct feedforward_clock *ffclock)
+init_ffclock(struct feedforward_clock *ffclock)
 {
 	unsigned long sz;
 	sz = sizeof(struct ffclock_estimate);
@@ -231,27 +229,37 @@ initffclock(struct feedforward_clock *ffclock)
 
 /* 
  * We need to have a boot time from the RTC clock or the like to get 
- * kickstarted. initffclock is called before inittodr(), so cannot put the code
+ * kickstarted. init_ffclock is called before inittodr(), so cannot put the code
  * there. Need to be called from tc_setclock(), once only.
  */
 static void
-setffclock(struct feedforward_clock *ffclock)
+reset_ffclock(struct feedforward_clock *ffclock, struct timehands *th)
 {
+	uint64_t freq;
+	struct timecounter *tc;
 	struct ffclock_estimate *cest;
-
-	/* If we have been updated by the radclock daemon, do not interfere. Also
-	 * tc_setclock() may be called several times */
-	if (ffclock->generation > 0)
-		return;
-
-	/* XXX Technically, should lock, but if radclock module not loaded? */	
 	cest = ffclock->cest;
 
-	/* Strictly speaking, we should record the ffcounter when the RTC clock is
-	 * read from initoddr(), but not worse the trouble (is RTC trustworthy
-	 * anyway?). Let's keep it simple
+	/*
+	 * If called with a timehand, the timecounter is being changed and we
+	 * restart fresh. If not, the clock is being set from tc_setclock (note that
+	 * this may occur several times during boot).
 	 */ 
-	cest->ffcounter = read_ffcounter();
+	if (th) {
+		th->ffcounter_record = 0;
+		cest->ffcounter = 0;
+		tc = th->th_counter;
+	}
+	else {
+		/* 
+		 * Strictly speaking, we should record the ffcounter when the RTC clock is
+		 * read from initoddr(), but not worse the trouble (is RTC trustworthy
+		 * anyway?). Let's keep it simple
+		 */ 
+		cest->ffcounter = read_ffcounter();
+		tc = timehands->th_counter;
+	}
+	freq = tc->tc_frequency;
 
 	/* Numbers here are a bit magic */
 	// TODO should check these values ... again
@@ -259,23 +267,58 @@ setffclock(struct feedforward_clock *ffclock)
 	cest->time_shift = 32;
 	cest->countdiff_maxbits = 30;
 
-	cest->phat_int = ((1LL << 63) / tc_getfrequency()) >> (63 - cest->phat_shift); 
+	cest->phat_int = ((1LL << 63) / freq) >> (63 - cest->phat_shift); 
 
 	cest->time_int = (boottimebin.sec << cest->time_shift)
 		+ (boottimebin.frac >> (64 - cest->time_shift));
 
-	/* Make sure we do not pass in here twice */
 	ffclock->generation++;
 
-	printf("initffclock: %s - phat_int = %llu (%llu Hz), time_int = %llu (%llu.%llu s)\n",
-			timecounter->tc_name,
+	printf("reset_ffclock: %s - phat_int = %llu (%llu Hz), time_int = %llu (%llu.%llu s)\n",
+			tc->tc_name,
 			(long long unsigned) cest->phat_int,
-			(long long unsigned) tc_getfrequency(),
+			(long long unsigned) freq,
 			(long long unsigned) cest->time_int,
 			(long long unsigned) boottimebin.sec, 
 			(long long unsigned) boottimebin.frac);
+
+	/* XXX Technically, should lock, but if radclock module not loaded?
+	 * Also, should make the radclock restart if the counter has changed!!
+	 */	
 }
 
+
+/* 
+ * Update to prevent overflow. This is no adjustment of the clock parameters.
+ * Assumption: timehands is the current one
+ */
+static void
+update_ffclock(struct feedforward_clock *ffclock)
+{
+	struct ffclock_estimate *cest;
+	struct timehands *th;
+	ffcounter_t cdiff;
+
+	/*
+	 * If we just changed the timecounter, or the clock has been adjusted, we
+	 * have nothing to do in here
+	 */
+	th = timehands;
+	cest = ffclock->cest;
+	if ( cest->ffcounter > th->ffcounter_record )
+		return;
+
+	/*
+	 * Bump the generation recklessly. Leave the clock adjustment function work
+	 * its way out.
+	 */
+	cdiff = th->ffcounter_record - cest->ffcounter;
+	cest->time_int += ((cest->phat_int * cdiff) >> (cest->phat_shift - cest->time_shift));
+	cest->ffcounter = th->ffcounter_record;
+
+	if (++ffclock->generation == 0)
+		ffclock->generation = 1;
+}
 
 
 void
@@ -297,22 +340,23 @@ ffcounter2bintime(ffcounter_t *ffcounter, struct bintime *bt)
 	 * has not changed instead.
 	 */
 	do {
-		cest = ffclock.cest;
 		gen = ffclock.generation;
+		cest = ffclock.cest;
 
 		countdiff = *ffcounter - cest->ffcounter;
+
+		/*
+		 * update_ffclock() should prevent countdiff to become to large and the
+		 * corresponding time interval added to overflow. Just send warning in
+		 * the unlikely event this is happening.
+		 */
 		if (countdiff & ~((1ll << (cest->countdiff_maxbits +1)) - 1))
 		{
-// XXX RADCLOCK:
-// This is clearly not good enough, we overflow way too quickly if the radclock
-// dies. Need to push a mechanism to update ->time_int and corresponding ->ffcounter
-/*
 			printf("ffclock: warning stamp may overflow timeval at %llu! "
 					"(countdiff = %llu, maxbits = %u)\n", 
 					(long long unsigned) *ffcounter,
 					(long long unsigned) countdiff,
 					cest->countdiff_maxbits);
-*/
 		}
 		/* Add the counter delta in second to the recorded fixed point time */
 		time_f 	= cest->time_int
@@ -352,13 +396,12 @@ read_ffcounter(void)
 	u_int gen, delta;
 	ffcounter_t ffcounter;
 
-	if ( sysctl_kern_timecounter_passthrough )
-	{
+	if ( sysctl_kern_timecounter_passthrough ) {
 		tc = timehands->th_counter;
 		return tc->tc_get_timecount_64(tc);
 	}
 	else {
-		do{
+		do {
 			th = timehands;
 			gen = th->th_generation;
 			delta = tc_delta(th);
@@ -606,7 +649,7 @@ tc_setclock(struct timespec *ts)
 	bintime2timeval(&bt, &boottime);
 
 #ifdef RADCLOCK
-	setffclock(&ffclock);
+	reset_ffclock(&ffclock, NULL);
 #endif	/* RADCLOCK */
 
 	/* XXX fiddle all the little crinkly bits around the fiords... */
@@ -709,8 +752,9 @@ tc_windup(void)
 		th->th_offset_count = ncount;
 		tc_min_ticktock_freq = max(1, timecounter->tc_frequency /
 		    (((uint64_t)timecounter->tc_counter_mask + 1) / 3));
+
 		#ifdef RADCLOCK
-		th->ffcounter_record = 0;
+		reset_ffclock(&ffclock, th);
 		#endif
 	}
 
@@ -754,6 +798,10 @@ tc_windup(void)
 	time_second = th->th_microtime.tv_sec;
 	time_uptime = th->th_offset.sec;
 	timehands = th;
+
+#ifdef RADCLOCK
+	update_ffclock(&ffclock);
+#endif
 }
 
 /* Report or change the active timecounter hardware. */
@@ -1069,14 +1117,14 @@ inittimecounter(void *dummy)
 	p = (tc_tick * 1000000) / hz;
 	printf("Timecounters tick every %d.%03u msec\n", p / 1000, p % 1000);
 
+#ifdef RADCLOCK
+	init_ffclock(&ffclock);
+#endif
+
 	/* warm up new timecounter (again) and get rolling. */
 	(void)timecounter->tc_get_timecount(timecounter);
 	(void)timecounter->tc_get_timecount(timecounter);
 	tc_windup();
-
-#ifdef RADCLOCK
-	initffclock(&ffclock);
-#endif
 }
 
 SYSINIT(timecounter, SI_SUB_CLOCKS, SI_ORDER_SECOND, inittimecounter, NULL);

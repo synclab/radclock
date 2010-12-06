@@ -259,14 +259,14 @@ struct set_ffclock_args {
 
 
 /*
- * Write down the clock estimates passed from userland. Hold ffclock_mtx to
- * prevent several instances to update concurrently.
+ * Adjust the ffclock by writing down the clock estimates passed from userland.
+ * Hold ffclock_mtx to prevent several instances to update concurrently,
+ * essentially to protect from user's bad practice.
+ * update_ffclock() may bump the generation number without us knowing. 
  */
-static int
-set_ffclock(struct proc *td, void *syscall_args)
+static int set_ffclock(struct proc *td, void *syscall_args)
 {
 	int error = 0;
-	uint8_t gen;
 	struct set_ffclock_args *uap;
 
 	uap = (struct set_ffclock_args *) syscall_args;
@@ -275,16 +275,14 @@ set_ffclock(struct proc *td, void *syscall_args)
 
 	mtx_lock(&ffclock_mtx);
 
-	gen = ffclock.generation;
 	error = copyin(uap->cest, ffclock.ocest, sizeof(struct ffclock_estimate));
 
 	ffclock.tmp = ffclock.cest;
-
-	if (++gen == 0)
-		gen = 1;
-	
 	ffclock.cest = ffclock.ocest;
-	ffclock.generation = gen;
+
+	if (++ffclock.generation == 0)
+		ffclock.generation = 1;
+
 	ffclock.ocest = ffclock.tmp;
 	ffclock.tmp = NULL;
 
