@@ -329,7 +329,7 @@ typedef uint64_t ffcounter_t;
 
 /* RADclock synchronisation structure */
 
-struct ffclock_estimate
+struct ffclock_data
 {
 	/* phat as an int shifted phat_shift to the left */
 	uint64_t phat_int;
@@ -345,14 +345,19 @@ struct ffclock_estimate
 	uint8_t countdiff_maxbits;
 };
 
+struct ffclock_estimate
+{
+	volatile uint8_t gen;
+	struct ffclock_data cdata;
+};
 
 /* Current estimate and old one, no locking on the timestamping side */
 struct feedforward_clock
 {
-	volatile uint8_t generation;
+	volatile uint8_t updated;
 	struct ffclock_estimate *cest;
 	struct ffclock_estimate *ocest;
-	struct ffclock_estimate *tmp;
+	struct ffclock_estimate *ucest;
 };
 
 

@@ -254,7 +254,7 @@ DECLARE_MODULE(get_ffcounter_latency, get_ffcounter_latency_mod, SI_SUB_SYSCALLS
  */
 
 struct set_ffclock_args {
-	struct ffclock_estimate *cest;
+	struct ffclock_data *cdata;
 };
 
 
@@ -263,6 +263,9 @@ struct set_ffclock_args {
  * Hold ffclock_mtx to prevent several instances to update concurrently,
  * essentially to protect from user's bad practice.
  * update_ffclock() may bump the generation number without us knowing. 
+ *
+ * XXX update comment to reflect what the code does.
+ * mention that updates are acted upon during tc_windup, leading to a delay <= 1/HZ
  */
 static int set_ffclock(struct proc *td, void *syscall_args)
 {
@@ -270,22 +273,12 @@ static int set_ffclock(struct proc *td, void *syscall_args)
 	struct set_ffclock_args *uap;
 
 	uap = (struct set_ffclock_args *) syscall_args;
-	if ( uap->cest == NULL )
+	if ( uap->cdata == NULL )
 		return -1;
 
 	mtx_lock(&ffclock_mtx);
-
-	error = copyin(uap->cest, ffclock.ocest, sizeof(struct ffclock_estimate));
-
-	ffclock.tmp = ffclock.cest;
-	ffclock.cest = ffclock.ocest;
-
-	if (++ffclock.generation == 0)
-		ffclock.generation = 1;
-
-	ffclock.ocest = ffclock.tmp;
-	ffclock.tmp = NULL;
-
+	error = copyin(uap->cdata, &(ffclock.ucest->cdata), sizeof(struct ffclock_data));
+	ffclock.updated = 1;
 	mtx_unlock(&ffclock_mtx);
 
 	return(error);

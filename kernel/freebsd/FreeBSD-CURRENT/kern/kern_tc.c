@@ -220,10 +220,10 @@ init_ffclock(struct feedforward_clock *ffclock)
 	unsigned long sz;
 	sz = sizeof(struct ffclock_estimate);
 
-	ffclock->generation = 0;
+	ffclock->updated = 0;
 	ffclock->cest	= (struct ffclock_estimate *) malloc(sz, M_FFCLOCK, M_WAITOK | M_ZERO);
 	ffclock->ocest	= (struct ffclock_estimate *) malloc(sz, M_FFCLOCK, M_WAITOK | M_ZERO);
-	ffclock->tmp = NULL;
+	ffclock->ucest	= (struct ffclock_estimate *) malloc(sz, M_FFCLOCK, M_WAITOK | M_ZERO);
 }
 
 
@@ -238,7 +238,10 @@ reset_ffclock(struct feedforward_clock *ffclock, struct timehands *th)
 	uint64_t freq;
 	struct timecounter *tc;
 	struct ffclock_estimate *cest;
-	cest = ffclock->cest;
+	struct ffclock_data *cdata;
+
+	cest = ffclock->ucest;
+	cdata = &(cest->cdata);
 
 	/*
 	 * If called with a timehand, the timecounter is being changed and we
@@ -247,7 +250,7 @@ reset_ffclock(struct feedforward_clock *ffclock, struct timehands *th)
 	 */ 
 	if (th) {
 		th->ffcounter_record = 0;
-		cest->ffcounter = 0;
+		cdata->ffcounter = 0;
 		tc = th->th_counter;
 	}
 	else {
@@ -256,29 +259,34 @@ reset_ffclock(struct feedforward_clock *ffclock, struct timehands *th)
 		 * read from initoddr(), but not worse the trouble (is RTC trustworthy
 		 * anyway?). Let's keep it simple
 		 */ 
-		cest->ffcounter = read_ffcounter();
+		cdata->ffcounter = read_ffcounter();
 		tc = timehands->th_counter;
 	}
 	freq = tc->tc_frequency;
 
 	/* Numbers here are a bit magic */
 	// TODO should check these values ... again
-	cest->phat_shift = 58;
-	cest->time_shift = 32;
-	cest->countdiff_maxbits = 30;
+	cdata->phat_shift = 58;
+	cdata->time_shift = 32;
+	cdata->countdiff_maxbits = 30;
 
-	cest->phat_int = ((1LL << 63) / freq) >> (63 - cest->phat_shift); 
+	cdata->phat_int = ((1LL << 63) / freq) >> (63 - cdata->phat_shift); 
 
-	cest->time_int = (boottimebin.sec << cest->time_shift)
-		+ (boottimebin.frac >> (64 - cest->time_shift));
+	cdata->time_int = (boottimebin.sec << cdata->time_shift)
+		+ (boottimebin.frac >> (64 - cdata->time_shift));
 
-	ffclock->generation++;
+	if (++cest->gen == 0)
+		cest->gen = 1;
 
+	ffclock->ucest = ffclock->cest;
+	ffclock->cest = cest;
+	
+	cdata = &(ffclock->cest->cdata);
 	printf("reset_ffclock: %s - phat_int = %llu (%llu Hz), time_int = %llu (%llu.%llu s)\n",
 			tc->tc_name,
-			(long long unsigned) cest->phat_int,
+			(long long unsigned) cdata->phat_int,
 			(long long unsigned) freq,
-			(long long unsigned) cest->time_int,
+			(long long unsigned) cdata->time_int,
 			(long long unsigned) boottimebin.sec, 
 			(long long unsigned) boottimebin.frac);
 
@@ -295,30 +303,53 @@ reset_ffclock(struct feedforward_clock *ffclock, struct timehands *th)
 static void
 update_ffclock(struct feedforward_clock *ffclock)
 {
-	struct ffclock_estimate *cest;
+	struct ffclock_estimate *tmp;
+	struct ffclock_data *cdata;
 	struct timehands *th;
 	ffcounter_t cdiff;
 
 	/*
-	 * If we just changed the timecounter, or the clock has been adjusted, we
-	 * have nothing to do in here
+	 * If the clock has been updated by the synchronisation daemon, this new
+	 * data is the more up to date one.
 	 */
+	if ( ffclock->updated )
+	{
+		ffclock->ucest->gen = ffclock->cest->gen;
+		if (++ffclock->ucest->gen == 0)
+			ffclock->ucest->gen = 1;
+
+		tmp = ffclock->cest;
+		ffclock->cest = ffclock->ucest;
+		ffclock->ucest = tmp;
+		ffclock->updated = 0;
+		return;
+	}
+
+	/*
+	 * If we just changed the timecounter, we have nothing to do in here
+	 */
+	cdata = &(ffclock->cest->cdata);
 	th = timehands;
-	cest = ffclock->cest;
-	if ( cest->ffcounter > th->ffcounter_record )
+	if ( cdata->ffcounter > th->ffcounter_record )
 		return;
 
 	/*
-	 * Bump the generation recklessly. Leave the clock adjustment function work
-	 * its way out.
+	 * Update time mark 
 	 */
-	cdiff = th->ffcounter_record - cest->ffcounter;
-	cest->time_int += ((cest->phat_int * cdiff) >> (cest->phat_shift - cest->time_shift));
-	cest->ffcounter = th->ffcounter_record;
+	*(ffclock->ocest) = *(ffclock->cest);	
+	cdata = &(ffclock->ocest->cdata);
 
-	if (++ffclock->generation == 0)
-		ffclock->generation = 1;
+	cdiff = th->ffcounter_record - cdata->ffcounter;
+	cdata->time_int += ((cdata->phat_int * cdiff) >> (cdata->phat_shift - cdata->time_shift));
+	cdata->ffcounter = th->ffcounter_record;
+	if (++ffclock->ocest->gen == 0)
+		ffclock->ocest->gen = 1;
+
+	tmp = ffclock->cest;
+	ffclock->cest = ffclock->ocest;
+	ffclock->ocest = tmp;
 }
+
 
 
 void
@@ -327,7 +358,7 @@ ffcounter2bintime(ffcounter_t *ffcounter, struct bintime *bt)
 	ffcounter_t countdiff;
 	uint64_t time_f;
 	uint64_t frac;
-	struct ffclock_estimate *cest;
+	struct ffclock_data *cdata;
 	uint8_t gen;
 
 	/* Synchronization algorithm (userland) should update the fixed point data
@@ -340,42 +371,42 @@ ffcounter2bintime(ffcounter_t *ffcounter, struct bintime *bt)
 	 * has not changed instead.
 	 */
 	do {
-		gen = ffclock.generation;
-		cest = ffclock.cest;
+		gen = ffclock.cest->gen;
+		cdata = &(ffclock.cest->cdata);
 
-		countdiff = *ffcounter - cest->ffcounter;
+		countdiff = *ffcounter - cdata->ffcounter;
 
 		/*
 		 * update_ffclock() should prevent countdiff to become to large and the
 		 * corresponding time interval added to overflow. Just send warning in
 		 * the unlikely event this is happening.
 		 */
-		if (countdiff & ~((1ll << (cest->countdiff_maxbits +1)) - 1))
+		if (countdiff & ~((1ll << (cdata->countdiff_maxbits +1)) - 1))
 		{
 			printf("ffclock: warning stamp may overflow timeval at %llu! "
 					"(countdiff = %llu, maxbits = %u)\n", 
 					(long long unsigned) *ffcounter,
 					(long long unsigned) countdiff,
-					cest->countdiff_maxbits);
+					cdata->countdiff_maxbits);
 		}
 		/* Add the counter delta in second to the recorded fixed point time */
-		time_f 	= cest->time_int
-			+ ((cest->phat_int * countdiff) >> (cest->phat_shift - cest->time_shift));
+		time_f 	= cdata->time_int
+			+ ((cdata->phat_int * countdiff) >> (cdata->phat_shift - cdata->time_shift));
 
-		bt->sec  = time_f >> cest->time_shift;
+		bt->sec  = time_f >> cdata->time_shift;
 
 /*
 		printf("ffclock: ffcounter = %llu bt->sec = %llu, time_int = %llu\n",
 				(long long unsigned) *ffcounter,
 			   	(long long unsigned) bt->sec, 
-				(long long unsigned) (cest->time_int >> cest->time_shift));
+				(long long unsigned) (cdata->time_int >> cdata->time_shift));
 */
 		// gives me headaches again
 		// frac * ( 2^64 - 2^time_shift) ... that should be the correct resolution
-		frac = time_f - ((uint64_t) bt->sec << cest->time_shift);
-		bt->frac = frac * ((uint64_t) 1LL << (64 - cest->time_shift));
+		frac = time_f - ((uint64_t) bt->sec << cdata->time_shift);
+		bt->frac = frac * ((uint64_t) 1LL << (64 - cdata->time_shift));
 
-	} while (gen == 0 || gen != ffclock.generation);
+	} while (gen == 0 || gen != ffclock.cest->gen);
 }
 
 
@@ -798,6 +829,7 @@ tc_windup(void)
 	time_second = th->th_microtime.tv_sec;
 	time_uptime = th->th_offset.sec;
 	timehands = th;
+
 
 #ifdef RADCLOCK
 	update_ffclock(&ffclock);
