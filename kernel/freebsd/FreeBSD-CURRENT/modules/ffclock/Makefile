@@ -5,11 +5,11 @@
 KMOD    =  radclock
 SRCS    =  radclock.c
 
-SRCS+=	opt_radclock.h
+SRCS+=	opt_ffclock.h
 
 .if !defined(KERNBUILDDIR)
-opt_radclock.h:
-	echo "#define RADCLOCK 1" > opt_radclock.h
+opt_ffclock.h:
+	echo "#define FFCLOCK 1" > opt_ffclock.h
 .endif
 
 .include <bsd.kmod.mk>

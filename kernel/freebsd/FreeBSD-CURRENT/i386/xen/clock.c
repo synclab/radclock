@@ -292,7 +292,7 @@ static inline int time_values_up_to_date(int cpu)
 
 static	unsigned xen_get_timecount(struct timecounter *tc);
 
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 static uint64_t xen_get_timecount_64(struct timecounter *tc);
 
 static struct timecounter xen_timecounter = {
@@ -847,7 +847,7 @@ xen_get_timecount(struct timecounter *tc)
 
 }
 
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 static uint64_t
 xen_get_timecount_64(struct timecounter *tc)
 {	

@@ -38,7 +38,7 @@
  */
 
 
-#include "opt_radclock.h" 
+#include "opt_ffclock.h" 
 
 #ifndef _NET_BPF_H_
 #define _NET_BPF_H_
@@ -173,7 +173,7 @@ enum bpf_direction {
 #define	BPF_T_FAST		0x0100
 #define	BPF_T_MONOTONIC		0x0200
 #define	BPF_T_MONOTONIC_FAST	(BPF_T_FAST | BPF_T_MONOTONIC)
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 #define	BPF_T_FFCLOCK		0x0400
 #define	BPF_T_FLAG_MASK		0x0700
 #else
@@ -194,7 +194,7 @@ enum bpf_direction {
 #define	BPF_T_MICROTIME_MONOTONIC_FAST	(BPF_T_MICROTIME | BPF_T_MONOTONIC_FAST)
 #define	BPF_T_NANOTIME_MONOTONIC_FAST	(BPF_T_NANOTIME | BPF_T_MONOTONIC_FAST)
 #define	BPF_T_BINTIME_MONOTONIC_FAST	(BPF_T_BINTIME | BPF_T_MONOTONIC_FAST)
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 #define BPF_T_MICROTIME_FFCLOCK		(BPF_T_MICROTIME | BPF_T_FFCLOCK)
 #define BPF_T_NANOTIME_FFCLOCK		(BPF_T_NANOTIME | BPF_T_FFCLOCK)
 #define BPF_T_BINTIME_FFCLOCK		(BPF_T_BINTIME | BPF_T_FFCLOCK)
@@ -208,7 +208,7 @@ struct bpf_ts {
 	bpf_u_int64	bt_frac;	/* fraction */
 };
 
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 struct bpf_xhdr {
 	struct bpf_ts	bh_tstamp;	/* time stamp */
 	bpf_u_int32	bh_caplen;	/* length of captured portion */
@@ -229,7 +229,7 @@ struct bpf_xhdr {
 #endif
 
 /* Obsolete */
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 struct bpf_hdr {
 	struct timeval	bh_tstamp;	/* time stamp */
 	bpf_u_int32	bh_caplen;	/* length of captured portion */

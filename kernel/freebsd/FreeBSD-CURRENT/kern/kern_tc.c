@@ -21,12 +21,11 @@ __FBSDID("$FreeBSD: src/sys/kern/kern_tc.c,v 1.191 2010/09/21 08:02:02 mav Exp $
 #include <sys/timetc.h>
 #include <sys/timex.h>
 
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/malloc.h>
-#endif	/* RADCLOCK */
-
+#endif	/* FFCLOCK */
 
 /*
  * A large step happens on boot.  This constant detects such steps.
@@ -60,11 +59,9 @@ struct timehands {
 	int64_t			th_adjustment;
 	uint64_t		th_scale;
 	u_int	 		th_offset_count;
-
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 	ffcounter_t		ffcounter_record;
 #endif
-
 	struct bintime		th_offset;
 	struct timeval		th_microtime;
 	struct timespec		th_nanotime;
@@ -73,7 +70,7 @@ struct timehands {
 	struct timehands	*th_next;
 };
 
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 static struct timehands th0;
 static struct timehands th9 = { NULL, 0, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th0};
 static struct timehands th8 = { NULL, 0, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th9};
@@ -118,7 +115,7 @@ static struct timehands th0 = {
 	1,
 	&th1
 };
-#endif	/* RADCLOCK */
+#endif	/* FFCLOCK */
 
 static struct timehands *volatile timehands = &th0;
 struct timecounter *timecounter = &dummy_timecounter;
@@ -200,7 +197,148 @@ tc_delta(struct timehands *th)
  * the comment in <sys/time.h> for a description of these 12 functions.
  */
 
-#ifdef RADCLOCK
+void
+binuptime(struct bintime *bt)
+{
+	struct timehands *th;
+	u_int gen;
+
+	do {
+		th = timehands;
+		gen = th->th_generation;
+		*bt = th->th_offset;
+		bintime_addx(bt, th->th_scale * tc_delta(th));
+	} while (gen == 0 || gen != th->th_generation);
+}
+
+void
+nanouptime(struct timespec *tsp)
+{
+	struct bintime bt;
+
+	binuptime(&bt);
+	bintime2timespec(&bt, tsp);
+}
+
+void
+microuptime(struct timeval *tvp)
+{
+	struct bintime bt;
+
+	binuptime(&bt);
+	bintime2timeval(&bt, tvp);
+}
+
+void
+bintime(struct bintime *bt)
+{
+
+	binuptime(bt);
+	bintime_add(bt, &boottimebin);
+}
+
+void
+nanotime(struct timespec *tsp)
+{
+	struct bintime bt;
+
+	bintime(&bt);
+	bintime2timespec(&bt, tsp);
+}
+
+void
+microtime(struct timeval *tvp)
+{
+	struct bintime bt;
+
+	bintime(&bt);
+	bintime2timeval(&bt, tvp);
+}
+
+void
+getbinuptime(struct bintime *bt)
+{
+	struct timehands *th;
+	u_int gen;
+
+	do {
+		th = timehands;
+		gen = th->th_generation;
+		*bt = th->th_offset;
+	} while (gen == 0 || gen != th->th_generation);
+}
+
+void
+getnanouptime(struct timespec *tsp)
+{
+	struct timehands *th;
+	u_int gen;
+
+	do {
+		th = timehands;
+		gen = th->th_generation;
+		bintime2timespec(&th->th_offset, tsp);
+	} while (gen == 0 || gen != th->th_generation);
+}
+
+void
+getmicrouptime(struct timeval *tvp)
+{
+	struct timehands *th;
+	u_int gen;
+
+	do {
+		th = timehands;
+		gen = th->th_generation;
+		bintime2timeval(&th->th_offset, tvp);
+	} while (gen == 0 || gen != th->th_generation);
+}
+
+void
+getbintime(struct bintime *bt)
+{
+	struct timehands *th;
+	u_int gen;
+
+	do {
+		th = timehands;
+		gen = th->th_generation;
+		*bt = th->th_offset;
+	} while (gen == 0 || gen != th->th_generation);
+	bintime_add(bt, &boottimebin);
+}
+
+void
+getnanotime(struct timespec *tsp)
+{
+	struct timehands *th;
+	u_int gen;
+
+	do {
+		th = timehands;
+		gen = th->th_generation;
+		*tsp = th->th_nanotime;
+	} while (gen == 0 || gen != th->th_generation);
+}
+
+void
+getmicrotime(struct timeval *tvp)
+{
+	struct timehands *th;
+	u_int gen;
+
+	do {
+		th = timehands;
+		gen = th->th_generation;
+		*tvp = th->th_microtime;
+	} while (gen == 0 || gen != th->th_generation);
+}
+
+
+/*
+ * All Feed-forward clock functions
+ */
+#ifdef FFCLOCK
 static int sysctl_kern_timecounter_passthrough = 0;
 SYSCTL_INT(_kern_timecounter, OID_AUTO, passthrough, CTLFLAG_RW,
 	&sysctl_kern_timecounter_passthrough, 0,
@@ -442,145 +580,7 @@ read_ffcounter(void)
 		return(ffcounter + delta);
 	}
 }
-#endif	/* RADCLOCK */
-
-
-void
-binuptime(struct bintime *bt)
-{
-	struct timehands *th;
-	u_int gen;
-
-	do {
-		th = timehands;
-		gen = th->th_generation;
-		*bt = th->th_offset;
-		bintime_addx(bt, th->th_scale * tc_delta(th));
-	} while (gen == 0 || gen != th->th_generation);
-}
-
-void
-nanouptime(struct timespec *tsp)
-{
-	struct bintime bt;
-
-	binuptime(&bt);
-	bintime2timespec(&bt, tsp);
-}
-
-void
-microuptime(struct timeval *tvp)
-{
-	struct bintime bt;
-
-	binuptime(&bt);
-	bintime2timeval(&bt, tvp);
-}
-
-void
-bintime(struct bintime *bt)
-{
-
-	binuptime(bt);
-	bintime_add(bt, &boottimebin);
-}
-
-void
-nanotime(struct timespec *tsp)
-{
-	struct bintime bt;
-
-	bintime(&bt);
-	bintime2timespec(&bt, tsp);
-}
-
-void
-microtime(struct timeval *tvp)
-{
-	struct bintime bt;
-
-	bintime(&bt);
-	bintime2timeval(&bt, tvp);
-}
-
-void
-getbinuptime(struct bintime *bt)
-{
-	struct timehands *th;
-	u_int gen;
-
-	do {
-		th = timehands;
-		gen = th->th_generation;
-		*bt = th->th_offset;
-	} while (gen == 0 || gen != th->th_generation);
-}
-
-void
-getnanouptime(struct timespec *tsp)
-{
-	struct timehands *th;
-	u_int gen;
-
-	do {
-		th = timehands;
-		gen = th->th_generation;
-		bintime2timespec(&th->th_offset, tsp);
-	} while (gen == 0 || gen != th->th_generation);
-}
-
-void
-getmicrouptime(struct timeval *tvp)
-{
-	struct timehands *th;
-	u_int gen;
-
-	do {
-		th = timehands;
-		gen = th->th_generation;
-		bintime2timeval(&th->th_offset, tvp);
-	} while (gen == 0 || gen != th->th_generation);
-}
-
-void
-getbintime(struct bintime *bt)
-{
-	struct timehands *th;
-	u_int gen;
-
-	do {
-		th = timehands;
-		gen = th->th_generation;
-		*bt = th->th_offset;
-	} while (gen == 0 || gen != th->th_generation);
-	bintime_add(bt, &boottimebin);
-}
-
-void
-getnanotime(struct timespec *tsp)
-{
-	struct timehands *th;
-	u_int gen;
-
-	do {
-		th = timehands;
-		gen = th->th_generation;
-		*tsp = th->th_nanotime;
-	} while (gen == 0 || gen != th->th_generation);
-}
-
-void
-getmicrotime(struct timeval *tvp)
-{
-	struct timehands *th;
-	u_int gen;
-
-	do {
-		th = timehands;
-		gen = th->th_generation;
-		*tvp = th->th_microtime;
-	} while (gen == 0 || gen != th->th_generation);
-}
+#endif	/* FFCLOCK */
 
 /*
  * Initialize a new timecounter and possibly use it.
@@ -607,7 +607,7 @@ tc_init(struct timecounter *tc)
 		    tc->tc_name, (uintmax_t)tc->tc_frequency,
 		    tc->tc_quality);
 	}
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 	/* XXX this is a very ugly but good enough to cover my back */
 	if ( (strcmp(tc->tc_name, "TSC") != 0) && (strcmp(tc->tc_name, "ixen") != 0) )
 	{
@@ -679,9 +679,9 @@ tc_setclock(struct timespec *ts)
 	boottimebin = bt;
 	bintime2timeval(&bt, &boottime);
 
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 	reset_ffclock(&ffclock, NULL);
-#endif	/* RADCLOCK */
+#endif	/* FFCLOCK */
 
 	/* XXX fiddle all the little crinkly bits around the fiords... */
 	tc_windup();
@@ -733,7 +733,7 @@ tc_windup(void)
 	else
 		ncount = 0;
 
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 	th->ffcounter_record += delta;
 #endif
 
@@ -784,7 +784,7 @@ tc_windup(void)
 		tc_min_ticktock_freq = max(1, timecounter->tc_frequency /
 		    (((uint64_t)timecounter->tc_counter_mask + 1) / 3));
 
-		#ifdef RADCLOCK
+		#ifdef FFCLOCK
 		reset_ffclock(&ffclock, th);
 		#endif
 	}
@@ -831,7 +831,7 @@ tc_windup(void)
 	timehands = th;
 
 
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 	update_ffclock(&ffclock);
 #endif
 }
@@ -900,7 +900,7 @@ pps_ioctl(u_long cmd, caddr_t data, struct pps_state *pps)
 {
 	pps_params_t *app;
 	struct pps_fetch_args *fapi;
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 	struct ffclock_pps_fetch_args *ffclock_fapi;
 #endif
 
@@ -938,8 +938,8 @@ pps_ioctl(u_long cmd, caddr_t data, struct pps_state *pps)
 		fapi->pps_info_buf = pps->ppsinfo;
 		return (0);
 
-#ifdef RADCLOCK
-	case RADCLOCK_PPS_IOC_FETCH:
+#ifdef FFCLOCK
+	case FFCLOCK_PPS_IOC_FETCH:
 		ffclock_fapi = (struct ffclock_pps_fetch_args *)data;
 		if (ffclock_fapi->tsformat && ffclock_fapi->tsformat != PPS_TSFMT_TSPEC)
 			return (EINVAL);
@@ -948,7 +948,7 @@ pps_ioctl(u_long cmd, caddr_t data, struct pps_state *pps)
 		pps->ppsinfo.current_mode = pps->ppsparam.mode;
 		ffclock_fapi->pps_info_buf = pps->ffclock_ppsinfo;
 		return (0);
-#endif 	/* RADCLOCK */
+#endif 	/* FFCLOCK */
 
 	case PPS_IOC_KCBIND:
 #ifdef PPS_SYNC
@@ -1002,7 +1002,7 @@ pps_event(struct pps_state *pps, int event)
 	u_int tcount, *pcount;
 	int foff, fhard;
 	pps_seq_t *pseq;
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 	struct timespec *ffclock_tsp;
 	pps_seq_t *ffclock_pseq;
 	ffcounter_t *ffcounter;
@@ -1022,7 +1022,7 @@ pps_event(struct pps_state *pps, int event)
 		fhard = pps->kcmode & PPS_CAPTUREASSERT;
 		pcount = &pps->ppscount[0];
 		pseq = &pps->ppsinfo.assert_sequence;
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 		ffcounter = &pps->ffclock_ppsinfo.assert_ffcounter;
 		ffclock_tsp = &pps->ffclock_ppsinfo.assert_timestamp;
 		ffclock_pseq = &pps->ffclock_ppsinfo.assert_sequence;
@@ -1034,7 +1034,7 @@ pps_event(struct pps_state *pps, int event)
 		fhard = pps->kcmode & PPS_CAPTURECLEAR;
 		pcount = &pps->ppscount[1];
 		pseq = &pps->ppsinfo.clear_sequence;
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 		ffcounter = &pps->ffclock_ppsinfo.clear_ffcounter;
 		ffclock_tsp = &pps->ffclock_ppsinfo.clear_timestamp;
 		ffclock_pseq = &pps->ffclock_ppsinfo.clear_sequence;
@@ -1055,7 +1055,7 @@ pps_event(struct pps_state *pps, int event)
 	/* Convert the count to a timespec. */
 	tcount = pps->capcount - pps->capth->th_offset_count;
 	tcount &= pps->capth->th_counter->tc_counter_mask;
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 	ffcounter_record = pps->capth->ffcounter_record;
 #endif
 	bt = pps->capth->th_offset;
@@ -1070,7 +1070,7 @@ pps_event(struct pps_state *pps, int event)
 	*pcount = pps->capcount;
 	(*pseq)++;
 	*tsp = ts;
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 	(*ffclock_pseq)++;
 	*ffclock_tsp = ts;
 	*ffcounter = (ffcounter_record + tcount);
@@ -1149,7 +1149,7 @@ inittimecounter(void *dummy)
 	p = (tc_tick * 1000000) / hz;
 	printf("Timecounters tick every %d.%03u msec\n", p / 1000, p % 1000);
 
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 	init_ffclock(&ffclock);
 #endif
 

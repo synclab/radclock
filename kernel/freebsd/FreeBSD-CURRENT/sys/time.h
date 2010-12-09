@@ -324,10 +324,10 @@ void	getbintime(struct bintime *bt);
 void	getnanotime(struct timespec *tsp);
 void	getmicrotime(struct timeval *tvp);
 
-/* RADCLOCK specific */
+/* FFCLOCK specific */
 typedef uint64_t ffcounter_t;
 
-/* RADclock synchronisation structure */
+/* Feed-Forward Clock synchronisation structure */
 
 struct ffclock_data
 {
@@ -364,7 +364,7 @@ struct feedforward_clock
 
 ffcounter_t read_ffcounter(void);
 void ffcounter2bintime(ffcounter_t *ffcounter, struct bintime *bt);
-/* RADCLOCK */
+/* FFCLOCK */
 
 
 /* Other functions */

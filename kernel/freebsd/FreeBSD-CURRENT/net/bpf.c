@@ -90,13 +90,13 @@ MALLOC_DEFINE(M_BPF, "BPF", "BPF data");
 
 #define PRINET  26			/* interruptible */
 
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 #define	SIZEOF_BPF_HDR(type)	\
     (offsetof(type, ffcounter_stamp) + sizeof(((type *)0)->ffcounter_stamp))
 #else
 #define	SIZEOF_BPF_HDR(type)	\
     (offsetof(type, bh_hdrlen) + sizeof(((type *)0)->bh_hdrlen))
-#endif	/* RADCLOCK */
+#endif	/* FFCLOCK */
 
 #ifdef COMPAT_FREEBSD32
 #include <sys/mount.h>
@@ -116,7 +116,7 @@ struct bpf_hdr32 {
 	uint32_t	bh_datalen;	/* original length of packet */
 	uint16_t	bh_hdrlen;	/* length of bpf header (this struct
 					   plus alignment padding) */
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 	u_short     padding;        /* padding to align the fields */
 	ffcounter_t  ffcounter_stamp;   /* raw virtual timecounter timestamp for this packet */      
 #endif
@@ -160,7 +160,7 @@ static int	bpf_setif(struct bpf_d *, struct ifreq *);
 static void	bpf_timed_out(void *);
 static __inline void
 		bpf_wakeup(struct bpf_d *);
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 static void catchpacket(struct bpf_d *, u_char *, u_int, u_int,
 			void (*)(struct bpf_d *, caddr_t, u_int, void *, u_int),
 			struct bintime *, ffcounter_t *);
@@ -187,11 +187,11 @@ SYSCTL_INT(_net_bpf, OID_AUTO, zerocopy_enable, CTLFLAG_RW,
     &bpf_zerocopy_enable, 0, "Enable new zero-copy BPF buffer sessions");
 SYSCTL_NODE(_net_bpf, OID_AUTO, stats, CTLFLAG_MPSAFE | CTLFLAG_RW,
     bpf_stats_sysctl, "bpf statistics portal");
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 static int bpf_ffclock_tstamp = 0; 
 SYSCTL_INT(_net_bpf, OID_AUTO, ffclock_tstamp, CTLFLAG_RW,
 	&bpf_ffclock_tstamp, 0, "Set BPF to timestamp using Feed-Forward clock by default");
-#endif /* RADCLOCK */
+#endif /* FFCLOCK */
 
 static	d_open_t	bpfopen;
 static	d_read_t	bpfread;
@@ -718,13 +718,13 @@ bpfopen(struct cdev *dev, int flags, int fmt, struct thread *td)
 	callout_init_mtx(&d->bd_callout, &d->bd_mtx, 0);
 	knlist_init_mtx(&d->bd_sel.si_note, &d->bd_mtx);
 
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 	/* Timestamping mode for this device, default is use the system clock.
 	 * Need BPF_T_MONOTONIC to avoid bpf_bintime2ts to add bootime.
 	 */
 	if (bpf_ffclock_tstamp)
 		d->bd_tstamp = d->bd_tstamp | BPF_T_FFCLOCK | BPF_T_MONOTONIC;
-#endif /* RADCLOCK */
+#endif /* FFCLOCK */
 
 	return (0);
 }
@@ -1845,7 +1845,7 @@ bpf_tap(struct bpf_if *bp, u_char *pkt, u_int pktlen)
 #endif
 	u_int slen;
 	int gottime;
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 	ffcounter_t ffcounter;
 #endif
 
@@ -1872,20 +1872,20 @@ bpf_tap(struct bpf_if *bp, u_char *pkt, u_int pktlen)
 			if (gottime < bpf_ts_quality(d->bd_tstamp))
 			{
 				gottime = bpf_gettime(&bt, d->bd_tstamp, NULL);
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 				ffcounter = read_ffcounter();
 #endif
 			}
 #ifdef MAC
 			if (mac_bpfdesc_check_receive(d, bp->bif_ifp) == 0)
 #endif
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 				catchpacket(d, pkt, pktlen, slen,
 				    bpf_append_bytes, &bt, &ffcounter);
 #else
 				catchpacket(d, pkt, pktlen, slen,
 				    bpf_append_bytes, &bt);
-#endif	/* RADCLOCK */
+#endif	/* FFCLOCK */
 		}
 		BPFD_UNLOCK(d);
 	}
@@ -1909,7 +1909,7 @@ bpf_mtap(struct bpf_if *bp, struct mbuf *m)
 #endif
 	u_int pktlen, slen;
 	int gottime;
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 	ffcounter_t ffcounter;
 #endif
 
@@ -1942,20 +1942,20 @@ bpf_mtap(struct bpf_if *bp, struct mbuf *m)
 			{
 				gottime = bpf_gettime(&bt, d->bd_tstamp, m);
 
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 				ffcounter = read_ffcounter();
 #endif
 			}
 #ifdef MAC
 			if (mac_bpfdesc_check_receive(d, bp->bif_ifp) == 0)
 #endif
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 				catchpacket(d, (u_char *)m, pktlen, slen,
 				    bpf_append_mbuf, &bt, &ffcounter);
 #else
 				catchpacket(d, (u_char *)m, pktlen, slen,
 				    bpf_append_mbuf, &bt);
-#endif 	/* RADCLOCK */
+#endif 	/* FFCLOCK */
 		}
 		BPFD_UNLOCK(d);
 	}
@@ -1974,9 +1974,9 @@ bpf_mtap2(struct bpf_if *bp, void *data, u_int dlen, struct mbuf *m)
 	struct bpf_d *d;
 	u_int pktlen, slen;
 	int gottime;
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 	ffcounter_t ffcounter;
-#endif 	/* RADCLOCK */
+#endif 	/* FFCLOCK */
 
 	/* Skip outgoing duplicate packets. */
 	if ((m->m_flags & M_PROMISC) != 0 && m->m_pkthdr.rcvif == NULL) {
@@ -2008,14 +2008,14 @@ bpf_mtap2(struct bpf_if *bp, void *data, u_int dlen, struct mbuf *m)
 			if (gottime < bpf_ts_quality(d->bd_tstamp))
 			{
 				gottime = bpf_gettime(&bt, d->bd_tstamp, m);
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 				ffcounter = read_ffcounter();
-#endif 	/* RADCLOCK */
+#endif 	/* FFCLOCK */
 			}
 #ifdef MAC
 			if (mac_bpfdesc_check_receive(d, bp->bif_ifp) == 0)
 #endif
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 				catchpacket(d, (u_char *)m, pktlen, slen,
 				    bpf_append_mbuf, &bt, &ffcounter);
 #else
@@ -2103,7 +2103,7 @@ bpf_bintime2ts(struct bintime *bt, struct bpf_ts *ts, int tstype)
  * bpf_append_mbuf is passed in to copy mbuf chains.  In the latter case,
  * pkt is really an mbuf.
  */
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 static void
 catchpacket(struct bpf_d *d, u_char *pkt, u_int pktlen, u_int snaplen,
     void (*cpfn)(struct bpf_d *, caddr_t, u_int, void *, u_int),
@@ -2126,10 +2126,10 @@ catchpacket(struct bpf_d *d, u_char *pkt, u_int pktlen, u_int snaplen,
 	int do_timestamp;
 	int tstype;
 
-// XXX RADCLOCK DEBUG XXX
+// XXX FFCLOCK DEBUG XXX
 //	struct bpf_if *bp;
 //	bp = d->bd_bif;
-// XXX RADCLOCK DEBUG XXX	
+// XXX FFCLOCK DEBUG XXX	
 
 	BPFD_LOCK_ASSERT(d);
 
@@ -2201,18 +2201,18 @@ catchpacket(struct bpf_d *d, u_char *pkt, u_int pktlen, u_int snaplen,
 		struct bpf_ts ts;
 		if (do_timestamp)
 		{
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 			/* If asked, use the RADclock to generate the bintime timestamp */
 			if ( (tstype & BPF_T_FFCLOCK) == BPF_T_FFCLOCK )
 				ffcounter2bintime(ffcounter, bt);
-#endif	/* RADCLOCK */
+#endif	/* FFCLOCK */
 			bpf_bintime2ts(bt, &ts, tstype);
 		}
 #ifdef COMPAT_FREEBSD32
 		if (d->bd_compat32) {
 			bzero(&hdr32_old, sizeof(hdr32_old));
 			if (do_timestamp) {
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 				hdr32_old.ffcounter_stamp = *ffcounter;
 #endif
 				hdr32_old.bh_tstamp.tv_sec = ts.bt_sec;
@@ -2222,10 +2222,10 @@ catchpacket(struct bpf_d *d, u_char *pkt, u_int pktlen, u_int snaplen,
 			hdr32_old.bh_hdrlen = hdrlen;
 			hdr32_old.bh_caplen = caplen;
 
-// XXX RADCLOCK DEBUG XXX
+// XXX FFCLOCK DEBUG XXX
 //if_printf(bp->bif_ifp, "radcatch: hdr32_old with hdrlen= %d, ffcounter= %llu\n",
 //	   	hdrlen, (long long unsigned) *ffcounter);
-// XXX RADCLOCK DEBUG XXX
+// XXX FFCLOCK DEBUG XXX
 
 			bpf_append_bytes(d, d->bd_sbuf, curlen, &hdr32_old,
 			    sizeof(hdr32_old));
@@ -2234,7 +2234,7 @@ catchpacket(struct bpf_d *d, u_char *pkt, u_int pktlen, u_int snaplen,
 #endif
 		bzero(&hdr_old, sizeof(hdr_old));
 		if (do_timestamp) {
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 			hdr_old.ffcounter_stamp = *ffcounter;
 #endif
 			hdr_old.bh_tstamp.tv_sec = ts.bt_sec;
@@ -2244,10 +2244,10 @@ catchpacket(struct bpf_d *d, u_char *pkt, u_int pktlen, u_int snaplen,
 		hdr_old.bh_hdrlen = hdrlen;
 		hdr_old.bh_caplen = caplen;
 
-// XXX RADCLOCK DEBUG XXX
+// XXX FFCLOCK DEBUG XXX
 //if_printf(bp->bif_ifp, "radcatch: hdr_old with hdrlen= %d, ffcounter= %llu\n",
 //	   	hdrlen, (long long unsigned) *ffcounter);
-// XXX RADCLOCK DEBUG XXX
+// XXX FFCLOCK DEBUG XXX
 
 		bpf_append_bytes(d, d->bd_sbuf, curlen, &hdr_old,
 		    sizeof(hdr_old));
@@ -2262,21 +2262,21 @@ catchpacket(struct bpf_d *d, u_char *pkt, u_int pktlen, u_int snaplen,
 	bzero(&hdr, sizeof(hdr));
 	if (do_timestamp)
 	{
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 		hdr.ffcounter_stamp = *ffcounter;
 		if ( (tstype & BPF_T_FFCLOCK) == BPF_T_FFCLOCK )
 			ffcounter2bintime(ffcounter, bt);
-#endif	/* RADCLOCK */
+#endif	/* FFCLOCK */
 		bpf_bintime2ts(bt, &hdr.bh_tstamp, tstype);
 	}
 	hdr.bh_datalen = pktlen;
 	hdr.bh_hdrlen = hdrlen;
 	hdr.bh_caplen = caplen;
 
-// XXX RADCLOCK DEBUG XXX
+// XXX FFCLOCK DEBUG XXX
 //if_printf(bp->bif_ifp, "radcatch: xhdr with hdrlen= %d, ffcounter= %llu\n",
 //	   	hdrlen, (long long unsigned) *ffcounter);
-// XXX RADCLOCK DEBUG XXX
+// XXX FFCLOCK DEBUG XXX
 
 	bpf_append_bytes(d, d->bd_sbuf, curlen, &hdr, sizeof(hdr));
 

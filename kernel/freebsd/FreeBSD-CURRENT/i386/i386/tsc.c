@@ -70,7 +70,7 @@ static void tsc_freq_changing(void *arg, const struct cf_level *level,
 static	unsigned tsc_get_timecount(struct timecounter *tc);
 static void tsc_levels_changed(void *arg, int unit);
 
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 static uint64_t tsc_get_timecount_64(struct timecounter *tc);
 static struct timecounter tsc_timecounter = {
 	.tc_get_timecount = tsc_get_timecount,
@@ -271,7 +271,7 @@ tsc_get_timecount(struct timecounter *tc)
 	return (rdtsc());
 }
 
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 static uint64_t
 tsc_get_timecount_64(struct timecounter *tc)
 {

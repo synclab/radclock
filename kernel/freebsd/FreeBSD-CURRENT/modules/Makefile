@@ -241,7 +241,7 @@ SUBDIR=	${_3dfx} \
 	${_pst} \
 	pty  \
 	puc \
-	radclock \
+	ffclock \
 	ral \
 	ralfw \
 	${_random} \

@@ -15,7 +15,7 @@
 #ifndef _SYS_TIMEPPS_H_
 #define _SYS_TIMEPPS_H_
 
-#include "opt_radclock.h"
+#include "opt_ffclock.h"
 
 #include <sys/ioccom.h>
 #include <sys/time.h>
@@ -46,7 +46,7 @@ typedef struct {
 } pps_info_t;
 
 
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 typedef union pps_ffcounteru {
 	ffcounter_t ffcounter;
 } pps_ffcounteru_t;
@@ -60,7 +60,7 @@ typedef struct {
 	pps_ffcounteru_t  assert_vcu;
 	pps_ffcounteru_t  clear_vcu;
 } ffclock_pps_info_t;
-#endif	/* RADCLOCK */
+#endif	/* FFCLOCK */
 
 
 #define assert_timestamp        assert_tu.tspec
@@ -69,10 +69,10 @@ typedef struct {
 #define assert_timestamp_ntpfp  assert_tu.ntpfp
 #define clear_timestamp_ntpfp   clear_tu.ntpfp
 
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 #define assert_ffcounter	assert_vcu.ffcounter
 #define clear_ffcounter		clear_vcu.ffcounter
-#endif 	/* RADCLOCK */
+#endif 	/* FFCLOCK */
 
 typedef struct {
 	int api_version;			/* API version # */
@@ -114,13 +114,13 @@ struct pps_fetch_args {
 	struct timespec	timeout;
 };
 
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 struct ffclock_pps_fetch_args {
 	int tsformat;
 	ffclock_pps_info_t	pps_info_buf;
 	struct timespec	timeout;
 };
-#endif	/* RADCLOCK */
+#endif	/* FFCLOCK */
 
 struct pps_kcbind_args {
 	int kernel_consumer;
@@ -135,9 +135,9 @@ struct pps_kcbind_args {
 #define PPS_IOC_GETCAP		_IOR('1', 5, int)
 #define PPS_IOC_FETCH		_IOWR('1', 6, struct pps_fetch_args)
 #define PPS_IOC_KCBIND		_IOW('1', 7, struct pps_kcbind_args)
-#ifdef RADCLOCK
-#define RADCLOCK_PPS_IOC_FETCH		_IOWR('1', 8, struct ffclock_pps_fetch_args)
-#endif 	/* RADCLOCK */
+#ifdef FFCLOCK
+#define FFCLOCK_PPS_IOC_FETCH		_IOWR('1', 8, struct ffclock_pps_fetch_args)
+#endif 	/* FFCLOCK */
 
 #ifdef _KERNEL
 
@@ -150,9 +150,9 @@ struct pps_state {
 	/* State information. */
 	pps_params_t	ppsparam;
 	pps_info_t	ppsinfo;
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 	ffclock_pps_info_t	ffclock_ppsinfo;
-#endif 	/* RADCLOCK */
+#endif 	/* FFCLOCK */
 	int		kcmode;
 	int		ppscap;
 	struct timecounter *ppstc;
@@ -222,7 +222,7 @@ time_pps_fetch(pps_handle_t handle, const int tsformat,
 	return (error);
 }
 
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 static __inline int
 ffclock_pps_fetch(pps_handle_t handle, const int tsformat,
 	ffclock_pps_info_t *ppsinfobuf, const struct timespec *timeout)
@@ -236,11 +236,11 @@ ffclock_pps_fetch(pps_handle_t handle, const int tsformat,
 		arg.timeout.tv_nsec = -1;
 	} else
 		arg.timeout = *timeout;
-	error = ioctl(handle, RADCLOCK_PPS_IOC_FETCH, &arg);
+	error = ioctl(handle, FFCLOCK_PPS_IOC_FETCH, &arg);
 	*ppsinfobuf = arg.pps_info_buf;
 	return (error);
 }
-#endif 	/* RADCLOCK */
+#endif 	/* FFCLOCK */
 
 static __inline int
 time_pps_kcbind(pps_handle_t handle, const int kernel_consumer,

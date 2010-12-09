@@ -4,13 +4,13 @@ Julien Ridoux
 julien@synclab.org
 
 diff -aur --unidirectional-new-file sys/amd64/amd64/tsc.c FreeBSD-CURRENT/amd64/amd64/tsc.c
---- sys/amd64/amd64/tsc.c	2010-12-03 12:11:39.000000000 +1100
-+++ FreeBSD-CURRENT/amd64/amd64/tsc.c	2010-12-03 12:34:17.000000000 +1100
+--- sys/amd64/amd64/tsc.c	2010-12-09 15:14:25.000000000 +1100
++++ FreeBSD-CURRENT/amd64/amd64/tsc.c	2010-12-09 15:22:45.000000000 +1100
 @@ -69,6 +69,18 @@
  static	unsigned tsc_get_timecount(struct timecounter *tc);
  static void tsc_levels_changed(void *arg, int unit);
  
-+#ifdef RADCLOCK
++#ifdef FFCLOCK
 +static uint64_t tsc_get_timecount_64(struct timecounter *tc);
 +static struct timecounter tsc_timecounter = {
 +	.tc_get_timecount = tsc_get_timecount,
@@ -38,376 +38,47 @@ diff -aur --unidirectional-new-file sys/amd64/amd64/tsc.c FreeBSD-CURRENT/amd64/
  	return (rdtsc());
  }
 +
-+#ifdef RADCLOCK
++#ifdef FFCLOCK
 +static uint64_t
 +tsc_get_timecount_64(struct timecounter *tc)
 +{
 +	return (rdtsc());
 +}
 +#endif
-diff -aur --unidirectional-new-file sys/amd64/conf/RADCLOCK.amd64 FreeBSD-CURRENT/amd64/conf/RADCLOCK.amd64
---- sys/amd64/conf/RADCLOCK.amd64	1970-01-01 10:00:00.000000000 +1000
-+++ FreeBSD-CURRENT/amd64/conf/RADCLOCK.amd64	2010-12-03 12:34:17.000000000 +1100
-@@ -0,0 +1,334 @@
-+#
-+# GENERIC -- Generic kernel configuration file for FreeBSD/amd64
-+#
-+# For more information on this file, please read the config(5) manual page,
-+# and/or the handbook section on Kernel Configuration Files:
-+#
-+#    http://www.FreeBSD.org/doc/en_US.ISO8859-1/books/handbook/kernelconfig-config.html
-+#
-+# The handbook is also available locally in /usr/share/doc/handbook
-+# if you've installed the doc distribution, otherwise always see the
-+# FreeBSD World Wide Web server (http://www.FreeBSD.org/) for the
-+# latest information.
-+#
-+# An exhaustive list of options and more detailed explanations of the
-+# device lines is also present in the ../../conf/NOTES and NOTES files.
-+# If you are in doubt as to the purpose or necessity of a line, check first
-+# in NOTES.
-+#
-+# $FreeBSD: src/sys/amd64/conf/GENERIC,v 1.549 2010/09/24 09:04:16 davidxu Exp $
-+
-+cpu		HAMMER
-+ident	RADCLOCK
-+
-+makeoptions	DEBUG=-g		# Build kernel with gdb(1) debug symbols
-+
-+options 	SCHED_ULE		# ULE scheduler
-+options 	PREEMPTION		# Enable kernel thread preemption
-+options 	INET			# InterNETworking
-+options 	INET6			# IPv6 communications protocols
-+options 	SCTP			# Stream Control Transmission Protocol
-+options 	FFS			# Berkeley Fast Filesystem
-+options 	SOFTUPDATES		# Enable FFS soft updates support
-+options 	UFS_ACL			# Support for access control lists
-+options 	UFS_DIRHASH		# Improve performance on big directories
-+options 	UFS_GJOURNAL		# Enable gjournal-based UFS journaling
-+options 	MD_ROOT			# MD is a potential root device
-+options 	NFSCLIENT		# Network Filesystem Client
-+options 	NFSSERVER		# Network Filesystem Server
-+options 	NFSLOCKD		# Network Lock Manager
-+options 	NFS_ROOT		# NFS usable as /, requires NFSCLIENT
-+options 	MSDOSFS			# MSDOS Filesystem
-+options 	CD9660			# ISO 9660 Filesystem
-+options 	PROCFS			# Process filesystem (requires PSEUDOFS)
-+options 	PSEUDOFS		# Pseudo-filesystem framework
-+options 	GEOM_PART_GPT		# GUID Partition Tables.
-+options 	GEOM_LABEL		# Provides labelization
-+options 	COMPAT_FREEBSD32	# Compatible with i386 binaries
-+options 	COMPAT_FREEBSD4		# Compatible with FreeBSD4
-+options 	COMPAT_FREEBSD5		# Compatible with FreeBSD5
-+options 	COMPAT_FREEBSD6		# Compatible with FreeBSD6
-+options 	COMPAT_FREEBSD7		# Compatible with FreeBSD7
-+options 	SCSI_DELAY=5000		# Delay (in ms) before probing SCSI
-+options 	KTRACE			# ktrace(1) support
-+options 	STACK			# stack(9) support
-+options 	SYSVSHM			# SYSV-style shared memory
-+options 	SYSVMSG			# SYSV-style message queues
-+options 	SYSVSEM			# SYSV-style semaphores
-+options 	_KPOSIX_PRIORITY_SCHEDULING # POSIX P1003_1B real-time extensions
-+options 	PRINTF_BUFR_SIZE=128	# Prevent printf output being interspersed.
-+options 	KBD_INSTALL_CDEV	# install a CDEV entry in /dev
-+options 	HWPMC_HOOKS		# Necessary kernel hooks for hwpmc(4)
-+options 	AUDIT			# Security event auditing
-+options 	MAC			# TrustedBSD MAC Framework
-+options 	FLOWTABLE		# per-cpu routing cache
-+#options 	KDTRACE_FRAME		# Ensure frames are compiled in
-+#options 	KDTRACE_HOOKS		# Kernel DTrace hooks
-+options 	INCLUDE_CONFIG_FILE     # Include this file in kernel
-+
-+# Debugging for use in -current
-+options 	KDB			# Enable kernel debugger support.
-+options 	DDB			# Support DDB.
-+options 	GDB			# Support remote GDB.
-+options 	DEADLKRES		# Enable the deadlock resolver
-+options 	INVARIANTS		# Enable calls of extra sanity checking
-+options 	INVARIANT_SUPPORT	# Extra sanity checks of internal structures, required by INVARIANTS
-+options 	WITNESS			# Enable checks to detect deadlocks and cycles
-+options 	WITNESS_SKIPSPIN	# Don't run witness on spinlocks for speed
-+options 	MALLOC_DEBUG_MAXZONES=8	# Separate malloc(9) zones
-+
-+# Make an SMP-capable kernel by default
-+options 	SMP			# Symmetric MultiProcessor Kernel
-+
-+# CPU frequency control
-+device		cpufreq
-+
-+# Bus support.
-+device		acpi
-+device		pci
-+
-+# Floppy drives
-+device		fdc
-+
-+# ATA and ATAPI devices
-+device		ata
-+device		atadisk		# ATA disk drives
-+device		ataraid		# ATA RAID drives
-+device		atapicd		# ATAPI CDROM drives
-+device		atapifd		# ATAPI floppy drives
-+device		atapist		# ATAPI tape drives
-+options 	ATA_STATIC_ID	# Static device numbering
-+
-+# SCSI Controllers
-+device		ahc		# AHA2940 and onboard AIC7xxx devices
-+options 	AHC_REG_PRETTY_PRINT	# Print register bitfields in debug
-+					# output.  Adds ~128k to driver.
-+device		ahd		# AHA39320/29320 and onboard AIC79xx devices
-+options 	AHD_REG_PRETTY_PRINT	# Print register bitfields in debug
-+					# output.  Adds ~215k to driver.
-+device		amd		# AMD 53C974 (Tekram DC-390(T))
-+device		hptiop		# Highpoint RocketRaid 3xxx series
-+device		isp		# Qlogic family
-+#device		ispfw		# Firmware for QLogic HBAs- normally a module
-+device		mpt		# LSI-Logic MPT-Fusion
-+device		mps		# LSI-Logic MPT-Fusion 2
-+#device		ncr		# NCR/Symbios Logic
-+device		sym		# NCR/Symbios Logic (newer chipsets + those of `ncr')
-+device		trm		# Tekram DC395U/UW/F DC315U adapters
-+
-+device		adv		# Advansys SCSI adapters
-+device		adw		# Advansys wide SCSI adapters
-+device		aic		# Adaptec 15[012]x SCSI adapters, AIC-6[23]60.
-+device		bt		# Buslogic/Mylex MultiMaster SCSI adapters
-+
-+# SCSI peripherals
-+device		scbus		# SCSI bus (required for SCSI)
-+device		ch		# SCSI media changers
-+device		da		# Direct Access (disks)
-+device		sa		# Sequential Access (tape etc)
-+device		cd		# CD
-+device		pass		# Passthrough device (direct SCSI access)
-+device		ses		# SCSI Environmental Services (and SAF-TE)
-+
-+# RAID controllers interfaced to the SCSI subsystem
-+device		amr		# AMI MegaRAID
-+device		arcmsr		# Areca SATA II RAID
-+#XXX it is not 64-bit clean, -scottl
-+#device		asr		# DPT SmartRAID V, VI and Adaptec SCSI RAID
-+device		ciss		# Compaq Smart RAID 5*
-+device		dpt		# DPT Smartcache III, IV - See NOTES for options
-+device		hptmv		# Highpoint RocketRAID 182x
-+device		hptrr		# Highpoint RocketRAID 17xx, 22xx, 23xx, 25xx
-+device		iir		# Intel Integrated RAID
-+device		ips		# IBM (Adaptec) ServeRAID
-+device		mly		# Mylex AcceleRAID/eXtremeRAID
-+device		twa		# 3ware 9000 series PATA/SATA RAID
-+
-+# RAID controllers
-+device		aac		# Adaptec FSA RAID
-+device		aacp		# SCSI passthrough for aac (requires CAM)
-+device		ida		# Compaq Smart RAID
-+device		mfi		# LSI MegaRAID SAS
-+device		mlx		# Mylex DAC960 family
-+#XXX pointer/int warnings
-+#device		pst		# Promise Supertrak SX6000
-+device		twe		# 3ware ATA RAID
-+
-+# atkbdc0 controls both the keyboard and the PS/2 mouse
-+device		atkbdc		# AT keyboard controller
-+device		atkbd		# AT keyboard
-+device		psm		# PS/2 mouse
-+
-+device		kbdmux		# keyboard multiplexer
-+
-+device		vga		# VGA video card driver
-+
-+device		splash		# Splash screen and screen saver support
-+
-+# syscons is the default console driver, resembling an SCO console
-+device		sc
-+
-+device		agp		# support several AGP chipsets
-+
-+# PCCARD (PCMCIA) support
-+# PCMCIA and cardbus bridge support
-+device		cbb		# cardbus (yenta) bridge
-+device		pccard		# PC Card (16-bit) bus
-+device		cardbus		# CardBus (32-bit) bus
-+
-+# Serial (COM) ports
-+device		uart		# Generic UART driver
-+
-+# Parallel port
-+device		ppc
-+device		ppbus		# Parallel port bus (required)
-+device		lpt		# Printer
-+device		plip		# TCP/IP over parallel
-+device		ppi		# Parallel port interface device
-+#device		vpo		# Requires scbus and da
-+
-+# If you've got a "dumb" serial or parallel PCI card that is
-+# supported by the puc(4) glue driver, uncomment the following
-+# line to enable it (connects to sio, uart and/or ppc drivers):
-+#device		puc
-+
-+# PCI Ethernet NICs.
-+device		de		# DEC/Intel DC21x4x (``Tulip'')
-+device		em		# Intel PRO/1000 Gigabit Ethernet Family
-+device		igb		# Intel PRO/1000 PCIE Server Gigabit Family
-+device		ixgbe		# Intel PRO/10GbE PCIE Ethernet Family
-+device		le		# AMD Am7900 LANCE and Am79C9xx PCnet
-+device		ti		# Alteon Networks Tigon I/II gigabit Ethernet
-+device		txp		# 3Com 3cR990 (``Typhoon'')
-+device		vx		# 3Com 3c590, 3c595 (``Vortex'')
-+
-+# PCI Ethernet NICs that use the common MII bus controller code.
-+# NOTE: Be sure to keep the 'device miibus' line in order to use these NICs!
-+device		miibus		# MII bus support
-+device		ae		# Attansic/Atheros L2 FastEthernet
-+device		age		# Attansic/Atheros L1 Gigabit Ethernet
-+device		alc		# Atheros AR8131/AR8132 Ethernet
-+device		ale		# Atheros AR8121/AR8113/AR8114 Ethernet
-+device		bce		# Broadcom BCM5706/BCM5708 Gigabit Ethernet
-+device		bfe		# Broadcom BCM440x 10/100 Ethernet
-+device		bge		# Broadcom BCM570xx Gigabit Ethernet
-+device		dc		# DEC/Intel 21143 and various workalikes
-+device		et		# Agere ET1310 10/100/Gigabit Ethernet
-+device		fxp		# Intel EtherExpress PRO/100B (82557, 82558)
-+device		jme		# JMicron JMC250 Gigabit/JMC260 Fast Ethernet
-+device		lge		# Level 1 LXT1001 gigabit Ethernet
-+device		msk		# Marvell/SysKonnect Yukon II Gigabit Ethernet
-+device		nfe		# nVidia nForce MCP on-board Ethernet
-+device		nge		# NatSemi DP83820 gigabit Ethernet
-+#device		nve		# nVidia nForce MCP on-board Ethernet Networking
-+device		pcn		# AMD Am79C97x PCI 10/100 (precedence over 'le')
-+device		re		# RealTek 8139C+/8169/8169S/8110S
-+device		rl		# RealTek 8129/8139
-+device		sf		# Adaptec AIC-6915 (``Starfire'')
-+device		sge		# Silicon Integrated Systems SiS190/191
-+device		sis		# Silicon Integrated Systems SiS 900/SiS 7016
-+device		sk		# SysKonnect SK-984x & SK-982x gigabit Ethernet
-+device		ste		# Sundance ST201 (D-Link DFE-550TX)
-+device		stge		# Sundance/Tamarack TC9021 gigabit Ethernet
-+device		tl		# Texas Instruments ThunderLAN
-+device		tx		# SMC EtherPower II (83c170 ``EPIC'')
-+device		vge		# VIA VT612x gigabit Ethernet
-+device		vr		# VIA Rhine, Rhine II
-+device		wb		# Winbond W89C840F
-+device		xl		# 3Com 3c90x (``Boomerang'', ``Cyclone'')
-+
-+# ISA Ethernet NICs.  pccard NICs included.
-+device		cs		# Crystal Semiconductor CS89x0 NIC
-+# 'device ed' requires 'device miibus'
-+device		ed		# NE[12]000, SMC Ultra, 3c503, DS8390 cards
-+device		ex		# Intel EtherExpress Pro/10 and Pro/10+
-+device		ep		# Etherlink III based cards
-+device		fe		# Fujitsu MB8696x based cards
-+device		sn		# SMC's 9000 series of Ethernet chips
-+device		xe		# Xircom pccard Ethernet
-+
-+# Wireless NIC cards
-+device		wlan		# 802.11 support
-+options 	IEEE80211_DEBUG	# enable debug msgs
-+options 	IEEE80211_AMPDU_AGE # age frames in AMPDU reorder q's
-+options 	IEEE80211_SUPPORT_MESH	# enable 802.11s draft support
-+device		wlan_wep	# 802.11 WEP support
-+device		wlan_ccmp	# 802.11 CCMP support
-+device		wlan_tkip	# 802.11 TKIP support
-+device		wlan_amrr	# AMRR transmit rate control algorithm
-+device		an		# Aironet 4500/4800 802.11 wireless NICs.
-+device		ath		# Atheros pci/cardbus NIC's
-+device		ath_hal		# pci/cardbus chip support
-+options 	AH_SUPPORT_AR5416	# enable AR5416 tx/rx descriptors
-+device		ath_rate_sample	# SampleRate tx rate control for ath
-+device		ral		# Ralink Technology RT2500 wireless NICs.
-+device		wi		# WaveLAN/Intersil/Symbol 802.11 wireless NICs.
-+
-+# Pseudo devices.
-+device		loop		# Network loopback
-+device		random		# Entropy device
-+device		ether		# Ethernet support
-+device		vlan		# 802.1Q VLAN support
-+device		tun		# Packet tunnel.
-+device		pty		# BSD-style compatibility pseudo ttys
-+device		md		# Memory "disks"
-+device		gif		# IPv6 and IPv4 tunneling
-+device		faith		# IPv6-to-IPv4 relaying (translation)
-+device		firmware	# firmware assist module
-+
-+# The `bpf' device enables the Berkeley Packet Filter.
-+# Be aware of the administrative consequences of enabling this!
-+# Note that 'bpf' is required for DHCP.
-+device		bpf		# Berkeley packet filter
-+
-+# USB support
-+options 	USB_DEBUG	# enable debug msgs
-+device		uhci		# UHCI PCI->USB interface
-+device		ohci		# OHCI PCI->USB interface
-+device		ehci		# EHCI PCI->USB interface (USB 2.0)
-+device		usb		# USB Bus (required)
-+#device		udbp		# USB Double Bulk Pipe devices
-+device		uhid		# "Human Interface Devices"
-+device		ukbd		# Keyboard
-+device		ulpt		# Printer
-+device		umass		# Disks/Mass storage - Requires scbus and da
-+device		ums		# Mouse
-+device		urio		# Diamond Rio 500 MP3 player
-+# USB Serial devices
-+device		u3g		# USB-based 3G modems (Option, Huawei, Sierra)
-+device		uark		# Technologies ARK3116 based serial adapters
-+device		ubsa		# Belkin F5U103 and compatible serial adapters
-+device		uftdi		# For FTDI usb serial adapters
-+device		uipaq		# Some WinCE based devices
-+device		uplcom		# Prolific PL-2303 serial adapters
-+device		uslcom		# SI Labs CP2101/CP2102 serial adapters
-+device		uvisor		# Visor and Palm devices
-+device		uvscom		# USB serial support for DDI pocket's PHS
-+# USB Ethernet, requires miibus
-+device		aue		# ADMtek USB Ethernet
-+device		axe		# ASIX Electronics USB Ethernet
-+device		cdce		# Generic USB over Ethernet
-+device		cue		# CATC USB Ethernet
-+device		kue		# Kawasaki LSI USB Ethernet
-+device		rue		# RealTek RTL8150 USB Ethernet
-+device		udav		# Davicom DM9601E USB
-+# USB Wireless
-+device		rum		# Ralink Technology RT2501USB wireless NICs
-+device		uath		# Atheros AR5523 wireless NICs
-+device		ural		# Ralink Technology RT2500USB wireless NICs
-+device		zyd		# ZyDAS zb1211/zb1211b wireless NICs
-+
-+# FireWire support
-+device		firewire	# FireWire bus code
-+device		sbp		# SCSI over FireWire (Requires scbus and da)
-+device		fwe		# Ethernet over FireWire (non-standard!)
-+device		fwip		# IP over FireWire (RFC 2734,3146)
-+device		dcons		# Dumb console driver
-+device		dcons_crom	# Configuration ROM for dcons
-+
-+# enable RADclock support
-+options     RADCLOCK
-+
-+#enable PPS management in Kernel
-+#options     PPS_SYNC
-+
-diff -aur --unidirectional-new-file sys/conf/options.amd64 FreeBSD-CURRENT/conf/options.amd64
---- sys/conf/options.amd64	2010-12-03 12:11:42.000000000 +1100
-+++ FreeBSD-CURRENT/conf/options.amd64	2010-12-03 12:34:17.000000000 +1100
-@@ -64,3 +64,7 @@
- BPF_JITTER		opt_bpf.h
+diff -aur --unidirectional-new-file sys/conf/NOTES FreeBSD-CURRENT/conf/NOTES
+--- sys/conf/NOTES	2010-12-09 15:14:29.000000000 +1100
++++ FreeBSD-CURRENT/conf/NOTES	2010-12-09 15:22:45.000000000 +1100
+@@ -1178,6 +1178,16 @@
  
- XENHVM			opt_global.h
-+
-+# RADclock support 
-+RADCLOCK		opt_radclock.h
-+
-diff -aur --unidirectional-new-file sys/conf/options.i386 FreeBSD-CURRENT/conf/options.i386
---- sys/conf/options.i386	2010-12-03 12:11:42.000000000 +1100
-+++ FreeBSD-CURRENT/conf/options.i386	2010-12-03 12:34:17.000000000 +1100
-@@ -118,3 +118,7 @@
+ options 	PPS_SYNC
  
- NATIVE			opt_global.h
- XEN			opt_global.h
++# Enable support for generic Feed-Forward clocks in the kernel.
++# The feed-forward clock support is an alternative to the feedback oriented
++# ntpd/system clock approach, and is to be used with a feed-forward
++# synchronization algorithm such as the RADclock:
++# More info there: http://www.synclab.org/radclock
++#
++# Note: this is an experimental feature.
 +
-+# RADclock support 
-+RADCLOCK		opt_radclock.h
++options 	FFCLOCK
 +
+ 
+ #####################################################################
+ # SCSI DEVICES
+diff -aur --unidirectional-new-file sys/conf/options FreeBSD-CURRENT/conf/options
+--- sys/conf/options	2010-12-09 15:14:29.000000000 +1100
++++ FreeBSD-CURRENT/conf/options	2010-12-09 15:22:45.000000000 +1100
+@@ -75,6 +75,7 @@
+ CY_PCI_FASTINTR
+ DEADLKRES	opt_watchdog.h
+ DIRECTIO
++FFCLOCK		opt_ffclock.h
+ FULL_PREEMPTION	opt_sched.h
+ IPI_PREEMPTION	opt_sched.h
+ GEOM_AES	opt_geom.h
 diff -aur --unidirectional-new-file sys/dev/e1000/if_em.c FreeBSD-CURRENT/dev/e1000/if_em.c
---- sys/dev/e1000/if_em.c	2010-12-03 12:11:49.000000000 +1100
-+++ FreeBSD-CURRENT/dev/e1000/if_em.c	2010-12-03 12:34:17.000000000 +1100
+--- sys/dev/e1000/if_em.c	2010-12-09 15:14:35.000000000 +1100
++++ FreeBSD-CURRENT/dev/e1000/if_em.c	2010-12-09 15:22:46.000000000 +1100
 @@ -251,7 +251,10 @@
  static void	em_register_vlan(void *, struct ifnet *, u16);
  static void	em_unregister_vlan(void *, struct ifnet *, u16);
@@ -500,363 +171,14 @@ diff -aur --unidirectional-new-file sys/dev/e1000/if_em.c FreeBSD-CURRENT/dev/e1
  
  	/*
  	** When using MSIX interrupts we need to throttle
-diff -aur --unidirectional-new-file sys/i386/conf/RADCLOCK.i386 FreeBSD-CURRENT/i386/conf/RADCLOCK.i386
---- sys/i386/conf/RADCLOCK.i386	1970-01-01 10:00:00.000000000 +1000
-+++ FreeBSD-CURRENT/i386/conf/RADCLOCK.i386	2010-12-03 12:34:17.000000000 +1100
-@@ -0,0 +1,345 @@
-+#
-+# GENERIC -- Generic kernel configuration file for FreeBSD/i386
-+#
-+# For more information on this file, please read the config(5) manual page,
-+# and/or the handbook section on Kernel Configuration Files:
-+#
-+#    http://www.FreeBSD.org/doc/en_US.ISO8859-1/books/handbook/kernelconfig-config.html
-+#
-+# The handbook is also available locally in /usr/share/doc/handbook
-+# if you've installed the doc distribution, otherwise always see the
-+# FreeBSD World Wide Web server (http://www.FreeBSD.org/) for the
-+# latest information.
-+#
-+# An exhaustive list of options and more detailed explanations of the
-+# device lines is also present in the ../../conf/NOTES and NOTES files.
-+# If you are in doubt as to the purpose or necessity of a line, check first
-+# in NOTES.
-+#
-+# $FreeBSD: src/sys/i386/conf/GENERIC,v 1.535 2010/09/24 09:04:16 davidxu Exp $
-+
-+cpu		I486_CPU
-+cpu		I586_CPU
-+cpu		I686_CPU
-+ident	RADCLOCK
-+
-+makeoptions	DEBUG=-g		# Build kernel with gdb(1) debug symbols
-+
-+options 	SCHED_ULE		# ULE scheduler
-+options 	PREEMPTION		# Enable kernel thread preemption
-+options 	INET			# InterNETworking
-+options 	INET6			# IPv6 communications protocols
-+options 	SCTP			# Stream Control Transmission Protocol
-+options 	FFS			# Berkeley Fast Filesystem
-+options 	SOFTUPDATES		# Enable FFS soft updates support
-+options 	UFS_ACL			# Support for access control lists
-+options 	UFS_DIRHASH		# Improve performance on big directories
-+options 	UFS_GJOURNAL		# Enable gjournal-based UFS journaling
-+options 	MD_ROOT			# MD is a potential root device
-+options 	NFSCLIENT		# Network Filesystem Client
-+options 	NFSSERVER		# Network Filesystem Server
-+options 	NFSLOCKD		# Network Lock Manager
-+options 	NFS_ROOT		# NFS usable as /, requires NFSCLIENT
-+options 	MSDOSFS			# MSDOS Filesystem
-+options 	CD9660			# ISO 9660 Filesystem
-+options 	PROCFS			# Process filesystem (requires PSEUDOFS)
-+options 	PSEUDOFS		# Pseudo-filesystem framework
-+options 	GEOM_PART_GPT		# GUID Partition Tables.
-+options 	GEOM_LABEL		# Provides labelization
-+options 	COMPAT_FREEBSD4		# Compatible with FreeBSD4
-+options 	COMPAT_FREEBSD5		# Compatible with FreeBSD5
-+options 	COMPAT_FREEBSD6		# Compatible with FreeBSD6
-+options 	COMPAT_FREEBSD7		# Compatible with FreeBSD7
-+options 	SCSI_DELAY=5000		# Delay (in ms) before probing SCSI
-+options 	KTRACE			# ktrace(1) support
-+options 	STACK			# stack(9) support
-+options 	SYSVSHM			# SYSV-style shared memory
-+options 	SYSVMSG			# SYSV-style message queues
-+options 	SYSVSEM			# SYSV-style semaphores
-+options 	_KPOSIX_PRIORITY_SCHEDULING # POSIX P1003_1B real-time extensions
-+options 	PRINTF_BUFR_SIZE=128	# Prevent printf output being interspersed.
-+options 	KBD_INSTALL_CDEV	# install a CDEV entry in /dev
-+options 	HWPMC_HOOKS		# Necessary kernel hooks for hwpmc(4)
-+options 	AUDIT			# Security event auditing
-+options 	MAC			# TrustedBSD MAC Framework
-+options 	FLOWTABLE		# per-cpu routing cache
-+#options 	KDTRACE_HOOKS		# Kernel DTrace hooks
-+options 	INCLUDE_CONFIG_FILE     # Include this file in kernel
-+
-+# Debugging for use in -current
-+options 	KDB			# Enable kernel debugger support.
-+options 	DDB			# Support DDB.
-+options 	GDB			# Support remote GDB.
-+options 	DEADLKRES		# Enable the deadlock resolver
-+options 	INVARIANTS		# Enable calls of extra sanity checking
-+options 	INVARIANT_SUPPORT	# Extra sanity checks of internal structures, required by INVARIANTS
-+options 	WITNESS			# Enable checks to detect deadlocks and cycles
-+options 	WITNESS_SKIPSPIN	# Don't run witness on spinlocks for speed
-+options 	MALLOC_DEBUG_MAXZONES=8	# Separate malloc(9) zones
-+
-+# To make an SMP kernel, the next two lines are needed
-+options 	SMP			# Symmetric MultiProcessor Kernel
-+device		apic			# I/O APIC
-+
-+# CPU frequency control
-+device		cpufreq
-+
-+# Bus support.
-+device		acpi
-+device		eisa
-+device		pci
-+
-+# Floppy drives
-+device		fdc
-+
-+# ATA and ATAPI devices
-+device		ata
-+device		atadisk		# ATA disk drives
-+device		ataraid		# ATA RAID drives
-+device		atapicd		# ATAPI CDROM drives
-+device		atapifd		# ATAPI floppy drives
-+device		atapist		# ATAPI tape drives
-+options 	ATA_STATIC_ID	# Static device numbering
-+
-+# SCSI Controllers
-+device		ahb		# EISA AHA1742 family
-+device		ahc		# AHA2940 and onboard AIC7xxx devices
-+options 	AHC_REG_PRETTY_PRINT	# Print register bitfields in debug
-+					# output.  Adds ~128k to driver.
-+device		ahd		# AHA39320/29320 and onboard AIC79xx devices
-+options 	AHD_REG_PRETTY_PRINT	# Print register bitfields in debug
-+					# output.  Adds ~215k to driver.
-+device		amd		# AMD 53C974 (Tekram DC-390(T))
-+device		hptiop		# Highpoint RocketRaid 3xxx series
-+device		isp		# Qlogic family
-+#device		ispfw		# Firmware for QLogic HBAs- normally a module
-+device		mpt		# LSI-Logic MPT-Fusion
-+#device		ncr		# NCR/Symbios Logic
-+device		sym		# NCR/Symbios Logic (newer chipsets + those of `ncr')
-+device		trm		# Tekram DC395U/UW/F DC315U adapters
-+
-+device		adv		# Advansys SCSI adapters
-+device		adw		# Advansys wide SCSI adapters
-+device		aha		# Adaptec 154x SCSI adapters
-+device		aic		# Adaptec 15[012]x SCSI adapters, AIC-6[23]60.
-+device		bt		# Buslogic/Mylex MultiMaster SCSI adapters
-+
-+device		ncv		# NCR 53C500
-+device		nsp		# Workbit Ninja SCSI-3
-+device		stg		# TMC 18C30/18C50
-+
-+# SCSI peripherals
-+device		scbus		# SCSI bus (required for SCSI)
-+device		ch		# SCSI media changers
-+device		da		# Direct Access (disks)
-+device		sa		# Sequential Access (tape etc)
-+device		cd		# CD
-+device		pass		# Passthrough device (direct SCSI access)
-+device		ses		# SCSI Environmental Services (and SAF-TE)
-+
-+# RAID controllers interfaced to the SCSI subsystem
-+device		amr		# AMI MegaRAID
-+device		arcmsr		# Areca SATA II RAID
-+device		asr		# DPT SmartRAID V, VI and Adaptec SCSI RAID
-+device		ciss		# Compaq Smart RAID 5*
-+device		dpt		# DPT Smartcache III, IV - See NOTES for options
-+device		hptmv		# Highpoint RocketRAID 182x
-+device		hptrr		# Highpoint RocketRAID 17xx, 22xx, 23xx, 25xx
-+device		iir		# Intel Integrated RAID
-+device		ips		# IBM (Adaptec) ServeRAID
-+device		mly		# Mylex AcceleRAID/eXtremeRAID
-+device		twa		# 3ware 9000 series PATA/SATA RAID
-+
-+# RAID controllers
-+device		aac		# Adaptec FSA RAID
-+device		aacp		# SCSI passthrough for aac (requires CAM)
-+device		ida		# Compaq Smart RAID
-+device		mfi		# LSI MegaRAID SAS
-+device		mlx		# Mylex DAC960 family
-+device		pst		# Promise Supertrak SX6000
-+device		twe		# 3ware ATA RAID
-+
-+# atkbdc0 controls both the keyboard and the PS/2 mouse
-+device		atkbdc		# AT keyboard controller
-+device		atkbd		# AT keyboard
-+device		psm		# PS/2 mouse
-+
-+device		kbdmux		# keyboard multiplexer
-+
-+device		vga		# VGA video card driver
-+
-+device		splash		# Splash screen and screen saver support
-+
-+# syscons is the default console driver, resembling an SCO console
-+device		sc
-+
-+device		agp		# support several AGP chipsets
-+
-+# Power management support (see NOTES for more options)
-+#device		apm
-+# Add suspend/resume support for the i8254.
-+device		pmtimer
-+
-+# PCCARD (PCMCIA) support
-+# PCMCIA and cardbus bridge support
-+device		cbb		# cardbus (yenta) bridge
-+device		pccard		# PC Card (16-bit) bus
-+device		cardbus		# CardBus (32-bit) bus
-+
-+# Serial (COM) ports
-+device		uart		# Generic UART driver
-+
-+# Parallel port
-+device		ppc
-+device		ppbus		# Parallel port bus (required)
-+device		lpt		# Printer
-+device		plip		# TCP/IP over parallel
-+device		ppi		# Parallel port interface device
-+#device		vpo		# Requires scbus and da
-+
-+# If you've got a "dumb" serial or parallel PCI card that is
-+# supported by the puc(4) glue driver, uncomment the following
-+# line to enable it (connects to sio, uart and/or ppc drivers):
-+#device		puc
-+
-+# PCI Ethernet NICs.
-+device		de		# DEC/Intel DC21x4x (``Tulip'')
-+device		em		# Intel PRO/1000 Gigabit Ethernet Family
-+device		igb		# Intel PRO/1000 PCIE Server Gigabit Family
-+device		ixgb		# Intel PRO/10GbE Ethernet Card
-+device		le		# AMD Am7900 LANCE and Am79C9xx PCnet
-+device		ti		# Alteon Networks Tigon I/II gigabit Ethernet
-+device		txp		# 3Com 3cR990 (``Typhoon'')
-+device		vx		# 3Com 3c590, 3c595 (``Vortex'')
-+
-+# PCI Ethernet NICs that use the common MII bus controller code.
-+# NOTE: Be sure to keep the 'device miibus' line in order to use these NICs!
-+device		miibus		# MII bus support
-+device		ae		# Attansic/Atheros L2 FastEthernet
-+device		age		# Attansic/Atheros L1 Gigabit Ethernet
-+device		alc		# Atheros AR8131/AR8132 Ethernet
-+device		ale		# Atheros AR8121/AR8113/AR8114 Ethernet
-+device		bce		# Broadcom BCM5706/BCM5708 Gigabit Ethernet
-+device		bfe		# Broadcom BCM440x 10/100 Ethernet
-+device		bge		# Broadcom BCM570xx Gigabit Ethernet
-+device		dc		# DEC/Intel 21143 and various workalikes
-+device		et		# Agere ET1310 10/100/Gigabit Ethernet
-+device		fxp		# Intel EtherExpress PRO/100B (82557, 82558)
-+device		jme		# JMicron JMC250 Gigabit/JMC260 Fast Ethernet
-+device		lge		# Level 1 LXT1001 gigabit Ethernet
-+device		msk		# Marvell/SysKonnect Yukon II Gigabit Ethernet
-+device		nfe		# nVidia nForce MCP on-board Ethernet
-+device		nge		# NatSemi DP83820 gigabit Ethernet
-+#device		nve		# nVidia nForce MCP on-board Ethernet Networking
-+device		pcn		# AMD Am79C97x PCI 10/100 (precedence over 'le')
-+device		re		# RealTek 8139C+/8169/8169S/8110S
-+device		rl		# RealTek 8129/8139
-+device		sf		# Adaptec AIC-6915 (``Starfire'')
-+device		sge		# Silicon Integrated Systems SiS190/191
-+device		sis		# Silicon Integrated Systems SiS 900/SiS 7016
-+device		sk		# SysKonnect SK-984x & SK-982x gigabit Ethernet
-+device		ste		# Sundance ST201 (D-Link DFE-550TX)
-+device		stge		# Sundance/Tamarack TC9021 gigabit Ethernet
-+device		tl		# Texas Instruments ThunderLAN
-+device		tx		# SMC EtherPower II (83c170 ``EPIC'')
-+device		vge		# VIA VT612x gigabit Ethernet
-+device		vr		# VIA Rhine, Rhine II
-+device		wb		# Winbond W89C840F
-+device		xl		# 3Com 3c90x (``Boomerang'', ``Cyclone'')
-+
-+# ISA Ethernet NICs.  pccard NICs included.
-+device		cs		# Crystal Semiconductor CS89x0 NIC
-+# 'device ed' requires 'device miibus'
-+device		ed		# NE[12]000, SMC Ultra, 3c503, DS8390 cards
-+device		ex		# Intel EtherExpress Pro/10 and Pro/10+
-+device		ep		# Etherlink III based cards
-+device		fe		# Fujitsu MB8696x based cards
-+device		ie		# EtherExpress 8/16, 3C507, StarLAN 10 etc.
-+device		sn		# SMC's 9000 series of Ethernet chips
-+device		xe		# Xircom pccard Ethernet
-+
-+# Wireless NIC cards
-+device		wlan		# 802.11 support
-+options 	IEEE80211_DEBUG	# enable debug msgs
-+options 	IEEE80211_AMPDU_AGE # age frames in AMPDU reorder q's
-+options 	IEEE80211_SUPPORT_MESH	# enable 802.11s draft support
-+device		wlan_wep	# 802.11 WEP support
-+device		wlan_ccmp	# 802.11 CCMP support
-+device		wlan_tkip	# 802.11 TKIP support
-+device		wlan_amrr	# AMRR transmit rate control algorithm
-+device		an		# Aironet 4500/4800 802.11 wireless NICs.
-+device		ath		# Atheros pci/cardbus NIC's
-+device		ath_hal		# pci/cardbus chip support
-+options 	AH_SUPPORT_AR5416	# enable AR5416 tx/rx descriptors
-+device		ath_rate_sample	# SampleRate tx rate control for ath
-+device		ral		# Ralink Technology RT2500 wireless NICs.
-+device		wi		# WaveLAN/Intersil/Symbol 802.11 wireless NICs.
-+#device		wl		# Older non 802.11 Wavelan wireless NIC.
-+
-+# Pseudo devices.
-+device		loop		# Network loopback
-+device		random		# Entropy device
-+device		ether		# Ethernet support
-+device		vlan		# 802.1Q VLAN support
-+device		tun		# Packet tunnel.
-+device		pty		# BSD-style compatibility pseudo ttys
-+device		md		# Memory "disks"
-+device		gif		# IPv6 and IPv4 tunneling
-+device		faith		# IPv6-to-IPv4 relaying (translation)
-+device		firmware	# firmware assist module
-+
-+# The `bpf' device enables the Berkeley Packet Filter.
-+# Be aware of the administrative consequences of enabling this!
-+# Note that 'bpf' is required for DHCP.
-+device		bpf		# Berkeley packet filter
-+
-+# USB support
-+options 	USB_DEBUG	# enable debug msgs
-+device		uhci		# UHCI PCI->USB interface
-+device		ohci		# OHCI PCI->USB interface
-+device		ehci		# EHCI PCI->USB interface (USB 2.0)
-+device		usb		# USB Bus (required)
-+#device		udbp		# USB Double Bulk Pipe devices
-+device		uhid		# "Human Interface Devices"
-+device		ukbd		# Keyboard
-+device		ulpt		# Printer
-+device		umass		# Disks/Mass storage - Requires scbus and da
-+device		ums		# Mouse
-+device		urio		# Diamond Rio 500 MP3 player
-+# USB Serial devices
-+device		u3g		# USB-based 3G modems (Option, Huawei, Sierra)
-+device		uark		# Technologies ARK3116 based serial adapters
-+device		ubsa		# Belkin F5U103 and compatible serial adapters
-+device		uftdi		# For FTDI usb serial adapters
-+device		uipaq		# Some WinCE based devices
-+device		uplcom		# Prolific PL-2303 serial adapters
-+device		uslcom		# SI Labs CP2101/CP2102 serial adapters
-+device		uvisor		# Visor and Palm devices
-+device		uvscom		# USB serial support for DDI pocket's PHS
-+# USB Ethernet, requires miibus
-+device		aue		# ADMtek USB Ethernet
-+device		axe		# ASIX Electronics USB Ethernet
-+device		cdce		# Generic USB over Ethernet
-+device		cue		# CATC USB Ethernet
-+device		kue		# Kawasaki LSI USB Ethernet
-+device		rue		# RealTek RTL8150 USB Ethernet
-+device		udav		# Davicom DM9601E USB
-+# USB Wireless
-+device		rum		# Ralink Technology RT2501USB wireless NICs
-+device		uath		# Atheros AR5523 wireless NICs
-+device		ural		# Ralink Technology RT2500USB wireless NICs
-+device		zyd		# ZyDAS zb1211/zb1211b wireless NICs
-+
-+# FireWire support
-+device		firewire	# FireWire bus code
-+device		sbp		# SCSI over FireWire (Requires scbus and da)
-+device		fwe		# Ethernet over FireWire (non-standard!)
-+device		fwip		# IP over FireWire (RFC 2734,3146)
-+device		dcons		# Dumb console driver
-+device		dcons_crom	# Configuration ROM for dcons
-+
-+# enable RADCLOCK support 
-+options		RADCLOCK
-+
-+#enable PPS management in Kernel
-+#options		PPS_SYNC
 diff -aur --unidirectional-new-file sys/i386/i386/tsc.c FreeBSD-CURRENT/i386/i386/tsc.c
---- sys/i386/i386/tsc.c	2010-12-03 12:11:54.000000000 +1100
-+++ FreeBSD-CURRENT/i386/i386/tsc.c	2010-12-03 12:34:17.000000000 +1100
+--- sys/i386/i386/tsc.c	2010-12-09 15:14:40.000000000 +1100
++++ FreeBSD-CURRENT/i386/i386/tsc.c	2010-12-09 15:22:45.000000000 +1100
 @@ -70,6 +70,18 @@
  static	unsigned tsc_get_timecount(struct timecounter *tc);
  static void tsc_levels_changed(void *arg, int unit);
  
-+#ifdef RADCLOCK
++#ifdef FFCLOCK
 +static uint64_t tsc_get_timecount_64(struct timecounter *tc);
 +static struct timecounter tsc_timecounter = {
 +	.tc_get_timecount = tsc_get_timecount,
@@ -884,7 +206,7 @@ diff -aur --unidirectional-new-file sys/i386/i386/tsc.c FreeBSD-CURRENT/i386/i38
  	return (rdtsc());
  }
 +
-+#ifdef RADCLOCK
++#ifdef FFCLOCK
 +static uint64_t
 +tsc_get_timecount_64(struct timecounter *tc)
 +{
@@ -892,13 +214,13 @@ diff -aur --unidirectional-new-file sys/i386/i386/tsc.c FreeBSD-CURRENT/i386/i38
 +}
 +#endif
 diff -aur --unidirectional-new-file sys/i386/xen/clock.c FreeBSD-CURRENT/i386/xen/clock.c
---- sys/i386/xen/clock.c	2010-12-03 12:11:54.000000000 +1100
-+++ FreeBSD-CURRENT/i386/xen/clock.c	2010-12-03 12:34:17.000000000 +1100
+--- sys/i386/xen/clock.c	2010-12-09 15:14:40.000000000 +1100
++++ FreeBSD-CURRENT/i386/xen/clock.c	2010-12-09 15:22:45.000000000 +1100
 @@ -292,6 +292,19 @@
  
  static	unsigned xen_get_timecount(struct timecounter *tc);
  
-+#ifdef RADCLOCK
++#ifdef FFCLOCK
 +static uint64_t xen_get_timecount_64(struct timecounter *tc);
 +
 +static struct timecounter xen_timecounter = {
@@ -926,7 +248,7 @@ diff -aur --unidirectional-new-file sys/i386/xen/clock.c FreeBSD-CURRENT/i386/xe
  
  }
  
-+#ifdef RADCLOCK
++#ifdef FFCLOCK
 +static uint64_t
 +xen_get_timecount_64(struct timecounter *tc)
 +{	
@@ -945,115 +267,39 @@ diff -aur --unidirectional-new-file sys/i386/xen/clock.c FreeBSD-CURRENT/i386/xe
  uint64_t
  get_system_time(int ticks)
 diff -aur --unidirectional-new-file sys/kern/kern_tc.c FreeBSD-CURRENT/kern/kern_tc.c
---- sys/kern/kern_tc.c	2010-12-03 12:11:54.000000000 +1100
-+++ FreeBSD-CURRENT/kern/kern_tc.c	2010-12-03 12:34:17.000000000 +1100
-@@ -21,6 +21,89 @@
+--- sys/kern/kern_tc.c	2010-12-09 15:14:41.000000000 +1100
++++ FreeBSD-CURRENT/kern/kern_tc.c	2010-12-09 15:22:45.000000000 +1100
+@@ -21,6 +21,13 @@
  #include <sys/timetc.h>
  #include <sys/timex.h>
  
-+
-+
-+#ifdef RADCLOCK
++#ifdef FFCLOCK
 +#include <sys/time.h>
 +#include <sys/types.h>
 +#include <sys/malloc.h>
-+/* Global data structure containing clock estimates */ 
-+static struct feedfwd_clock ffclock;
-+
-+MALLOC_DECLARE(M_FFCLOCK);
-+MALLOC_DEFINE(M_FFCLOCK, "FFCLOCK", "Feed-Forward Clock estimates");
-+
-+
-+// TODO should pass first timecounter frequency estimate here to get something
-+// consistent at startup
-+static void
-+initffclock(struct feedfwd_clock *ffclock)
-+{
-+	ffclock->generation = 0;
-+	ffclock->estimate = (struct radclock_fixedpoint *) malloc(sizeof(struct radclock_fixedpoint), M_FFCLOCK, M_WAITOK | M_ZERO);
-+	ffclock->estimate_old = (struct radclock_fixedpoint *) malloc(sizeof(struct radclock_fixedpoint), M_FFCLOCK, M_WAITOK | M_ZERO);
-+	ffclock->tmp = NULL;
-+}
-+
-+
-+
-+void
-+ffcounter2bintime(ffcounter_t *ffcounter, struct bintime *bt)
-+{
-+	ffcounter_t countdiff;
-+	uint64_t time_f;
-+	uint64_t frac;
-+	struct radclock_fixedpoint *clock_fp;
-+	uint8_t gen;
-+
-+	/* Synchronization algorithm (userland) should update the fixed point data
-+	 * often enough to make sure the timeval does not overflow. If no sync algo
-+	 * updates the data, we loose precision, but in that case, nobody is tracking
-+	 * the clock drift anyway ... so send warning and stop worrying.
-+	 */
-+
-+	/* No locking to prevent clock data to be updated. Check that the generation
-+	 * has not changed instead.
-+	 */
-+	do {
-+		clock_fp = ffclock.estimate;
-+		gen = ffclock.generation;
-+
-+		countdiff = *ffcounter - clock_fp->ffcounter;
-+		if (countdiff & ~((1ll << (clock_fp->countdiff_maxbits +1)) -1))
-+		{
-+// XXX RADCLOCK:
-+// This is clearly not good enough, we overflow way too quickly if the radclock
-+// dies. Need to push a mechanism to update ->time_int and corresponding ->ffcounter
-+			printf("ffclock: warning stamp may overflow timeval at %llu! "
-+					"(countdiff = %llu, maxbits = %u)\n", 
-+					(long long unsigned) *ffcounter,
-+					(long long unsigned) countdiff,
-+					clock_fp->countdiff_maxbits);
-+
-+		}
-+		/* Add the counter delta in second to the recorded fixed point time */
-+		time_f 	= clock_fp->time_int
-+				  + ((clock_fp->phat_int * countdiff) >> (clock_fp->phat_shift - clock_fp->time_shift)) ;
-+
-+		bt->sec  = time_f >> clock_fp->time_shift;
-+
-+		printf("ffclock: ffcounter = %llu bt->sec = %llu, time_int = %llu\n",
-+				(long long unsigned) *ffcounter,
-+			   	(long long unsigned) bt->sec, 
-+				(long long unsigned) (clock_fp->time_int >> clock_fp->time_shift));
-+
-+		// gives me headaches again
-+		// frac * ( 2^64 - 2^time_shift) ... that should be the correct resolution
-+		frac = time_f - ((uint64_t) bt->sec << clock_fp->time_shift);
-+		bt->frac = frac * ((uint64_t) 1LL << (64 - clock_fp->time_shift));
-+
-+	} while (gen == 0 || gen != ffclock.generation);
-+}
-+
-+#endif /* RADCLOCK */
++#endif	/* FFCLOCK */
 +
 +
  /*
   * A large step happens on boot.  This constant detects such steps.
   * It is relatively small so that ntp_update_second gets called enough
-@@ -53,6 +136,11 @@
+@@ -53,6 +60,11 @@
  	int64_t			th_adjustment;
  	uint64_t		th_scale;
  	u_int	 		th_offset_count;
 +
-+#ifdef RADCLOCK
++#ifdef FFCLOCK
 +	ffcounter_t		ffcounter_record;
 +#endif
 +
  	struct bintime		th_offset;
  	struct timeval		th_microtime;
  	struct timespec		th_nanotime;
-@@ -61,6 +149,30 @@
+@@ -61,6 +73,30 @@
  	struct timehands	*th_next;
  };
  
-+#ifdef RADCLOCK
++#ifdef FFCLOCK
 +static struct timehands th0;
 +static struct timehands th9 = { NULL, 0, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th0};
 +static struct timehands th8 = { NULL, 0, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th9};
@@ -1080,23 +326,226 @@ diff -aur --unidirectional-new-file sys/kern/kern_tc.c FreeBSD-CURRENT/kern/kern
  static struct timehands th0;
  static struct timehands th9 = { NULL, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th0};
  static struct timehands th8 = { NULL, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th9};
-@@ -82,6 +194,7 @@
+@@ -82,6 +118,7 @@
  	1,
  	&th1
  };
-+#endif	/* RADCLOCK */
++#endif	/* FFCLOCK */
  
  static struct timehands *volatile timehands = &th0;
  struct timecounter *timecounter = &dummy_timecounter;
-@@ -163,6 +276,47 @@
+@@ -163,6 +200,251 @@
   * the comment in <sys/time.h> for a description of these 12 functions.
   */
  
-+#ifdef RADCLOCK
++#ifdef FFCLOCK
 +static int sysctl_kern_timecounter_passthrough = 0;
 +SYSCTL_INT(_kern_timecounter, OID_AUTO, passthrough, CTLFLAG_RW,
 +	&sysctl_kern_timecounter_passthrough, 0,
 +	"Select universal Feed-Forward timecounter for OS virtualization");
++
++
++/* Global data structure containing clock estimates */ 
++static struct feedforward_clock ffclock;
++
++MALLOC_DECLARE(M_FFCLOCK);
++MALLOC_DEFINE(M_FFCLOCK, "FFCLOCK", "Feed-Forward Clock estimates");
++
++
++static void
++init_ffclock(struct feedforward_clock *ffclock)
++{
++	unsigned long sz;
++	sz = sizeof(struct ffclock_estimate);
++
++	ffclock->updated = 0;
++	ffclock->cest	= (struct ffclock_estimate *) malloc(sz, M_FFCLOCK, M_WAITOK | M_ZERO);
++	ffclock->ocest	= (struct ffclock_estimate *) malloc(sz, M_FFCLOCK, M_WAITOK | M_ZERO);
++	ffclock->ucest	= (struct ffclock_estimate *) malloc(sz, M_FFCLOCK, M_WAITOK | M_ZERO);
++}
++
++
++/* 
++ * We need to have a boot time from the RTC clock or the like to get 
++ * kickstarted. init_ffclock is called before inittodr(), so cannot put the code
++ * there. Need to be called from tc_setclock(), once only.
++ */
++static void
++reset_ffclock(struct feedforward_clock *ffclock, struct timehands *th)
++{
++	uint64_t freq;
++	struct timecounter *tc;
++	struct ffclock_estimate *cest;
++	struct ffclock_data *cdata;
++
++	cest = ffclock->ucest;
++	cdata = &(cest->cdata);
++
++	/*
++	 * If called with a timehand, the timecounter is being changed and we
++	 * restart fresh. If not, the clock is being set from tc_setclock (note that
++	 * this may occur several times during boot).
++	 */ 
++	if (th) {
++		th->ffcounter_record = 0;
++		cdata->ffcounter = 0;
++		tc = th->th_counter;
++	}
++	else {
++		/* 
++		 * Strictly speaking, we should record the ffcounter when the RTC clock is
++		 * read from initoddr(), but not worse the trouble (is RTC trustworthy
++		 * anyway?). Let's keep it simple
++		 */ 
++		cdata->ffcounter = read_ffcounter();
++		tc = timehands->th_counter;
++	}
++	freq = tc->tc_frequency;
++
++	/* Numbers here are a bit magic */
++	// TODO should check these values ... again
++	cdata->phat_shift = 58;
++	cdata->time_shift = 32;
++	cdata->countdiff_maxbits = 30;
++
++	cdata->phat_int = ((1LL << 63) / freq) >> (63 - cdata->phat_shift); 
++
++	cdata->time_int = (boottimebin.sec << cdata->time_shift)
++		+ (boottimebin.frac >> (64 - cdata->time_shift));
++
++	if (++cest->gen == 0)
++		cest->gen = 1;
++
++	ffclock->ucest = ffclock->cest;
++	ffclock->cest = cest;
++	
++	cdata = &(ffclock->cest->cdata);
++	printf("reset_ffclock: %s - phat_int = %llu (%llu Hz), time_int = %llu (%llu.%llu s)\n",
++			tc->tc_name,
++			(long long unsigned) cdata->phat_int,
++			(long long unsigned) freq,
++			(long long unsigned) cdata->time_int,
++			(long long unsigned) boottimebin.sec, 
++			(long long unsigned) boottimebin.frac);
++
++	/* XXX Technically, should lock, but if radclock module not loaded?
++	 * Also, should make the radclock restart if the counter has changed!!
++	 */	
++}
++
++
++/* 
++ * Update to prevent overflow. This is no adjustment of the clock parameters.
++ * Assumption: timehands is the current one
++ */
++static void
++update_ffclock(struct feedforward_clock *ffclock)
++{
++	struct ffclock_estimate *tmp;
++	struct ffclock_data *cdata;
++	struct timehands *th;
++	ffcounter_t cdiff;
++
++	/*
++	 * If the clock has been updated by the synchronisation daemon, this new
++	 * data is the more up to date one.
++	 */
++	if ( ffclock->updated )
++	{
++		ffclock->ucest->gen = ffclock->cest->gen;
++		if (++ffclock->ucest->gen == 0)
++			ffclock->ucest->gen = 1;
++
++		tmp = ffclock->cest;
++		ffclock->cest = ffclock->ucest;
++		ffclock->ucest = tmp;
++		ffclock->updated = 0;
++		return;
++	}
++
++	/*
++	 * If we just changed the timecounter, we have nothing to do in here
++	 */
++	cdata = &(ffclock->cest->cdata);
++	th = timehands;
++	if ( cdata->ffcounter > th->ffcounter_record )
++		return;
++
++	/*
++	 * Update time mark 
++	 */
++	*(ffclock->ocest) = *(ffclock->cest);	
++	cdata = &(ffclock->ocest->cdata);
++
++	cdiff = th->ffcounter_record - cdata->ffcounter;
++	cdata->time_int += ((cdata->phat_int * cdiff) >> (cdata->phat_shift - cdata->time_shift));
++	cdata->ffcounter = th->ffcounter_record;
++	if (++ffclock->ocest->gen == 0)
++		ffclock->ocest->gen = 1;
++
++	tmp = ffclock->cest;
++	ffclock->cest = ffclock->ocest;
++	ffclock->ocest = tmp;
++}
++
++
++
++void
++ffcounter2bintime(ffcounter_t *ffcounter, struct bintime *bt)
++{
++	ffcounter_t countdiff;
++	uint64_t time_f;
++	uint64_t frac;
++	struct ffclock_data *cdata;
++	uint8_t gen;
++
++	/* Synchronization algorithm (userland) should update the fixed point data
++	 * often enough to make sure the timeval does not overflow. If no sync algo
++	 * updates the data, we loose precision, but in that case, nobody is tracking
++	 * the clock drift anyway ... so send warning and stop worrying.
++	 */
++
++	/* No locking to prevent clock data to be updated. Check that the generation
++	 * has not changed instead.
++	 */
++	do {
++		gen = ffclock.cest->gen;
++		cdata = &(ffclock.cest->cdata);
++
++		countdiff = *ffcounter - cdata->ffcounter;
++
++		/*
++		 * update_ffclock() should prevent countdiff to become to large and the
++		 * corresponding time interval added to overflow. Just send warning in
++		 * the unlikely event this is happening.
++		 */
++		if (countdiff & ~((1ll << (cdata->countdiff_maxbits +1)) - 1))
++		{
++			printf("ffclock: warning stamp may overflow timeval at %llu! "
++					"(countdiff = %llu, maxbits = %u)\n", 
++					(long long unsigned) *ffcounter,
++					(long long unsigned) countdiff,
++					cdata->countdiff_maxbits);
++		}
++		/* Add the counter delta in second to the recorded fixed point time */
++		time_f 	= cdata->time_int
++			+ ((cdata->phat_int * countdiff) >> (cdata->phat_shift - cdata->time_shift));
++
++		bt->sec  = time_f >> cdata->time_shift;
++
++/*
++		printf("ffclock: ffcounter = %llu bt->sec = %llu, time_int = %llu\n",
++				(long long unsigned) *ffcounter,
++			   	(long long unsigned) bt->sec, 
++				(long long unsigned) (cdata->time_int >> cdata->time_shift));
++*/
++		// gives me headaches again
++		// frac * ( 2^64 - 2^time_shift) ... that should be the correct resolution
++		frac = time_f - ((uint64_t) bt->sec << cdata->time_shift);
++		bt->frac = frac * ((uint64_t) 1LL << (64 - cdata->time_shift));
++
++	} while (gen == 0 || gen != ffclock.cest->gen);
++}
 +
 +
 +static __inline uint64_t
@@ -1107,6 +556,7 @@ diff -aur --unidirectional-new-file sys/kern/kern_tc.c FreeBSD-CURRENT/kern/kern
 +	return (uint64_t) count;
 +}
 +
++
 +ffcounter_t
 +read_ffcounter(void)
 +{
@@ -1115,13 +565,12 @@ diff -aur --unidirectional-new-file sys/kern/kern_tc.c FreeBSD-CURRENT/kern/kern
 +	u_int gen, delta;
 +	ffcounter_t ffcounter;
 +
-+	if ( sysctl_kern_timecounter_passthrough )
-+	{
++	if ( sysctl_kern_timecounter_passthrough ) {
 +		tc = timehands->th_counter;
 +		return tc->tc_get_timecount_64(tc);
 +	}
 +	else {
-+		do{
++		do {
 +			th = timehands;
 +			gen = th->th_generation;
 +			delta = tc_delta(th);
@@ -1131,17 +580,18 @@ diff -aur --unidirectional-new-file sys/kern/kern_tc.c FreeBSD-CURRENT/kern/kern
 +		return(ffcounter + delta);
 +	}
 +}
-+#endif	/* RADCLOCK */
++#endif	/* FFCLOCK */
++
 +
  void
  binuptime(struct bintime *bt)
  {
-@@ -325,7 +479,13 @@
+@@ -325,7 +607,13 @@
  		    tc->tc_name, (uintmax_t)tc->tc_frequency,
  		    tc->tc_quality);
  	}
 -
-+#ifdef RADCLOCK
++#ifdef FFCLOCK
 +	/* XXX this is a very ugly but good enough to cover my back */
 +	if ( (strcmp(tc->tc_name, "TSC") != 0) && (strcmp(tc->tc_name, "ixen") != 0) )
 +	{
@@ -1151,133 +601,157 @@ diff -aur --unidirectional-new-file sys/kern/kern_tc.c FreeBSD-CURRENT/kern/kern
  	tc->tc_next = timecounters;
  	timecounters = tc;
  	/*
-@@ -440,6 +600,11 @@
+@@ -391,6 +679,10 @@
+ 	boottimebin = bt;
+ 	bintime2timeval(&bt, &boottime);
+ 
++#ifdef FFCLOCK
++	reset_ffclock(&ffclock, NULL);
++#endif	/* FFCLOCK */
++
+ 	/* XXX fiddle all the little crinkly bits around the fiords... */
+ 	tc_windup();
+ 	nanotime(&taft);
+@@ -440,6 +732,11 @@
  		ncount = timecounter->tc_get_timecount(timecounter);
  	else
  		ncount = 0;
 +
-+#ifdef RADCLOCK
++#ifdef FFCLOCK
 +	th->ffcounter_record += delta;
 +#endif
 +
  	th->th_offset_count += delta;
  	th->th_offset_count &= th->th_counter->tc_counter_mask;
  	bintime_addx(&th->th_offset, th->th_scale * delta);
-@@ -486,6 +651,9 @@
+@@ -486,6 +783,10 @@
  		th->th_offset_count = ncount;
  		tc_min_ticktock_freq = max(1, timecounter->tc_frequency /
  		    (((uint64_t)timecounter->tc_counter_mask + 1) / 3));
-+		#ifdef RADCLOCK
-+		th->ffcounter_record = 0;
++
++		#ifdef FFCLOCK
++		reset_ffclock(&ffclock, th);
 +		#endif
  	}
  
  	/*-
-@@ -594,6 +762,10 @@
+@@ -528,6 +829,11 @@
+ 	time_second = th->th_microtime.tv_sec;
+ 	time_uptime = th->th_offset.sec;
+ 	timehands = th;
++
++
++#ifdef FFCLOCK
++	update_ffclock(&ffclock);
++#endif
+ }
+ 
+ /* Report or change the active timecounter hardware. */
+@@ -594,6 +900,10 @@
  {
  	pps_params_t *app;
  	struct pps_fetch_args *fapi;
-+#ifdef RADCLOCK
-+	struct radclock_pps_fetch_args *radclock_fapi;
++#ifdef FFCLOCK
++	struct ffclock_pps_fetch_args *ffclock_fapi;
 +#endif
 +
  #ifdef PPS_SYNC
  	struct pps_kcbind_args *kapi;
  #endif
-@@ -627,6 +799,19 @@
+@@ -627,6 +937,19 @@
  		pps->ppsinfo.current_mode = pps->ppsparam.mode;
  		fapi->pps_info_buf = pps->ppsinfo;
  		return (0);
 +
-+#ifdef RADCLOCK
-+	case RADCLOCK_PPS_IOC_FETCH:
-+		radclock_fapi = (struct radclock_pps_fetch_args *)data;
-+		if (radclock_fapi->tsformat && radclock_fapi->tsformat != PPS_TSFMT_TSPEC)
++#ifdef FFCLOCK
++	case FFCLOCK_PPS_IOC_FETCH:
++		ffclock_fapi = (struct ffclock_pps_fetch_args *)data;
++		if (ffclock_fapi->tsformat && ffclock_fapi->tsformat != PPS_TSFMT_TSPEC)
 +			return (EINVAL);
-+		if (radclock_fapi->timeout.tv_sec || radclock_fapi->timeout.tv_nsec)
++		if (ffclock_fapi->timeout.tv_sec || ffclock_fapi->timeout.tv_nsec)
 +			return (EOPNOTSUPP);
 +		pps->ppsinfo.current_mode = pps->ppsparam.mode;
-+		radclock_fapi->pps_info_buf = pps->radclock_ppsinfo;
++		ffclock_fapi->pps_info_buf = pps->ffclock_ppsinfo;
 +		return (0);
-+#endif 	/* RADCLOCK */
++#endif 	/* FFCLOCK */
 +
  	case PPS_IOC_KCBIND:
  #ifdef PPS_SYNC
  		kapi = (struct pps_kcbind_args *)data;
-@@ -679,6 +864,12 @@
+@@ -679,6 +1002,12 @@
  	u_int tcount, *pcount;
  	int foff, fhard;
  	pps_seq_t *pseq;
-+#ifdef RADCLOCK
-+	struct timespec *radclock_tsp;
-+	pps_seq_t *radclock_pseq;
++#ifdef FFCLOCK
++	struct timespec *ffclock_tsp;
++	pps_seq_t *ffclock_pseq;
 +	ffcounter_t *ffcounter;
 +	ffcounter_t ffcounter_record;
 +#endif
  
  	KASSERT(pps != NULL, ("NULL pps pointer in pps_event"));
  	/* If the timecounter was wound up underneath us, bail out. */
-@@ -693,6 +884,11 @@
+@@ -693,6 +1022,11 @@
  		fhard = pps->kcmode & PPS_CAPTUREASSERT;
  		pcount = &pps->ppscount[0];
  		pseq = &pps->ppsinfo.assert_sequence;
-+#ifdef RADCLOCK
-+		ffcounter = &pps->radclock_ppsinfo.assert_ffcounter;
-+		radclock_tsp = &pps->radclock_ppsinfo.assert_timestamp;
-+		radclock_pseq = &pps->radclock_ppsinfo.assert_sequence;
++#ifdef FFCLOCK
++		ffcounter = &pps->ffclock_ppsinfo.assert_ffcounter;
++		ffclock_tsp = &pps->ffclock_ppsinfo.assert_timestamp;
++		ffclock_pseq = &pps->ffclock_ppsinfo.assert_sequence;
 +#endif
  	} else {
  		tsp = &pps->ppsinfo.clear_timestamp;
  		osp = &pps->ppsparam.clear_offset;
-@@ -700,6 +896,11 @@
+@@ -700,6 +1034,11 @@
  		fhard = pps->kcmode & PPS_CAPTURECLEAR;
  		pcount = &pps->ppscount[1];
  		pseq = &pps->ppsinfo.clear_sequence;
-+#ifdef RADCLOCK
-+		ffcounter = &pps->radclock_ppsinfo.clear_ffcounter;
-+		radclock_tsp = &pps->radclock_ppsinfo.clear_timestamp;
-+		radclock_pseq = &pps->radclock_ppsinfo.clear_sequence;
++#ifdef FFCLOCK
++		ffcounter = &pps->ffclock_ppsinfo.clear_ffcounter;
++		ffclock_tsp = &pps->ffclock_ppsinfo.clear_timestamp;
++		ffclock_pseq = &pps->ffclock_ppsinfo.clear_sequence;
 +#endif
  	}
  
  	/*
-@@ -716,6 +917,9 @@
+@@ -716,6 +1055,9 @@
  	/* Convert the count to a timespec. */
  	tcount = pps->capcount - pps->capth->th_offset_count;
  	tcount &= pps->capth->th_counter->tc_counter_mask;
-+#ifdef RADCLOCK
++#ifdef FFCLOCK
 +	ffcounter_record = pps->capth->ffcounter_record;
 +#endif
  	bt = pps->capth->th_offset;
  	bintime_addx(&bt, pps->capth->th_scale * tcount);
  	bintime_add(&bt, &boottimebin);
-@@ -728,6 +932,11 @@
+@@ -728,6 +1070,11 @@
  	*pcount = pps->capcount;
  	(*pseq)++;
  	*tsp = ts;
-+#ifdef RADCLOCK
-+	(*radclock_pseq)++;
-+	*radclock_tsp = ts;
++#ifdef FFCLOCK
++	(*ffclock_pseq)++;
++	*ffclock_tsp = ts;
 +	*ffcounter = (ffcounter_record + tcount);
 +#endif
  
  	if (foff) {
  		timespecadd(tsp, osp);
-@@ -806,6 +1015,10 @@
- 	(void)timecounter->tc_get_timecount(timecounter);
- 	(void)timecounter->tc_get_timecount(timecounter);
- 	tc_windup();
-+
-+#ifdef RADCLOCK
-+	initffclock(&ffclock);
-+#endif
- }
+@@ -802,6 +1149,10 @@
+ 	p = (tc_tick * 1000000) / hz;
+ 	printf("Timecounters tick every %d.%03u msec\n", p / 1000, p % 1000);
  
- SYSINIT(timecounter, SI_SUB_CLOCKS, SI_ORDER_SECOND, inittimecounter, NULL);
++#ifdef FFCLOCK
++	init_ffclock(&ffclock);
++#endif
++
+ 	/* warm up new timecounter (again) and get rolling. */
+ 	(void)timecounter->tc_get_timecount(timecounter);
+ 	(void)timecounter->tc_get_timecount(timecounter);
 diff -aur --unidirectional-new-file sys/kern/radclock.c FreeBSD-CURRENT/kern/radclock.c
 --- sys/kern/radclock.c	1970-01-01 10:00:00.000000000 +1000
-+++ FreeBSD-CURRENT/kern/radclock.c	2010-12-03 12:34:17.000000000 +1100
-@@ -0,0 +1,356 @@
++++ FreeBSD-CURRENT/kern/radclock.c	2010-12-09 15:22:45.000000000 +1100
+@@ -0,0 +1,347 @@
 +/*-
 + * Copyright (C) 2010 University of Melbourne
 + * All rights reserved.
@@ -1327,7 +801,7 @@ diff -aur --unidirectional-new-file sys/kern/radclock.c FreeBSD-CURRENT/kern/rad
 +#include <sys/sysctl.h>
 +
 +
-+extern struct feedfwd_clock ffclock;
++extern struct feedforward_clock ffclock;
 +
 +static struct mtx ffclock_mtx;	/* lock against concurrent updates of the ffclock estimates */
 +
@@ -1419,7 +893,7 @@ diff -aur --unidirectional-new-file sys/kern/radclock.c FreeBSD-CURRENT/kern/rad
 +	{ 0, NULL, AUE_NULL}
 +};
 +
-+static moduledata_t get_ffounter_mod = {
++static moduledata_t get_ffcounter_mod = {
 +	"get_ffcounter",
 +	syscall_module_handler,
 +	&get_ffcounter_syscall_mod
@@ -1534,40 +1008,31 @@ diff -aur --unidirectional-new-file sys/kern/radclock.c FreeBSD-CURRENT/kern/rad
 + */
 +
 +struct set_ffclock_args {
-+	struct radclock_fixedpoint *clock_fp;
++	struct ffclock_data *cdata;
 +};
 +
 +
 +/*
-+ * Write down the clock estimates passed from userland. Hold ffclock_mtx to
-+ * prevent several instances to update concurrently.
++ * Adjust the ffclock by writing down the clock estimates passed from userland.
++ * Hold ffclock_mtx to prevent several instances to update concurrently,
++ * essentially to protect from user's bad practice.
++ * update_ffclock() may bump the generation number without us knowing. 
++ *
++ * XXX update comment to reflect what the code does.
++ * mention that updates are acted upon during tc_windup, leading to a delay <= 1/HZ
 + */
-+static int
-+set_ffclock(struct proc *td, void *syscall_args)
++static int set_ffclock(struct proc *td, void *syscall_args)
 +{
 +	int error = 0;
-+	uint8_t gen;
 +	struct set_ffclock_args *uap;
 +
 +	uap = (struct set_ffclock_args *) syscall_args;
-+	if ( uap->clock_fp == NULL )
++	if ( uap->cdata == NULL )
 +		return -1;
 +
 +	mtx_lock(&ffclock_mtx);
-+
-+	gen = ffclock.generation;
-+	error = copyin(uap->clock_fp, ffclock.estimate_old, sizeof(struct radclock_fixedpoint));
-+
-+	ffclock.tmp = ffclock.estimate;
-+
-+	if (++gen == 0)
-+		gen = 1;
-+	
-+	ffclock.estimate = ffclock.estimate_old;
-+	ffclock.generation = gen;
-+	ffclock.estimate_old = ffclock.tmp;
-+	ffclock.tmp = NULL;
-+
++	error = copyin(uap->cdata, &(ffclock.ucest->cdata), sizeof(struct ffclock_data));
++	ffclock.updated = 1;
 +	mtx_unlock(&ffclock_mtx);
 +
 +	return(error);
@@ -1635,8 +1100,8 @@ diff -aur --unidirectional-new-file sys/kern/radclock.c FreeBSD-CURRENT/kern/rad
 +
 +
 diff -aur --unidirectional-new-file sys/modules/Makefile FreeBSD-CURRENT/modules/Makefile
---- sys/modules/Makefile	2010-12-03 12:11:57.000000000 +1100
-+++ FreeBSD-CURRENT/modules/Makefile	2010-12-03 12:34:17.000000000 +1100
+--- sys/modules/Makefile	2010-12-09 15:14:44.000000000 +1100
++++ FreeBSD-CURRENT/modules/Makefile	2010-12-09 15:22:45.000000000 +1100
 @@ -241,6 +241,7 @@
  	${_pst} \
  	pty  \
@@ -1647,7 +1112,7 @@ diff -aur --unidirectional-new-file sys/modules/Makefile FreeBSD-CURRENT/modules
  	${_random} \
 diff -aur --unidirectional-new-file sys/modules/radclock/Makefile FreeBSD-CURRENT/modules/radclock/Makefile
 --- sys/modules/radclock/Makefile	1970-01-01 10:00:00.000000000 +1000
-+++ FreeBSD-CURRENT/modules/radclock/Makefile	2010-12-03 12:34:17.000000000 +1100
++++ FreeBSD-CURRENT/modules/radclock/Makefile	2010-12-09 15:22:45.000000000 +1100
 @@ -0,0 +1,15 @@
 +# This make file creates the .ko module for retrieving the vitual counter through syscall.
 +
@@ -1656,28 +1121,28 @@ diff -aur --unidirectional-new-file sys/modules/radclock/Makefile FreeBSD-CURREN
 +KMOD    =  radclock
 +SRCS    =  radclock.c
 +
-+SRCS+=	opt_radclock.h
++SRCS+=	opt_ffclock.h
 +
 +.if !defined(KERNBUILDDIR)
-+opt_radclock.h:
-+	echo "#define RADCLOCK 1" > opt_radclock.h
++opt_ffclock.h:
++	echo "#define FFCLOCK 1" > opt_ffclock.h
 +.endif
 +
 +.include <bsd.kmod.mk>
 diff -aur --unidirectional-new-file sys/net/bpf.c FreeBSD-CURRENT/net/bpf.c
---- sys/net/bpf.c	2010-12-03 12:11:57.000000000 +1100
-+++ FreeBSD-CURRENT/net/bpf.c	2010-12-03 12:34:17.000000000 +1100
+--- sys/net/bpf.c	2010-12-09 15:14:44.000000000 +1100
++++ FreeBSD-CURRENT/net/bpf.c	2010-12-09 15:22:45.000000000 +1100
 @@ -90,8 +90,13 @@
  
  #define PRINET  26			/* interruptible */
  
-+#ifdef RADCLOCK
++#ifdef FFCLOCK
 +#define	SIZEOF_BPF_HDR(type)	\
 +    (offsetof(type, ffcounter_stamp) + sizeof(((type *)0)->ffcounter_stamp))
 +#else
  #define	SIZEOF_BPF_HDR(type)	\
      (offsetof(type, bh_hdrlen) + sizeof(((type *)0)->bh_hdrlen))
-+#endif	/* RADCLOCK */
++#endif	/* FFCLOCK */
  
  #ifdef COMPAT_FREEBSD32
  #include <sys/mount.h>
@@ -1685,7 +1150,7 @@ diff -aur --unidirectional-new-file sys/net/bpf.c FreeBSD-CURRENT/net/bpf.c
  	uint32_t	bh_datalen;	/* original length of packet */
  	uint16_t	bh_hdrlen;	/* length of bpf header (this struct
  					   plus alignment padding) */
-+#ifdef RADCLOCK
++#ifdef FFCLOCK
 +	u_short     padding;        /* padding to align the fields */
 +	ffcounter_t  ffcounter_stamp;   /* raw virtual timecounter timestamp for this packet */      
 +#endif
@@ -1696,7 +1161,7 @@ diff -aur --unidirectional-new-file sys/net/bpf.c FreeBSD-CURRENT/net/bpf.c
  static void	bpf_timed_out(void *);
  static __inline void
  		bpf_wakeup(struct bpf_d *);
-+#ifdef RADCLOCK
++#ifdef FFCLOCK
 +static void catchpacket(struct bpf_d *, u_char *, u_int, u_int,
 +			void (*)(struct bpf_d *, caddr_t, u_int, void *, u_int),
 +			struct bintime *, ffcounter_t *);
@@ -1712,11 +1177,11 @@ diff -aur --unidirectional-new-file sys/net/bpf.c FreeBSD-CURRENT/net/bpf.c
      &bpf_zerocopy_enable, 0, "Enable new zero-copy BPF buffer sessions");
  SYSCTL_NODE(_net_bpf, OID_AUTO, stats, CTLFLAG_MPSAFE | CTLFLAG_RW,
      bpf_stats_sysctl, "bpf statistics portal");
-+#ifdef RADCLOCK
++#ifdef FFCLOCK
 +static int bpf_ffclock_tstamp = 0; 
 +SYSCTL_INT(_net_bpf, OID_AUTO, ffclock_tstamp, CTLFLAG_RW,
 +	&bpf_ffclock_tstamp, 0, "Set BPF to timestamp using Feed-Forward clock by default");
-+#endif /* RADCLOCK */
++#endif /* FFCLOCK */
  
  static	d_open_t	bpfopen;
  static	d_read_t	bpfread;
@@ -1724,13 +1189,13 @@ diff -aur --unidirectional-new-file sys/net/bpf.c FreeBSD-CURRENT/net/bpf.c
  	callout_init_mtx(&d->bd_callout, &d->bd_mtx, 0);
  	knlist_init_mtx(&d->bd_sel.si_note, &d->bd_mtx);
  
-+#ifdef RADCLOCK
++#ifdef FFCLOCK
 +	/* Timestamping mode for this device, default is use the system clock.
 +	 * Need BPF_T_MONOTONIC to avoid bpf_bintime2ts to add bootime.
 +	 */
 +	if (bpf_ffclock_tstamp)
 +		d->bd_tstamp = d->bd_tstamp | BPF_T_FFCLOCK | BPF_T_MONOTONIC;
-+#endif /* RADCLOCK */
++#endif /* FFCLOCK */
 +
  	return (0);
  }
@@ -1739,7 +1204,7 @@ diff -aur --unidirectional-new-file sys/net/bpf.c FreeBSD-CURRENT/net/bpf.c
  #endif
  	u_int slen;
  	int gottime;
-+#ifdef RADCLOCK
++#ifdef FFCLOCK
 +	ffcounter_t ffcounter;
 +#endif
  
@@ -1751,20 +1216,20 @@ diff -aur --unidirectional-new-file sys/net/bpf.c FreeBSD-CURRENT/net/bpf.c
  			if (gottime < bpf_ts_quality(d->bd_tstamp))
 +			{
  				gottime = bpf_gettime(&bt, d->bd_tstamp, NULL);
-+#ifdef RADCLOCK
++#ifdef FFCLOCK
 +				ffcounter = read_ffcounter();
 +#endif
 +			}
  #ifdef MAC
  			if (mac_bpfdesc_check_receive(d, bp->bif_ifp) == 0)
  #endif
-+#ifdef RADCLOCK
++#ifdef FFCLOCK
 +				catchpacket(d, pkt, pktlen, slen,
 +				    bpf_append_bytes, &bt, &ffcounter);
 +#else
  				catchpacket(d, pkt, pktlen, slen,
  				    bpf_append_bytes, &bt);
-+#endif	/* RADCLOCK */
++#endif	/* FFCLOCK */
  		}
  		BPFD_UNLOCK(d);
  	}
@@ -1772,7 +1237,7 @@ diff -aur --unidirectional-new-file sys/net/bpf.c FreeBSD-CURRENT/net/bpf.c
  #endif
  	u_int pktlen, slen;
  	int gottime;
-+#ifdef RADCLOCK
++#ifdef FFCLOCK
 +	ffcounter_t ffcounter;
 +#endif
  
@@ -1785,20 +1250,20 @@ diff -aur --unidirectional-new-file sys/net/bpf.c FreeBSD-CURRENT/net/bpf.c
 +			{
  				gottime = bpf_gettime(&bt, d->bd_tstamp, m);
 +
-+#ifdef RADCLOCK
++#ifdef FFCLOCK
 +				ffcounter = read_ffcounter();
 +#endif
 +			}
  #ifdef MAC
  			if (mac_bpfdesc_check_receive(d, bp->bif_ifp) == 0)
  #endif
-+#ifdef RADCLOCK
++#ifdef FFCLOCK
 +				catchpacket(d, (u_char *)m, pktlen, slen,
 +				    bpf_append_mbuf, &bt, &ffcounter);
 +#else
  				catchpacket(d, (u_char *)m, pktlen, slen,
  				    bpf_append_mbuf, &bt);
-+#endif 	/* RADCLOCK */
++#endif 	/* FFCLOCK */
  		}
  		BPFD_UNLOCK(d);
  	}
@@ -1806,9 +1271,9 @@ diff -aur --unidirectional-new-file sys/net/bpf.c FreeBSD-CURRENT/net/bpf.c
  	struct bpf_d *d;
  	u_int pktlen, slen;
  	int gottime;
-+#ifdef RADCLOCK
++#ifdef FFCLOCK
 +	ffcounter_t ffcounter;
-+#endif 	/* RADCLOCK */
++#endif 	/* FFCLOCK */
  
  	/* Skip outgoing duplicate packets. */
  	if ((m->m_flags & M_PROMISC) != 0 && m->m_pkthdr.rcvif == NULL) {
@@ -1818,14 +1283,14 @@ diff -aur --unidirectional-new-file sys/net/bpf.c FreeBSD-CURRENT/net/bpf.c
  			if (gottime < bpf_ts_quality(d->bd_tstamp))
 +			{
  				gottime = bpf_gettime(&bt, d->bd_tstamp, m);
-+#ifdef RADCLOCK
++#ifdef FFCLOCK
 +				ffcounter = read_ffcounter();
-+#endif 	/* RADCLOCK */
++#endif 	/* FFCLOCK */
 +			}
  #ifdef MAC
  			if (mac_bpfdesc_check_receive(d, bp->bif_ifp) == 0)
  #endif
-+#ifdef RADCLOCK
++#ifdef FFCLOCK
 +				catchpacket(d, (u_char *)m, pktlen, slen,
 +				    bpf_append_mbuf, &bt, &ffcounter);
 +#else
@@ -1856,7 +1321,7 @@ diff -aur --unidirectional-new-file sys/net/bpf.c FreeBSD-CURRENT/net/bpf.c
   * bpf_append_mbuf is passed in to copy mbuf chains.  In the latter case,
   * pkt is really an mbuf.
   */
-+#ifdef RADCLOCK
++#ifdef FFCLOCK
  static void
  catchpacket(struct bpf_d *d, u_char *pkt, u_int pktlen, u_int snaplen,
      void (*cpfn)(struct bpf_d *, caddr_t, u_int, void *, u_int),
@@ -1873,39 +1338,31 @@ diff -aur --unidirectional-new-file sys/net/bpf.c FreeBSD-CURRENT/net/bpf.c
  	int do_timestamp;
  	int tstype;
  
-+// XXX RADCLOCK DEBUG XXX
++// XXX FFCLOCK DEBUG XXX
 +//	struct bpf_if *bp;
 +//	bp = d->bd_bif;
-+// XXX RADCLOCK DEBUG XXX	
++// XXX FFCLOCK DEBUG XXX	
 +
  	BPFD_LOCK_ASSERT(d);
  
  	/*
-@@ -2118,17 +2200,41 @@
+@@ -2118,17 +2200,33 @@
  	if (tstype == BPF_T_NONE || BPF_T_FORMAT(tstype) == BPF_T_MICROTIME) {
  		struct bpf_ts ts;
  		if (do_timestamp)
 +		{
-+#ifdef RADCLOCK
++#ifdef FFCLOCK
 +			/* If asked, use the RADclock to generate the bintime timestamp */
 +			if ( (tstype & BPF_T_FFCLOCK) == BPF_T_FFCLOCK )
 +				ffcounter2bintime(ffcounter, bt);
-+#endif	/* RADCLOCK */
++#endif	/* FFCLOCK */
  			bpf_bintime2ts(bt, &ts, tstype);
-+
-+			// XXX RADCLOCK DEBUG XXX
-+			printf("     bt: sec = %llu, frac = %llu\n", 
-+					(long long unsigned) bt->sec,
-+					(long long unsigned) bt->frac);
-+			printf("     ts: sec = %lu, usec = %lu\n", 
-+					(long unsigned) ts.bt_sec,
-+					(long unsigned) ts.bt_frac);
 +		}
  #ifdef COMPAT_FREEBSD32
  		if (d->bd_compat32) {
  			bzero(&hdr32_old, sizeof(hdr32_old));
  			if (do_timestamp) {
-+#ifdef RADCLOCK
++#ifdef FFCLOCK
 +				hdr32_old.ffcounter_stamp = *ffcounter;
 +#endif
  				hdr32_old.bh_tstamp.tv_sec = ts.bt_sec;
@@ -1915,19 +1372,19 @@ diff -aur --unidirectional-new-file sys/net/bpf.c FreeBSD-CURRENT/net/bpf.c
  			hdr32_old.bh_hdrlen = hdrlen;
  			hdr32_old.bh_caplen = caplen;
 +
-+// XXX RADCLOCK DEBUG XXX
++// XXX FFCLOCK DEBUG XXX
 +//if_printf(bp->bif_ifp, "radcatch: hdr32_old with hdrlen= %d, ffcounter= %llu\n",
 +//	   	hdrlen, (long long unsigned) *ffcounter);
-+// XXX RADCLOCK DEBUG XXX
++// XXX FFCLOCK DEBUG XXX
 +
  			bpf_append_bytes(d, d->bd_sbuf, curlen, &hdr32_old,
  			    sizeof(hdr32_old));
  			goto copy;
-@@ -2136,12 +2242,21 @@
+@@ -2136,12 +2234,21 @@
  #endif
  		bzero(&hdr_old, sizeof(hdr_old));
  		if (do_timestamp) {
-+#ifdef RADCLOCK
++#ifdef FFCLOCK
 +			hdr_old.ffcounter_stamp = *ffcounter;
 +#endif
  			hdr_old.bh_tstamp.tv_sec = ts.bt_sec;
@@ -1937,47 +1394,47 @@ diff -aur --unidirectional-new-file sys/net/bpf.c FreeBSD-CURRENT/net/bpf.c
  		hdr_old.bh_hdrlen = hdrlen;
  		hdr_old.bh_caplen = caplen;
 +
-+// XXX RADCLOCK DEBUG XXX
++// XXX FFCLOCK DEBUG XXX
 +//if_printf(bp->bif_ifp, "radcatch: hdr_old with hdrlen= %d, ffcounter= %llu\n",
 +//	   	hdrlen, (long long unsigned) *ffcounter);
-+// XXX RADCLOCK DEBUG XXX
++// XXX FFCLOCK DEBUG XXX
 +
  		bpf_append_bytes(d, d->bd_sbuf, curlen, &hdr_old,
  		    sizeof(hdr_old));
  		goto copy;
-@@ -2154,10 +2269,23 @@
+@@ -2154,10 +2261,23 @@
  	 */
  	bzero(&hdr, sizeof(hdr));
  	if (do_timestamp)
 +	{
-+#ifdef RADCLOCK
++#ifdef FFCLOCK
 +		hdr.ffcounter_stamp = *ffcounter;
 +		if ( (tstype & BPF_T_FFCLOCK) == BPF_T_FFCLOCK )
 +			ffcounter2bintime(ffcounter, bt);
-+#endif	/* RADCLOCK */
++#endif	/* FFCLOCK */
  		bpf_bintime2ts(bt, &hdr.bh_tstamp, tstype);
 +	}
  	hdr.bh_datalen = pktlen;
  	hdr.bh_hdrlen = hdrlen;
  	hdr.bh_caplen = caplen;
 +
-+// XXX RADCLOCK DEBUG XXX
++// XXX FFCLOCK DEBUG XXX
 +//if_printf(bp->bif_ifp, "radcatch: xhdr with hdrlen= %d, ffcounter= %llu\n",
 +//	   	hdrlen, (long long unsigned) *ffcounter);
-+// XXX RADCLOCK DEBUG XXX
++// XXX FFCLOCK DEBUG XXX
 +
  	bpf_append_bytes(d, d->bd_sbuf, curlen, &hdr, sizeof(hdr));
  
  	/*
 diff -aur --unidirectional-new-file sys/net/bpf.h FreeBSD-CURRENT/net/bpf.h
---- sys/net/bpf.h	2010-12-03 12:11:57.000000000 +1100
-+++ FreeBSD-CURRENT/net/bpf.h	2010-12-03 12:34:17.000000000 +1100
+--- sys/net/bpf.h	2010-12-09 15:14:44.000000000 +1100
++++ FreeBSD-CURRENT/net/bpf.h	2010-12-09 15:22:45.000000000 +1100
 @@ -37,9 +37,13 @@
   * $FreeBSD: src/sys/net/bpf.h,v 1.56 2010/10/29 18:41:09 rpaulo Exp $
   */
  
 +
-+#include "opt_radclock.h" 
++#include "opt_ffclock.h" 
 +
  #ifndef _NET_BPF_H_
  #define _NET_BPF_H_
@@ -1990,7 +1447,7 @@ diff -aur --unidirectional-new-file sys/net/bpf.h FreeBSD-CURRENT/net/bpf.h
  #define	BPF_T_FAST		0x0100
  #define	BPF_T_MONOTONIC		0x0200
  #define	BPF_T_MONOTONIC_FAST	(BPF_T_FAST | BPF_T_MONOTONIC)
-+#ifdef RADCLOCK
++#ifdef FFCLOCK
 +#define	BPF_T_FFCLOCK		0x0400
 +#define	BPF_T_FLAG_MASK		0x0700
 +#else
@@ -2003,7 +1460,7 @@ diff -aur --unidirectional-new-file sys/net/bpf.h FreeBSD-CURRENT/net/bpf.h
  #define	BPF_T_MICROTIME_MONOTONIC_FAST	(BPF_T_MICROTIME | BPF_T_MONOTONIC_FAST)
  #define	BPF_T_NANOTIME_MONOTONIC_FAST	(BPF_T_NANOTIME | BPF_T_MONOTONIC_FAST)
  #define	BPF_T_BINTIME_MONOTONIC_FAST	(BPF_T_BINTIME | BPF_T_MONOTONIC_FAST)
-+#ifdef RADCLOCK
++#ifdef FFCLOCK
 +#define BPF_T_MICROTIME_FFCLOCK		(BPF_T_MICROTIME | BPF_T_FFCLOCK)
 +#define BPF_T_NANOTIME_FFCLOCK		(BPF_T_NANOTIME | BPF_T_FFCLOCK)
 +#define BPF_T_BINTIME_FFCLOCK		(BPF_T_BINTIME | BPF_T_FFCLOCK)
@@ -2016,7 +1473,7 @@ diff -aur --unidirectional-new-file sys/net/bpf.h FreeBSD-CURRENT/net/bpf.h
  	bpf_u_int64	bt_frac;	/* fraction */
  };
 +
-+#ifdef RADCLOCK
++#ifdef FFCLOCK
  struct bpf_xhdr {
  	struct bpf_ts	bh_tstamp;	/* time stamp */
  	bpf_u_int32	bh_caplen;	/* length of captured portion */
@@ -2037,7 +1494,7 @@ diff -aur --unidirectional-new-file sys/net/bpf.h FreeBSD-CURRENT/net/bpf.h
 +#endif
 +
  /* Obsolete */
-+#ifdef RADCLOCK
++#ifdef FFCLOCK
  struct bpf_hdr {
  	struct timeval	bh_tstamp;	/* time stamp */
  	bpf_u_int32	bh_caplen;	/* length of captured portion */
@@ -2060,30 +1517,18 @@ diff -aur --unidirectional-new-file sys/net/bpf.h FreeBSD-CURRENT/net/bpf.h
  #define	MTAG_BPF		0x627066
  #define	MTAG_BPF_TIMESTAMP	0
 diff -aur --unidirectional-new-file sys/sys/time.h FreeBSD-CURRENT/sys/time.h
---- sys/sys/time.h	2010-12-03 12:11:59.000000000 +1100
-+++ FreeBSD-CURRENT/sys/time.h	2010-12-03 12:34:17.000000000 +1100
-@@ -324,6 +324,55 @@
+--- sys/sys/time.h	2010-12-09 15:14:47.000000000 +1100
++++ FreeBSD-CURRENT/sys/time.h	2010-12-09 15:22:46.000000000 +1100
+@@ -324,6 +324,49 @@
  void	getnanotime(struct timespec *tsp);
  void	getmicrotime(struct timeval *tvp);
  
-+/* RADCLOCK specific */
++/* FFCLOCK specific */
 +typedef uint64_t ffcounter_t;
 +
-+/* RADclock synchronisation structure */
++/* Feed-Forward Clock synchronisation structure */
 +
-+//struct radclock_data {
-+//	double 		phat;
-+//	double 		phat_err;
-+//	double 		phat_local;
-+//	double 		phat_local_err;
-+//	long double	ca;
-+//	double 		ca_err;
-+//	uint32_t	status;
-+//	vcounter_t	last_changed;
-+//	vcounter_t	valid_till;
-+//};
-+
-+struct radclock_fixedpoint
++struct ffclock_data
 +{
 +	/* phat as an int shifted phat_shift to the left */
 +	uint64_t phat_int;
@@ -2099,33 +1544,39 @@ diff -aur --unidirectional-new-file sys/sys/time.h FreeBSD-CURRENT/sys/time.h
 +	uint8_t countdiff_maxbits;
 +};
 +
-+
-+struct feedfwd_clock
++struct ffclock_estimate
 +{
-+	uint8_t generation;
-+	struct radclock_fixedpoint *estimate;
-+	struct radclock_fixedpoint *estimate_old;
-+	struct radclock_fixedpoint *tmp;
++	volatile uint8_t gen;
++	struct ffclock_data cdata;
++};
++
++/* Current estimate and old one, no locking on the timestamping side */
++struct feedforward_clock
++{
++	volatile uint8_t updated;
++	struct ffclock_estimate *cest;
++	struct ffclock_estimate *ocest;
++	struct ffclock_estimate *ucest;
 +};
 +
 +
 +
 +ffcounter_t read_ffcounter(void);
 +void ffcounter2bintime(ffcounter_t *ffcounter, struct bintime *bt);
-+/* RADCLOCK */
++/* FFCLOCK */
 +
 +
  /* Other functions */
  int	itimerdecr(struct itimerval *itp, int usec);
  int	itimerfix(struct timeval *tv);
 diff -aur --unidirectional-new-file sys/sys/timepps.h FreeBSD-CURRENT/sys/timepps.h
---- sys/sys/timepps.h	2010-12-03 12:11:59.000000000 +1100
-+++ FreeBSD-CURRENT/sys/timepps.h	2010-12-03 12:34:17.000000000 +1100
+--- sys/sys/timepps.h	2010-12-09 15:14:47.000000000 +1100
++++ FreeBSD-CURRENT/sys/timepps.h	2010-12-09 15:22:46.000000000 +1100
 @@ -15,6 +15,8 @@
  #ifndef _SYS_TIMEPPS_H_
  #define _SYS_TIMEPPS_H_
  
-+#include "opt_radclock.h"
++#include "opt_ffclock.h"
 +
  #include <sys/ioccom.h>
  #include <sys/time.h>
@@ -2135,7 +1586,7 @@ diff -aur --unidirectional-new-file sys/sys/timepps.h FreeBSD-CURRENT/sys/timepp
  } pps_info_t;
  
 +
-+#ifdef RADCLOCK
++#ifdef FFCLOCK
 +typedef union pps_ffcounteru {
 +	ffcounter_t ffcounter;
 +} pps_ffcounteru_t;
@@ -2148,8 +1599,8 @@ diff -aur --unidirectional-new-file sys/sys/timepps.h FreeBSD-CURRENT/sys/timepp
 +	int		current_mode;		/* current mode bits */
 +	pps_ffcounteru_t  assert_vcu;
 +	pps_ffcounteru_t  clear_vcu;
-+} radclock_pps_info_t;
-+#endif	/* RADCLOCK */
++} ffclock_pps_info_t;
++#endif	/* FFCLOCK */
 +
 +
  #define assert_timestamp        assert_tu.tspec
@@ -2158,10 +1609,10 @@ diff -aur --unidirectional-new-file sys/sys/timepps.h FreeBSD-CURRENT/sys/timepp
  #define assert_timestamp_ntpfp  assert_tu.ntpfp
  #define clear_timestamp_ntpfp   clear_tu.ntpfp
  
-+#ifdef RADCLOCK
++#ifdef FFCLOCK
 +#define assert_ffcounter	assert_vcu.ffcounter
-+#define clear_ffcounter		clear_vcu.ffcount
-+#endif 	/* RADCLOCK */
++#define clear_ffcounter		clear_vcu.ffcounter
++#endif 	/* FFCLOCK */
 +
  typedef struct {
  	int api_version;			/* API version # */
@@ -2170,13 +1621,13 @@ diff -aur --unidirectional-new-file sys/sys/timepps.h FreeBSD-CURRENT/sys/timepp
  	struct timespec	timeout;
  };
  
-+#ifdef RADCLOCK
-+struct radclock_pps_fetch_args {
++#ifdef FFCLOCK
++struct ffclock_pps_fetch_args {
 +	int tsformat;
-+	radclock_pps_info_t	pps_info_buf;
++	ffclock_pps_info_t	pps_info_buf;
 +	struct timespec	timeout;
 +};
-+#endif	/* RADCLOCK */
++#endif	/* FFCLOCK */
 +
  struct pps_kcbind_args {
  	int kernel_consumer;
@@ -2185,9 +1636,9 @@ diff -aur --unidirectional-new-file sys/sys/timepps.h FreeBSD-CURRENT/sys/timepp
  #define PPS_IOC_GETCAP		_IOR('1', 5, int)
  #define PPS_IOC_FETCH		_IOWR('1', 6, struct pps_fetch_args)
  #define PPS_IOC_KCBIND		_IOW('1', 7, struct pps_kcbind_args)
-+#ifdef RADCLOCK
-+#define RADCLOCK_PPS_IOC_FETCH		_IOWR('1', 8, struct radclock_pps_fetch_args)
-+#endif 	/* RADCLOCK */
++#ifdef FFCLOCK
++#define FFCLOCK_PPS_IOC_FETCH		_IOWR('1', 8, struct ffclock_pps_fetch_args)
++#endif 	/* FFCLOCK */
  
  #ifdef _KERNEL
  
@@ -2195,9 +1646,9 @@ diff -aur --unidirectional-new-file sys/sys/timepps.h FreeBSD-CURRENT/sys/timepp
  	/* State information. */
  	pps_params_t	ppsparam;
  	pps_info_t	ppsinfo;
-+#ifdef RADCLOCK
-+	radclock_pps_info_t	radclock_ppsinfo;
-+#endif 	/* RADCLOCK */
++#ifdef FFCLOCK
++	ffclock_pps_info_t	ffclock_ppsinfo;
++#endif 	/* FFCLOCK */
  	int		kcmode;
  	int		ppscap;
  	struct timecounter *ppstc;
@@ -2205,13 +1656,13 @@ diff -aur --unidirectional-new-file sys/sys/timepps.h FreeBSD-CURRENT/sys/timepp
  	return (error);
  }
  
-+#ifdef RADCLOCK
++#ifdef FFCLOCK
 +static __inline int
-+radclock_pps_fetch(pps_handle_t handle, const int tsformat,
-+	radclock_pps_info_t *ppsinfobuf, const struct timespec *timeout)
++ffclock_pps_fetch(pps_handle_t handle, const int tsformat,
++	ffclock_pps_info_t *ppsinfobuf, const struct timespec *timeout)
 +{
 +	int error;
-+	struct radclock_pps_fetch_args arg;
++	struct ffclock_pps_fetch_args arg;
 +
 +	arg.tsformat = tsformat;
 +	if (timeout == NULL) {
@@ -2219,23 +1670,23 @@ diff -aur --unidirectional-new-file sys/sys/timepps.h FreeBSD-CURRENT/sys/timepp
 +		arg.timeout.tv_nsec = -1;
 +	} else
 +		arg.timeout = *timeout;
-+	error = ioctl(handle, RADCLOCK_PPS_IOC_FETCH, &arg);
++	error = ioctl(handle, FFCLOCK_PPS_IOC_FETCH, &arg);
 +	*ppsinfobuf = arg.pps_info_buf;
 +	return (error);
 +}
-+#endif 	/* RADCLOCK */
++#endif 	/* FFCLOCK */
 +
  static __inline int
  time_pps_kcbind(pps_handle_t handle, const int kernel_consumer,
  	const int edge, const int tsformat)
 diff -aur --unidirectional-new-file sys/sys/timetc.h FreeBSD-CURRENT/sys/timetc.h
---- sys/sys/timetc.h	2010-12-03 12:11:59.000000000 +1100
-+++ FreeBSD-CURRENT/sys/timetc.h	2010-12-03 12:34:17.000000000 +1100
+--- sys/sys/timetc.h	2010-12-09 15:14:47.000000000 +1100
++++ FreeBSD-CURRENT/sys/timetc.h	2010-12-09 15:22:46.000000000 +1100
 @@ -16,6 +16,8 @@
  #error "no user-serviceable parts inside"
  #endif
  
-+#include "opt_radclock.h"
++#include "opt_ffclock.h"
 +
  /*-
   * `struct timecounter' is the interface between the hardware which implements
@@ -2244,7 +1695,7 @@ diff -aur --unidirectional-new-file sys/sys/timetc.h FreeBSD-CURRENT/sys/timetc.
  		/* Pointer to the timecounter's private parts. */
  	struct timecounter	*tc_next;
  		/* Pointer to the next timecounter. */
-+#ifdef RADCLOCK
++#ifdef FFCLOCK
 +	uint64_t (*tc_get_timecount_64) (struct timecounter *);
 +		/*
 +		 * This function reads the counter and return a 64 bit unsigned int.

@@ -16,7 +16,7 @@
 #error "no user-serviceable parts inside"
 #endif
 
-#include "opt_radclock.h"
+#include "opt_ffclock.h"
 
 /*-
  * `struct timecounter' is the interface between the hardware which implements
@@ -64,7 +64,7 @@ struct timecounter {
 		/* Pointer to the timecounter's private parts. */
 	struct timecounter	*tc_next;
 		/* Pointer to the next timecounter. */
-#ifdef RADCLOCK
+#ifdef FFCLOCK
 	uint64_t (*tc_get_timecount_64) (struct timecounter *);
 		/*
 		 * This function reads the counter and return a 64 bit unsigned int.
