@@ -6,6 +6,12 @@
  * this stuff is worth it, you can buy me a beer in return.   Poul-Henning Kamp
  * ----------------------------------------------------------------------------
  *
+ * Copyright (C) 2010 The University of Melbourne
+ * All rights reserved.
+ *
+ * Portions of this software were developed by the University of Melbourne
+ * under sponsorship from the FreeBSD Foundation.
+ *
  * $FreeBSD: src/sys/sys/timetc.h,v 1.62 2010/09/14 08:48:06 mav Exp $
  */
 

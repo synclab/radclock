@@ -6,6 +6,12 @@
  * this stuff is worth it, you can buy me a beer in return.   Poul-Henning Kamp
  * ----------------------------------------------------------------------------
  *
+ * Copyright (C) 2010 The University of Melbourne
+ * All rights reserved.
+ *
+ * Portions of this software were developed by the University of Melbourne
+ * under sponsorship from the FreeBSD Foundation.
+ *
  * $FreeBSD: src/sys/sys/timepps.h,v 1.19 2005/01/07 02:29:24 imp Exp $
  *
  * The is a FreeBSD version of the RFC 2783 API for Pulse Per Second 

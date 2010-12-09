@@ -7,6 +7,12 @@
  * to Berkeley by Steven McCanne and Van Jacobson both of Lawrence
  * Berkeley Laboratory.
  *
+ * Copyright (C) 2010 The University of Melbourne
+ * All rights reserved.
+ *
+ * Portions of this software were developed by the University of Melbourne
+ * under sponsorship from the FreeBSD Foundation.
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:

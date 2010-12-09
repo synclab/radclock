@@ -2,8 +2,8 @@
 
 .PATH: ${.CURDIR}/../../kern
 
-KMOD    =  radclock
-SRCS    =  radclock.c
+KMOD    =  ffclock
+SRCS    =  ffclock.c
 
 SRCS+=	opt_ffclock.h
 

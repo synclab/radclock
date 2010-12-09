@@ -5,6 +5,12 @@
  * This code is derived from software contributed to Berkeley by
  * William Jolitz and Don Ahn.
  *
+ * Copyright (C) 2010 The University of Melbourne
+ * All rights reserved.
+ *
+ * Portions of this software were developed by the University of Melbourne
+ * under sponsorship from the FreeBSD Foundation.
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:

@@ -5,7 +5,14 @@
  * can do whatever you want with this stuff. If we meet some day, and you think
  * this stuff is worth it, you can buy me a beer in return.   Poul-Henning Kamp
  * ----------------------------------------------------------------------------
+ *
+ * Copyright (C) 2010 The University of Melbourne
+ * All rights reserved.
+ *
+ * Portions of this software were developed by the University of Melbourne
+ * under sponsorship from the FreeBSD Foundation.
  */
+
 
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD: src/sys/kern/kern_tc.c,v 1.191 2010/09/21 08:02:02 mav Exp $");
