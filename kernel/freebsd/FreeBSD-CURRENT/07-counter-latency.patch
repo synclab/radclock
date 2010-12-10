@@ -1,0 +1,116 @@
+Counter latency.
+
+Research only patch.
+Useful to measure the in-kernel latency of a given counter. Very dirty.
+
+
+---
+ kern/ffclock.c |   97 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 97 insertions(+)
+
+Index: sys/kern/ffclock.c
+===================================================================
+--- sys.orig/kern/ffclock.c	2010-12-10 14:34:08.000000000 +1100
++++ sys/kern/ffclock.c	2010-12-10 15:34:57.000000000 +1100
+@@ -246,4 +246,101 @@ static moduledata_t set_ffclock_mod = {
+ DECLARE_MODULE(set_ffclock, set_ffclock_mod, SI_SUB_SYSCALLS, SI_ORDER_MIDDLE);
+ 
+ 
++/*
++ * Second system call is get_ffcounter_latency to compute the latency of
++ * the timecounter interface from within the kernel
++ *
++ * XXX: of course this makes sense ONLY if we have a stable TSC
++ * (i.e. no SMP, no power management, no frequency jumps etc.)
++ */
++
++struct get_ffcounter_latency_args {
++	ffcounter_t *ffcounter;
++	uint64_t *ffcounter_lat;
++	uint64_t *tsc_lat;
++};
++
++static int
++get_ffcounter_latency(struct proc *td, void *syscall_args)
++{
++	uint64_t tsc1 = 0, tsc2 = 0, tsc3 = 0, ffcounter_lat = 0, tsc_lat = 0;
++	ffcounter_t ffcounter;
++	int error = 0;
++	struct get_ffcounter_latency_args *uap;
++
++	uap = (struct get_ffcounter_latency_args *) syscall_args;
++
++	/* One for fun and warmup */
++	tsc1 = rdtsc();
++	__asm __volatile("lfence" ::: "memory");
++	tsc1 = rdtsc();
++	__asm __volatile("lfence" ::: "memory");
++	tsc2 = rdtsc();
++	__asm __volatile("lfence" ::: "memory");
++	ffcounter = read_ffcounter();
++	__asm __volatile("lfence" ::: "memory");
++	tsc3 = rdtsc();
++	__asm __volatile("lfence" ::: "memory");
++
++	tsc_lat = tsc2 - tsc1;
++	ffcounter_lat = tsc3 - tsc2;
++
++	error += copyout(&ffcounter, uap->ffcounter, sizeof(ffcounter_t));
++	error += copyout(&ffcounter_lat, uap->ffcounter_lat, sizeof(uint64_t));
++	error += copyout(&tsc_lat, uap->tsc_lat, sizeof(uint64_t));
++
++	return(error);
++}
++
++
++static struct sysent get_ffcounter_latency_sysent = {
++	3,
++	(sy_call_t *) get_ffcounter_latency,
++	AUE_NULL,
++	NULL,
++	0,
++	0
++};
++
++
++static int get_ffcounter_latency_offset = NO_SYSCALL;
++
++static int
++get_ffcounter_latency_load (struct module *module, int cmd, void *arg)
++{
++	int error = 0;
++	switch (cmd) {
++		case MOD_LOAD :
++			printf("get_ffcounter_latency syscall loaded at %d \n", get_ffcounter_latency_offset);
++		break;
++		case MOD_UNLOAD :
++			printf("get_ffcounter_latency syscall unloaded from %d\n", get_ffcounter_latency_offset);
++		break;
++		default :
++			error = EINVAL;
++		break;
++	}
++	return error;
++}
++
++/* See comment above for use of SYSCALL_MODULE before 8.1 */
++//SYSCALL_MODULE(get_ffcounter_latency, &get_ffcounter_latency_offset, &get_ffcounter_latency_sysent, get_ffcounter_latency_load, NULL);
++
++static struct syscall_module_data get_ffcounter_latency_syscall_mod = {
++	get_ffcounter_latency_load,
++	NULL,
++	&get_ffcounter_latency_offset,
++	&get_ffcounter_latency_sysent,
++	{ 0, NULL, AUE_NULL}
++};
++
++static moduledata_t get_ffcounter_latency_mod = {
++	"get_ffcounter_latency",
++	syscall_module_handler,
++	&get_ffcounter_latency_syscall_mod
++};
++
++DECLARE_MODULE(get_ffcounter_latency, get_ffcounter_latency_mod, SI_SUB_SYSCALLS, SI_ORDER_MIDDLE);
++
++
+ 

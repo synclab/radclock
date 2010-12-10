@@ -1,0 +1,278 @@
+Feed-forward clock support for Xen.
+
+Allow clock dependent mode of operation and a universal ffcounter to ensure all
+guests see the same time and allow live migration.
+
+---
+ amd64/amd64/tsc.c |   27 +++++++++++++++++++++++++++
+ i386/i386/tsc.c   |   27 +++++++++++++++++++++++++++
+ i386/xen/clock.c  |   35 +++++++++++++++++++++++++++++++++++
+ kern/kern_tc.c    |   20 ++++++++++++++++++++
+ sys/timetc.h      |   16 ++++++++++++++++
+ 5 files changed, 125 insertions(+)
+
+Index: sys/amd64/amd64/tsc.c
+===================================================================
+--- sys.orig/amd64/amd64/tsc.c	2010-12-10 09:18:51.000000000 +1100
++++ sys/amd64/amd64/tsc.c	2010-12-10 15:13:26.000000000 +1100
+@@ -2,6 +2,12 @@
+  * Copyright (C) 1998-2003 Poul-Henning Kamp
+  * All rights reserved.
+  *
++ * Copyright (C) 2010 The University of Melbourne
++ * All rights reserved.
++ *
++ * Portions of this software were developed by the University of Melbourne
++ * under sponsorship from the FreeBSD Foundation.
++ *
+  * Redistribution and use in source and binary forms, with or without
+  * modification, are permitted provided that the following conditions
+  * are met:
+@@ -69,6 +75,18 @@ static void tsc_freq_changing(void *arg,
+ static	unsigned tsc_get_timecount(struct timecounter *tc);
+ static void tsc_levels_changed(void *arg, int unit);
+ 
++#ifdef FFCLOCK
++static uint64_t tsc_get_timecount_64(struct timecounter *tc);
++static struct timecounter tsc_timecounter = {
++	.tc_get_timecount = tsc_get_timecount,
++	.tc_poll_pps = 0,
++	.tc_counter_mask = ~0u,
++	.tc_frequency = 0,
++	.tc_name = "TSC",
++	.tc_quality = 800,
++	.tc_get_timecount_64 = &tsc_get_timecount_64
++};
++#else
+ static struct timecounter tsc_timecounter = {
+ 	tsc_get_timecount,	/* get_timecount */
+ 	0,			/* no poll_pps */
+@@ -77,6 +95,7 @@ static struct timecounter tsc_timecounte
+ 	"TSC",			/* name */
+ 	800,			/* quality (adjusted in code) */
+ };
++#endif
+ 
+ void
+ init_TSC(void)
+@@ -229,3 +248,11 @@ tsc_get_timecount(struct timecounter *tc
+ {
+ 	return (rdtsc());
+ }
++
++#ifdef FFCLOCK
++static uint64_t
++tsc_get_timecount_64(struct timecounter *tc)
++{
++	return (rdtsc());
++}
++#endif
+Index: sys/i386/i386/tsc.c
+===================================================================
+--- sys.orig/i386/i386/tsc.c	2010-12-10 09:19:07.000000000 +1100
++++ sys/i386/i386/tsc.c	2010-12-10 15:15:59.000000000 +1100
+@@ -2,6 +2,12 @@
+  * Copyright (C) 1998-2003 Poul-Henning Kamp
+  * All rights reserved.
+  *
++ * Copyright (C) 2010 The University of Melbourne
++ * All rights reserved.
++ *
++ * Portions of this software were developed by the University of Melbourne
++ * under sponsorship from the FreeBSD Foundation.
++ *
+  * Redistribution and use in source and binary forms, with or without
+  * modification, are permitted provided that the following conditions
+  * are met:
+@@ -70,6 +76,18 @@ static void tsc_freq_changing(void *arg,
+ static	unsigned tsc_get_timecount(struct timecounter *tc);
+ static void tsc_levels_changed(void *arg, int unit);
+ 
++#ifdef FFCLOCK
++static uint64_t tsc_get_timecount_64(struct timecounter *tc);
++static struct timecounter tsc_timecounter = {
++	.tc_get_timecount = tsc_get_timecount,
++	.tc_poll_pps = 0,
++	.tc_counter_mask = ~0u,
++	.tc_frequency = 0,
++	.tc_name = "TSC",
++	.tc_quality = 800,
++	.tc_get_timecount_64 = &tsc_get_timecount_64
++};
++#else
+ static struct timecounter tsc_timecounter = {
+ 	tsc_get_timecount,	/* get_timecount */
+ 	0,			/* no poll_pps */
+@@ -78,6 +96,7 @@ static struct timecounter tsc_timecounte
+ 	"TSC",			/* name */
+ 	800,			/* quality (adjusted in code) */
+ };
++#endif
+ 
+ void
+ init_TSC(void)
+@@ -257,3 +276,11 @@ tsc_get_timecount(struct timecounter *tc
+ {
+ 	return (rdtsc());
+ }
++
++#ifdef FFCLOCK
++static uint64_t
++tsc_get_timecount_64(struct timecounter *tc)
++{
++	return (rdtsc());
++}
++#endif
+Index: sys/i386/xen/clock.c
+===================================================================
+--- sys.orig/i386/xen/clock.c	2010-12-10 09:19:07.000000000 +1100
++++ sys/i386/xen/clock.c	2010-12-10 15:17:40.000000000 +1100
+@@ -5,6 +5,12 @@
+  * This code is derived from software contributed to Berkeley by
+  * William Jolitz and Don Ahn.
+  *
++ * Copyright (C) 2010 The University of Melbourne
++ * All rights reserved.
++ *
++ * Portions of this software were developed by the University of Melbourne
++ * under sponsorship from the FreeBSD Foundation.
++ *
+  * Redistribution and use in source and binary forms, with or without
+  * modification, are permitted provided that the following conditions
+  * are met:
+@@ -292,6 +298,19 @@ static inline int time_values_up_to_date
+ 
+ static	unsigned xen_get_timecount(struct timecounter *tc);
+ 
++#ifdef FFCLOCK
++static uint64_t xen_get_timecount_64(struct timecounter *tc);
++
++static struct timecounter xen_timecounter = {
++	.tc_get_timecount = xen_get_timecount,
++	.tc_poll_pps = 0,
++	.tc_counter_mask = ~0u,
++	.tc_frequency = 0,
++	.tc_name = "ixen",
++	.tc_quality = 0,
++	.tc_get_timecount_64 = &xen_get_timecount_64
++};
++#else
+ static struct timecounter xen_timecounter = {
+ 	xen_get_timecount,	/* get_timecount */
+ 	0,			/* no poll_pps */
+@@ -300,6 +319,7 @@ static struct timecounter xen_timecounte
+ 	"ixen",			/* name */
+ 	0			/* quality */
+ };
++#endif
+ 
+ static int
+ clkintr(void *arg)
+@@ -833,6 +853,21 @@ xen_get_timecount(struct timecounter *tc
+ 
+ }
+ 
++#ifdef FFCLOCK
++static uint64_t
++xen_get_timecount_64(struct timecounter *tc)
++{
++	uint64_t clk;
++	struct shadow_time_info *shadow;
++	shadow = &per_cpu(shadow_time, smp_processor_id());
++
++	__get_time_values_from_xen();
++	clk = shadow->system_timestamp + get_nsec_offset(shadow);
++
++	return clk;
++}
++#endif
++
+ /* Return system time offset by ticks */
+ uint64_t
+ get_system_time(int ticks)
+Index: sys/kern/kern_tc.c
+===================================================================
+--- sys.orig/kern/kern_tc.c	2010-12-10 15:04:48.000000000 +1100
++++ sys/kern/kern_tc.c	2010-12-10 15:22:43.000000000 +1100
+@@ -345,6 +345,11 @@ getmicrotime(struct timeval *tvp)
+  * All Feed-forward clock functions
+  */
+ #ifdef FFCLOCK
++static int sysctl_kern_timecounter_passthrough = 0;
++SYSCTL_INT(_kern_timecounter, OID_AUTO, passthrough, CTLFLAG_RW,
++	&sysctl_kern_timecounter_passthrough, 0,
++	"Select universal Feed-Forward timecounter for OS virtualization");
++
+ /* Global data structure containing clock estimates */
+ static struct feedforward_clock ffclock;
+ 
+@@ -572,6 +577,14 @@ read_ffcounter(void)
+ 		return(ffcounter + delta);
+ 	}
+ }
++
++static __inline uint64_t
++tc_get_timecount_fake64(struct timecounter *tc)
++{
++	u_int count;
++	count = tc->tc_get_timecount(tc);
++	return (uint64_t) count;
++}
+ #endif	/* FFCLOCK */
+ 
+ 
+@@ -601,6 +614,13 @@ tc_init(struct timecounter *tc)
+ 		    tc->tc_quality);
+ 	}
+ 
++#ifdef FFCLOCK
++	/* XXX this is a very ugly but good enough to cover my back */
++	if ((strcmp(tc->tc_name, "TSC") != 0) && (strcmp(tc->tc_name, "ixen") != 0)) {
++		tc->tc_get_timecount_64 = &tc_get_timecount_fake64;
++	}
++#endif
++
+ 	tc->tc_next = timecounters;
+ 	timecounters = tc;
+ 	/*
+Index: sys/sys/timetc.h
+===================================================================
+--- sys.orig/sys/timetc.h	2010-12-10 09:19:15.000000000 +1100
++++ sys/sys/timetc.h	2010-12-10 15:24:18.000000000 +1100
+@@ -6,6 +6,12 @@
+  * this stuff is worth it, you can buy me a beer in return.   Poul-Henning Kamp
+  * ----------------------------------------------------------------------------
+  *
++ * Copyright (C) 2010 The University of Melbourne
++ * All rights reserved.
++ *
++ * Portions of this software were developed by the University of Melbourne
++ * under sponsorship from the FreeBSD Foundation.
++ *
+  * $FreeBSD: src/sys/sys/timetc.h,v 1.62 2010/09/14 08:48:06 mav Exp $
+  */
+ 
+@@ -16,6 +22,8 @@
+ #error "no user-serviceable parts inside"
+ #endif
+ 
++#include "opt_ffclock.h"
++
+ /*-
+  * `struct timecounter' is the interface between the hardware which implements
+  * a timecounter and the MI code which uses this to keep track of time.
+@@ -62,6 +70,14 @@ struct timecounter {
+ 		/* Pointer to the timecounter's private parts. */
+ 	struct timecounter	*tc_next;
+ 		/* Pointer to the next timecounter. */
++#ifdef FFCLOCK
++	uint64_t (*tc_get_timecount_64) (struct timecounter *);
++		/*
++		 * This function reads the counter and return a 64 bit unsigned int.
++		 * It is used for the passthrough mode, required by feed-forward
++		 * clocks in a virtual system (eg. Xen)
++		 */
++#endif
+ };
+ 
+ extern struct timecounter *timecounter;

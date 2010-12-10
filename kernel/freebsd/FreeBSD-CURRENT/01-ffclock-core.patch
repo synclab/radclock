@@ -1,0 +1,482 @@
+FFclock core
+
+Core set of changes to support a feed-forward clock within the kernel.
+
+---
+ conf/NOTES     |   10 +
+ conf/options   |    1 
+ kern/kern_tc.c |  291 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ sys/time.h     |   48 +++++++++
+ 4 files changed, 350 insertions(+)
+
+Index: sys/kern/kern_tc.c
+===================================================================
+--- sys.orig/kern/kern_tc.c	2010-12-10 09:37:55.000000000 +1100
++++ sys/kern/kern_tc.c	2010-12-10 11:54:51.000000000 +1100
+@@ -5,6 +5,12 @@
+  * can do whatever you want with this stuff. If we meet some day, and you think
+  * this stuff is worth it, you can buy me a beer in return.   Poul-Henning Kamp
+  * ----------------------------------------------------------------------------
++ *
++ * Copyright (C) 2010 The University of Melbourne
++ * All rights reserved.
++ *
++ * Portions of this software were developed by the University of Melbourne
++ * under sponsorship from the FreeBSD Foundation.
+  */
+ 
+ #include <sys/cdefs.h>
+@@ -21,6 +27,12 @@ __FBSDID("$FreeBSD: src/sys/kern/kern_tc
+ #include <sys/timetc.h>
+ #include <sys/timex.h>
+ 
++#ifdef FFCLOCK
++#include <sys/time.h>
++#include <sys/types.h>
++#include <sys/malloc.h>
++#endif	/* FFCLOCK */
++
+ /*
+  * A large step happens on boot.  This constant detects such steps.
+  * It is relatively small so that ntp_update_second gets called enough
+@@ -53,6 +65,9 @@ struct timehands {
+ 	int64_t			th_adjustment;
+ 	uint64_t		th_scale;
+ 	u_int	 		th_offset_count;
++#ifdef FFCLOCK
++	ffcounter_t		ffcounter_record;
++#endif
+ 	struct bintime		th_offset;
+ 	struct timeval		th_microtime;
+ 	struct timespec		th_nanotime;
+@@ -61,6 +76,30 @@ struct timehands {
+ 	struct timehands	*th_next;
+ };
+ 
++#ifdef FFCLOCK
++static struct timehands th0;
++static struct timehands th9 = { NULL, 0, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th0};
++static struct timehands th8 = { NULL, 0, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th9};
++static struct timehands th7 = { NULL, 0, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th8};
++static struct timehands th6 = { NULL, 0, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th7};
++static struct timehands th5 = { NULL, 0, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th6};
++static struct timehands th4 = { NULL, 0, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th5};
++static struct timehands th3 = { NULL, 0, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th4};
++static struct timehands th2 = { NULL, 0, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th3};
++static struct timehands th1 = { NULL, 0, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th2};
++static struct timehands th0 = {
++	&dummy_timecounter,
++	0,
++	(uint64_t)-1 / 1000000,
++	0,
++	0,
++	{1, 0},
++	{0, 0},
++	{0, 0},
++	1,
++	&th1
++};
++#else
+ static struct timehands th0;
+ static struct timehands th9 = { NULL, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th0};
+ static struct timehands th8 = { NULL, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th9};
+@@ -82,6 +121,7 @@ static struct timehands th0 = {
+ 	1,
+ 	&th1
+ };
++#endif	/* FFCLOCK */
+ 
+ static struct timehands *volatile timehands = &th0;
+ struct timecounter *timecounter = &dummy_timecounter;
+@@ -300,6 +340,241 @@ getmicrotime(struct timeval *tvp)
+ 	} while (gen == 0 || gen != th->th_generation);
+ }
+ 
++
++/*
++ * All Feed-forward clock functions
++ */
++#ifdef FFCLOCK
++/* Global data structure containing clock estimates */
++static struct feedforward_clock ffclock;
++
++MALLOC_DECLARE(M_FFCLOCK);
++MALLOC_DEFINE(M_FFCLOCK, "FFCLOCK", "Feed-Forward Clock estimates");
++
++
++static void
++init_ffclock(struct feedforward_clock *ffclock)
++{
++	unsigned long sz;
++	sz = sizeof(struct ffclock_estimate);
++
++	ffclock->updated = 0;
++	ffclock->cest	= (struct ffclock_estimate *) malloc(sz, M_FFCLOCK, M_WAITOK | M_ZERO);
++	ffclock->ocest	= (struct ffclock_estimate *) malloc(sz, M_FFCLOCK, M_WAITOK | M_ZERO);
++	ffclock->ucest	= (struct ffclock_estimate *) malloc(sz, M_FFCLOCK, M_WAITOK | M_ZERO);
++}
++
++
++/*
++ * We need to have a boot time from the RTC clock or the like to get
++ * kickstarted. init_ffclock is called before inittodr(), so cannot put the code
++ * there. Need to be called from tc_setclock(), once only.
++ */
++static void
++reset_ffclock(struct feedforward_clock *ffclock, struct timehands *th)
++{
++	uint64_t freq;
++	struct timecounter *tc;
++	struct ffclock_estimate *cest;
++	struct ffclock_data *cdata;
++
++	cest = ffclock->ucest;
++	cdata = &(cest->cdata);
++
++	/*
++	 * If called with a timehand, the timecounter is being changed and we
++	 * restart fresh. If not, the clock is being set from tc_setclock (note that
++	 * this may occur several times during boot).
++	 */
++	if (th) {
++		th->ffcounter_record = 0;
++		cdata->ffcounter = 0;
++		tc = th->th_counter;
++	}
++	else {
++		/*
++		 * Strictly speaking, we should record the ffcounter when the RTC clock is
++		 * read from initoddr(), but not worse the trouble (is RTC trustworthy
++		 * anyway?). Let's keep it simple
++		 */
++		cdata->ffcounter = read_ffcounter();
++		tc = timehands->th_counter;
++	}
++	freq = tc->tc_frequency;
++
++	/* Numbers here are a bit magic */
++	// TODO should check these values ... again
++	cdata->phat_shift = 58;
++	cdata->time_shift = 32;
++	cdata->countdiff_maxbits = 30;
++
++	cdata->phat_int = ((1LL << 63) / freq) >> (63 - cdata->phat_shift);
++
++	cdata->time_int = (boottimebin.sec << cdata->time_shift)
++		+ (boottimebin.frac >> (64 - cdata->time_shift));
++
++	if (++cest->gen == 0)
++		cest->gen = 1;
++
++	ffclock->ucest = ffclock->cest;
++	ffclock->cest = cest;
++
++	cdata = &(ffclock->cest->cdata);
++	printf("reset_ffclock: %s - phat_int = %llu (%llu Hz), time_int = %llu (%llu.%llu s)\n",
++			tc->tc_name,
++			(long long unsigned) cdata->phat_int,
++			(long long unsigned) freq,
++			(long long unsigned) cdata->time_int,
++			(long long unsigned) boottimebin.sec,
++			(long long unsigned) boottimebin.frac);
++
++	/* XXX Technically, should lock, but if radclock module not loaded?
++	 * Also, should make the radclock restart if the counter has changed!!
++	 */
++}
++
++
++/*
++ * Update to prevent overflow. This is no adjustment of the clock parameters.
++ * Assumption: timehands is the current one
++ */
++static void
++update_ffclock(struct feedforward_clock *ffclock)
++{
++	struct ffclock_estimate *tmp;
++	struct ffclock_data *cdata;
++	struct timehands *th;
++	ffcounter_t cdiff;
++
++	/*
++	 * If the clock has been updated by the synchronisation daemon, this new
++	 * data is the more up to date one.
++	 */
++	if ( ffclock->updated )
++	{
++		ffclock->ucest->gen = ffclock->cest->gen;
++		if (++ffclock->ucest->gen == 0)
++			ffclock->ucest->gen = 1;
++
++		tmp = ffclock->cest;
++		ffclock->cest = ffclock->ucest;
++		ffclock->ucest = tmp;
++		ffclock->updated = 0;
++		return;
++	}
++
++	/*
++	 * If we just changed the timecounter, we have nothing to do in here
++	 */
++	cdata = &(ffclock->cest->cdata);
++	th = timehands;
++	if ( cdata->ffcounter > th->ffcounter_record )
++		return;
++
++	/*
++	 * Update time mark
++	 */
++	*(ffclock->ocest) = *(ffclock->cest);
++	cdata = &(ffclock->ocest->cdata);
++
++	cdiff = th->ffcounter_record - cdata->ffcounter;
++	cdata->time_int += ((cdata->phat_int * cdiff) >> (cdata->phat_shift - cdata->time_shift));
++	cdata->ffcounter = th->ffcounter_record;
++	if (++ffclock->ocest->gen == 0)
++		ffclock->ocest->gen = 1;
++
++	tmp = ffclock->cest;
++	ffclock->cest = ffclock->ocest;
++	ffclock->ocest = tmp;
++}
++
++
++
++void
++ffcounter2bintime(ffcounter_t *ffcounter, struct bintime *bt)
++{
++	ffcounter_t countdiff;
++	uint64_t time_f;
++	uint64_t frac;
++	struct ffclock_data *cdata;
++	uint8_t gen;
++
++	/* Synchronization algorithm (userland) should update the fixed point data
++	 * often enough to make sure the timeval does not overflow. If no sync algo
++	 * updates the data, we loose precision, but in that case, nobody is tracking
++	 * the clock drift anyway ... so send warning and stop worrying.
++	 */
++
++	/* No locking to prevent clock data to be updated. Check that the generation
++	 * has not changed instead.
++	 */
++	do {
++		gen = ffclock.cest->gen;
++		cdata = &(ffclock.cest->cdata);
++
++		countdiff = *ffcounter - cdata->ffcounter;
++
++		/*
++		 * update_ffclock() should prevent countdiff to become to large and the
++		 * corresponding time interval added to overflow. Just send warning in
++		 * the unlikely event this is happening.
++		 */
++		if (countdiff & ~((1ll << (cdata->countdiff_maxbits +1)) - 1))
++		{
++			printf("ffclock: warning stamp may overflow timeval at %llu! "
++					"(countdiff = %llu, maxbits = %u)\n",
++					(long long unsigned) *ffcounter,
++					(long long unsigned) countdiff,
++					cdata->countdiff_maxbits);
++		}
++		/* Add the counter delta in second to the recorded fixed point time */
++		time_f 	= cdata->time_int
++			+ ((cdata->phat_int * countdiff) >> (cdata->phat_shift - cdata->time_shift));
++
++		bt->sec  = time_f >> cdata->time_shift;
++
++/*
++		printf("ffclock: ffcounter = %llu bt->sec = %llu, time_int = %llu\n",
++				(long long unsigned) *ffcounter,
++			   	(long long unsigned) bt->sec,
++				(long long unsigned) (cdata->time_int >> cdata->time_shift));
++*/
++		// gives me headaches again
++		// frac * ( 2^64 - 2^time_shift) ... that should be the correct resolution
++		frac = time_f - ((uint64_t) bt->sec << cdata->time_shift);
++		bt->frac = frac * ((uint64_t) 1LL << (64 - cdata->time_shift));
++
++	} while (gen == 0 || gen != ffclock.cest->gen);
++}
++
++
++
++ffcounter_t
++read_ffcounter(void)
++{
++	struct timecounter *tc;
++	struct timehands *th;
++	u_int gen, delta;
++	ffcounter_t ffcounter;
++
++	if ( sysctl_kern_timecounter_passthrough ) {
++		tc = timehands->th_counter;
++		return tc->tc_get_timecount_64(tc);
++	}
++	else {
++		do {
++			th = timehands;
++			gen = th->th_generation;
++			delta = tc_delta(th);
++			ffcounter = th->ffcounter_record;
++		} while ( gen == 0 || gen != th->th_generation);
++
++		return(ffcounter + delta);
++	}
++}
++#endif	/* FFCLOCK */
++
++
+ /*
+  * Initialize a new timecounter and possibly use it.
+  */
+@@ -391,6 +666,10 @@ tc_setclock(struct timespec *ts)
+ 	boottimebin = bt;
+ 	bintime2timeval(&bt, &boottime);
+ 
++#ifdef FFCLOCK
++	reset_ffclock(&ffclock, NULL);
++#endif	/* FFCLOCK */
++
+ 	/* XXX fiddle all the little crinkly bits around the fiords... */
+ 	tc_windup();
+ 	nanotime(&taft);
+@@ -440,6 +719,9 @@ tc_windup(void)
+ 		ncount = timecounter->tc_get_timecount(timecounter);
+ 	else
+ 		ncount = 0;
++#ifdef FFCLOCK
++	th->ffcounter_record += delta;
++#endif
+ 	th->th_offset_count += delta;
+ 	th->th_offset_count &= th->th_counter->tc_counter_mask;
+ 	bintime_addx(&th->th_offset, th->th_scale * delta);
+@@ -486,6 +768,9 @@ tc_windup(void)
+ 		th->th_offset_count = ncount;
+ 		tc_min_ticktock_freq = max(1, timecounter->tc_frequency /
+ 		    (((uint64_t)timecounter->tc_counter_mask + 1) / 3));
++#ifdef FFCLOCK
++		reset_ffclock(&ffclock, th);
++#endif
+ 	}
+ 
+ 	/*-
+@@ -528,6 +813,9 @@ tc_windup(void)
+ 	time_second = th->th_microtime.tv_sec;
+ 	time_uptime = th->th_offset.sec;
+ 	timehands = th;
++#ifdef FFCLOCK
++	update_ffclock(&ffclock);
++#endif
+ }
+ 
+ /* Report or change the active timecounter hardware. */
+@@ -802,6 +1090,9 @@ inittimecounter(void *dummy)
+ 	p = (tc_tick * 1000000) / hz;
+ 	printf("Timecounters tick every %d.%03u msec\n", p / 1000, p % 1000);
+ 
++#ifdef FFCLOCK
++	init_ffclock(&ffclock);
++#endif
+ 	/* warm up new timecounter (again) and get rolling. */
+ 	(void)timecounter->tc_get_timecount(timecounter);
+ 	(void)timecounter->tc_get_timecount(timecounter);
+Index: sys/sys/time.h
+===================================================================
+--- sys.orig/sys/time.h	2010-12-10 09:37:56.000000000 +1100
++++ sys/sys/time.h	2010-12-10 13:10:39.000000000 +1100
+@@ -2,6 +2,12 @@
+  * Copyright (C) 1982, 1986, 1993
+  *	The Regents of the University of California.  All rights reserved.
+  *
++ * Copyright (C) 2010 The University of Melbourne
++ * All rights reserved.
++ *
++ * Portions of this software were developed by the University of Melbourne
++ * under sponsorship from the FreeBSD Foundation.
++ *
+  * Redistribution and use in source and binary forms, with or without
+  * modification, are permitted provided that the following conditions
+  * are met:
+@@ -324,6 +330,48 @@ void	getbintime(struct bintime *bt);
+ void	getnanotime(struct timespec *tsp);
+ void	getmicrotime(struct timeval *tvp);
+ 
++/* FFCLOCK specific */
++typedef uint64_t ffcounter_t;
++
++/* Feed-Forward Clock synchronisation structure */
++
++struct ffclock_data
++{
++	/* phat as an int shifted phat_shift to the left */
++	uint64_t phat_int;
++	/* Record of last time update from synchronization algorithm as an int */
++	uint64_t time_int;
++	/* The counter value to convert in seconds */
++	ffcounter_t ffcounter;
++	/* the shift amount for phat_int */
++	uint8_t phat_shift;
++	/* the shift amount for time_int */
++	uint8_t time_shift;
++	/* Warn if stamp is over this many bits */
++	uint8_t countdiff_maxbits;
++};
++
++struct ffclock_estimate
++{
++	volatile uint8_t gen;
++	struct ffclock_data cdata;
++};
++
++/* Current estimate and old one, no locking on the timestamping side */
++struct feedforward_clock
++{
++	volatile uint8_t updated;
++	struct ffclock_estimate *cest;
++	struct ffclock_estimate *ocest;
++	struct ffclock_estimate *ucest;
++};
++
++
++
++ffcounter_t read_ffcounter(void);
++void ffcounter2bintime(ffcounter_t *ffcounter, struct bintime *bt);
++/* FFCLOCK */
++
+ /* Other functions */
+ int	itimerdecr(struct itimerval *itp, int usec);
+ int	itimerfix(struct timeval *tv);
+Index: sys/conf/NOTES
+===================================================================
+--- sys.orig/conf/NOTES	2010-12-10 09:37:51.000000000 +1100
++++ sys/conf/NOTES	2010-12-10 13:13:18.000000000 +1100
+@@ -1178,6 +1178,16 @@ options 	HZ=100
+ 
+ options 	PPS_SYNC
+ 
++# Enable support for generic Feed-Forward clocks in the kernel.
++# The feed-forward clock support is an alternative to the feedback oriented
++# ntpd/system clock approach, and is to be used with a feed-forward
++# synchronization algorithm such as the RADclock:
++# More info there: http://www.synclab.org/radclock
++#
++# Note: this is an experimental feature.
++
++options 	FFCLOCK
++
+ 
+ #####################################################################
+ # SCSI DEVICES
+Index: sys/conf/options
+===================================================================
+--- sys.orig/conf/options	2010-12-10 09:37:51.000000000 +1100
++++ sys/conf/options	2010-12-10 13:13:54.000000000 +1100
+@@ -75,6 +75,7 @@ COMPRESS_USER_CORES opt_core.h
+ CY_PCI_FASTINTR
+ DEADLKRES	opt_watchdog.h
+ DIRECTIO
++FFCLOCK		opt_ffclock.h
+ FULL_PREEMPTION	opt_sched.h
+ IPI_PREEMPTION	opt_sched.h
+ GEOM_AES	opt_geom.h

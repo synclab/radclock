@@ -1,0 +1,108 @@
+MTAP call in em driver.
+
+Make sure the timestamp created by the BPF is called from section of code that
+will not fail. Otherwise, the timestamp of a packet sent on the interface may be
+created after the packet has reached the destination!
+
+Disable all interrupt throttling. Tune low latency against throughput.
+
+---
+ dev/e1000/if_em.c |   36 +++++++++++++++++++++++++++++-------
+ 1 file changed, 29 insertions(+), 7 deletions(-)
+
+Index: sys/dev/e1000/if_em.c
+===================================================================
+--- sys.orig/dev/e1000/if_em.c	2010-12-10 09:19:02.000000000 +1100
++++ sys/dev/e1000/if_em.c	2010-12-10 15:27:44.000000000 +1100
+@@ -251,7 +251,10 @@ static void	em_refresh_mbufs(struct rx_r
+ static void	em_register_vlan(void *, struct ifnet *, u16);
+ static void	em_unregister_vlan(void *, struct ifnet *, u16);
+ static void	em_setup_vlan_hw_support(struct adapter *);
+-static int	em_xmit(struct tx_ring *, struct mbuf **);
++
++// jrid
++//static int	em_xmit(struct tx_ring *, struct mbuf **);
++static int	em_xmit(struct tx_ring *, struct mbuf **, struct ifnet *);
+ static int	em_dma_malloc(struct adapter *, bus_size_t,
+ 		    struct em_dma_alloc *, int);
+ static void	em_dma_free(struct adapter *, struct em_dma_alloc *);
+@@ -846,14 +849,17 @@ em_mq_start_locked(struct ifnet *ifp, st
+ 
+ 	/* Process the queue */
+ 	while (next != NULL) {
+-		if ((err = em_xmit(txr, &next)) != 0) {
++// jrid
++//		if ((err = em_xmit(txr, &next)) != 0) {
++		if ((err = em_xmit(txr, &next, ifp)) != 0) {
+                         if (next != NULL)
+                                 err = drbr_enqueue(ifp, txr->br, next);
+                         break;
+ 		}
+ 		enq++;
+ 		drbr_stats_update(ifp, next->m_pkthdr.len, next->m_flags);
+-		ETHER_BPF_MTAP(ifp, next);
++// jrid
++//		ETHER_BPF_MTAP(ifp, next);
+ 		if ((ifp->if_drv_flags & IFF_DRV_RUNNING) == 0)
+                         break;
+ 		if (txr->tx_avail < EM_MAX_SCATTER) {
+@@ -942,7 +948,10 @@ em_start_locked(struct ifnet *ifp, struc
+ 		 *  Encapsulation can modify our pointer, and or make it
+ 		 *  NULL on failure.  In that event, we can't requeue.
+ 		 */
+-		if (em_xmit(txr, &m_head)) {
++// jrid
++// To be able to call BPF_MTAP from em_xmit
++//		if (em_xmit(txr, &m_head)) {
++		if (em_xmit(txr, &m_head, ifp)) {
+ 			if (m_head == NULL)
+ 				break;
+ 			ifp->if_drv_flags |= IFF_DRV_OACTIVE;
+@@ -951,7 +960,11 @@ em_start_locked(struct ifnet *ifp, struc
+ 		}
+ 
+ 		/* Send a copy of the frame to the BPF listener */
+-		ETHER_BPF_MTAP(ifp, m_head);
++// jrid
++// This call after em_xmit() does not preserve causality
++// If called before em_xmit() (which can fail) takes the risk to send 2 copies of the
++// same packet. Need to move it into em_xmit()
++//		ETHER_BPF_MTAP(ifp, m_head);
+ 
+ 		/* Set timeout in case hardware has problems transmitting. */
+ 		txr->watchdog_time = ticks;
+@@ -1743,8 +1756,11 @@ em_media_change(struct ifnet *ifp)
+  *  return 0 on success, positive on failure
+  **********************************************************************/
+ 
++// jrid
++//static int
++//em_xmit(struct tx_ring *txr, struct mbuf **m_headp)
+ static int
+-em_xmit(struct tx_ring *txr, struct mbuf **m_headp)
++em_xmit(struct tx_ring *txr, struct mbuf **m_headp, struct ifnet *ifp)
+ {
+ 	struct adapter		*adapter = txr->adapter;
+ 	bus_dma_segment_t	segs[EM_MAX_SCATTER];
+@@ -2034,6 +2050,9 @@ em_xmit(struct tx_ring *txr, struct mbuf
+ 	/* Update the watchdog time early and often */
+ 	txr->watchdog_time = ticks;
+ 
++// jrid
++// This cannot fail
++		ETHER_BPF_MTAP(ifp, m_head);
+ 	/*
+ 	 * Advance the Transmit Descriptor Tail (TDT), this tells the E1000
+ 	 * that this frame is available to transmit.
+@@ -4071,7 +4090,10 @@ em_initialize_receive_unit(struct adapte
+ 	 * Set the interrupt throttling rate. Value is calculated
+ 	 * as DEFAULT_ITR = 1/(MAX_INTS_PER_SEC * 256ns)
+ 	 */
+-	E1000_WRITE_REG(hw, E1000_ITR, DEFAULT_ITR);
++// jrid
++// Disable any type of interrupt throttling
++//	E1000_WRITE_REG(hw, E1000_ITR, DEFAULT_ITR);
++	E1000_WRITE_REG(hw, E1000_ITR, 0);
+ 
+ 	/*
+ 	** When using MSIX interrupts we need to throttle
