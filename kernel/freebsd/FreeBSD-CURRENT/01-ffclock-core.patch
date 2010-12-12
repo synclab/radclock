@@ -3,16 +3,16 @@ FFclock core
 Core set of changes to support a feed-forward clock within the kernel.
 
 ---
- conf/NOTES     |   10 +
+ conf/NOTES     |   10 ++
  conf/options   |    1 
- kern/kern_tc.c |  291 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ kern/kern_tc.c |  285 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++
  sys/time.h     |   48 +++++++++
- 4 files changed, 350 insertions(+)
+ 4 files changed, 344 insertions(+)
 
 Index: sys/kern/kern_tc.c
 ===================================================================
---- sys.orig/kern/kern_tc.c	2010-12-10 09:37:55.000000000 +1100
-+++ sys/kern/kern_tc.c	2010-12-10 11:54:51.000000000 +1100
+--- sys.orig/kern/kern_tc.c	2010-12-12 11:43:35.000000000 +1100
++++ sys/kern/kern_tc.c	2010-12-12 11:45:10.000000000 +1100
 @@ -5,6 +5,12 @@
   * can do whatever you want with this stuff. If we meet some day, and you think
   * this stuff is worth it, you can buy me a beer in return.   Poul-Henning Kamp
@@ -88,7 +88,7 @@ Index: sys/kern/kern_tc.c
  
  static struct timehands *volatile timehands = &th0;
  struct timecounter *timecounter = &dummy_timecounter;
-@@ -300,6 +340,241 @@ getmicrotime(struct timeval *tvp)
+@@ -300,6 +340,235 @@ getmicrotime(struct timeval *tvp)
  	} while (gen == 0 || gen != th->th_generation);
  }
  
@@ -309,20 +309,14 @@ Index: sys/kern/kern_tc.c
 +	u_int gen, delta;
 +	ffcounter_t ffcounter;
 +
-+	if ( sysctl_kern_timecounter_passthrough ) {
-+		tc = timehands->th_counter;
-+		return tc->tc_get_timecount_64(tc);
-+	}
-+	else {
-+		do {
-+			th = timehands;
-+			gen = th->th_generation;
-+			delta = tc_delta(th);
-+			ffcounter = th->ffcounter_record;
-+		} while ( gen == 0 || gen != th->th_generation);
++	do {
++		th = timehands;
++		gen = th->th_generation;
++		delta = tc_delta(th);
++		ffcounter = th->ffcounter_record;
++	} while ( gen == 0 || gen != th->th_generation);
 +
-+		return(ffcounter + delta);
-+	}
++	return(ffcounter + delta);
 +}
 +#endif	/* FFCLOCK */
 +
@@ -330,7 +324,7 @@ Index: sys/kern/kern_tc.c
  /*
   * Initialize a new timecounter and possibly use it.
   */
-@@ -391,6 +666,10 @@ tc_setclock(struct timespec *ts)
+@@ -391,6 +660,10 @@ tc_setclock(struct timespec *ts)
  	boottimebin = bt;
  	bintime2timeval(&bt, &boottime);
  
@@ -341,7 +335,7 @@ Index: sys/kern/kern_tc.c
  	/* XXX fiddle all the little crinkly bits around the fiords... */
  	tc_windup();
  	nanotime(&taft);
-@@ -440,6 +719,9 @@ tc_windup(void)
+@@ -440,6 +713,9 @@ tc_windup(void)
  		ncount = timecounter->tc_get_timecount(timecounter);
  	else
  		ncount = 0;
@@ -351,7 +345,7 @@ Index: sys/kern/kern_tc.c
  	th->th_offset_count += delta;
  	th->th_offset_count &= th->th_counter->tc_counter_mask;
  	bintime_addx(&th->th_offset, th->th_scale * delta);
-@@ -486,6 +768,9 @@ tc_windup(void)
+@@ -486,6 +762,9 @@ tc_windup(void)
  		th->th_offset_count = ncount;
  		tc_min_ticktock_freq = max(1, timecounter->tc_frequency /
  		    (((uint64_t)timecounter->tc_counter_mask + 1) / 3));
@@ -361,7 +355,7 @@ Index: sys/kern/kern_tc.c
  	}
  
  	/*-
-@@ -528,6 +813,9 @@ tc_windup(void)
+@@ -528,6 +807,9 @@ tc_windup(void)
  	time_second = th->th_microtime.tv_sec;
  	time_uptime = th->th_offset.sec;
  	timehands = th;
@@ -371,7 +365,7 @@ Index: sys/kern/kern_tc.c
  }
  
  /* Report or change the active timecounter hardware. */
-@@ -802,6 +1090,9 @@ inittimecounter(void *dummy)
+@@ -802,6 +1084,9 @@ inittimecounter(void *dummy)
  	p = (tc_tick * 1000000) / hz;
  	printf("Timecounters tick every %d.%03u msec\n", p / 1000, p % 1000);
  
@@ -383,8 +377,8 @@ Index: sys/kern/kern_tc.c
  	(void)timecounter->tc_get_timecount(timecounter);
 Index: sys/sys/time.h
 ===================================================================
---- sys.orig/sys/time.h	2010-12-10 09:37:56.000000000 +1100
-+++ sys/sys/time.h	2010-12-10 13:10:39.000000000 +1100
+--- sys.orig/sys/time.h	2010-12-12 11:43:35.000000000 +1100
++++ sys/sys/time.h	2010-12-12 11:44:40.000000000 +1100
 @@ -2,6 +2,12 @@
   * Copyright (C) 1982, 1986, 1993
   *	The Regents of the University of California.  All rights reserved.
@@ -449,8 +443,8 @@ Index: sys/sys/time.h
  int	itimerfix(struct timeval *tv);
 Index: sys/conf/NOTES
 ===================================================================
---- sys.orig/conf/NOTES	2010-12-10 09:37:51.000000000 +1100
-+++ sys/conf/NOTES	2010-12-10 13:13:18.000000000 +1100
+--- sys.orig/conf/NOTES	2010-12-12 11:43:35.000000000 +1100
++++ sys/conf/NOTES	2010-12-12 11:44:40.000000000 +1100
 @@ -1178,6 +1178,16 @@ options 	HZ=100
  
  options 	PPS_SYNC
@@ -470,8 +464,8 @@ Index: sys/conf/NOTES
  # SCSI DEVICES
 Index: sys/conf/options
 ===================================================================
---- sys.orig/conf/options	2010-12-10 09:37:51.000000000 +1100
-+++ sys/conf/options	2010-12-10 13:13:54.000000000 +1100
+--- sys.orig/conf/options	2010-12-12 11:43:35.000000000 +1100
++++ sys/conf/options	2010-12-12 11:44:40.000000000 +1100
 @@ -75,6 +75,7 @@ COMPRESS_USER_CORES opt_core.h
  CY_PCI_FASTINTR
  DEADLKRES	opt_watchdog.h
