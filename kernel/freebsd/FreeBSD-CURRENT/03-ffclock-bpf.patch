@@ -10,8 +10,8 @@ Allow to choose between feedback and feed-forward clock for timestamping.
 
 Index: sys/net/bpf.h
 ===================================================================
---- sys.orig/net/bpf.h	2010-12-10 09:19:12.000000000 +1100
-+++ sys/net/bpf.h	2010-12-10 14:51:59.000000000 +1100
+--- sys.orig/net/bpf.h	2010-12-13 19:11:08.000000000 +1100
++++ sys/net/bpf.h	2010-12-13 19:11:13.000000000 +1100
 @@ -7,6 +7,12 @@
   * to Berkeley by Steven McCanne and Van Jacobson both of Lawrence
   * Berkeley Laboratory.
@@ -109,8 +109,8 @@ Index: sys/net/bpf.h
  #define	MTAG_BPF_TIMESTAMP	0
 Index: sys/net/bpf.c
 ===================================================================
---- sys.orig/net/bpf.c	2010-12-10 09:19:12.000000000 +1100
-+++ sys/net/bpf.c	2010-12-10 14:55:39.000000000 +1100
+--- sys.orig/net/bpf.c	2010-12-13 19:11:08.000000000 +1100
++++ sys/net/bpf.c	2010-12-13 19:11:13.000000000 +1100
 @@ -7,6 +7,12 @@
   * to Berkeley by Steven McCanne and Van Jacobson both of Lawrence
   * Berkeley Laboratory.

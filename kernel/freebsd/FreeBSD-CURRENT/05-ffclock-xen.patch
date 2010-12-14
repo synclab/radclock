@@ -7,14 +7,14 @@ guests see the same time and allow live migration.
  amd64/amd64/tsc.c |   27 +++++++++++++++++++++++++++
  i386/i386/tsc.c   |   27 +++++++++++++++++++++++++++
  i386/xen/clock.c  |   35 +++++++++++++++++++++++++++++++++++
- kern/kern_tc.c    |   40 +++++++++++++++++++++++++++++++++-------
+ kern/kern_tc.c    |   41 ++++++++++++++++++++++++++++++++++-------
  sys/timetc.h      |   16 ++++++++++++++++
- 5 files changed, 138 insertions(+), 7 deletions(-)
+ 5 files changed, 139 insertions(+), 7 deletions(-)
 
 Index: sys/amd64/amd64/tsc.c
 ===================================================================
---- sys.orig/amd64/amd64/tsc.c	2010-12-10 16:04:15.000000000 +1100
-+++ sys/amd64/amd64/tsc.c	2010-12-12 11:47:03.000000000 +1100
+--- sys.orig/amd64/amd64/tsc.c	2010-12-13 11:55:40.000000000 +1100
++++ sys/amd64/amd64/tsc.c	2010-12-13 11:59:47.000000000 +1100
 @@ -2,6 +2,12 @@
   * Copyright (C) 1998-2003 Poul-Henning Kamp
   * All rights reserved.
@@ -69,8 +69,8 @@ Index: sys/amd64/amd64/tsc.c
 +#endif
 Index: sys/i386/i386/tsc.c
 ===================================================================
---- sys.orig/i386/i386/tsc.c	2010-12-10 16:04:15.000000000 +1100
-+++ sys/i386/i386/tsc.c	2010-12-12 11:47:03.000000000 +1100
+--- sys.orig/i386/i386/tsc.c	2010-12-13 11:55:40.000000000 +1100
++++ sys/i386/i386/tsc.c	2010-12-13 11:59:47.000000000 +1100
 @@ -2,6 +2,12 @@
   * Copyright (C) 1998-2003 Poul-Henning Kamp
   * All rights reserved.
@@ -125,8 +125,8 @@ Index: sys/i386/i386/tsc.c
 +#endif
 Index: sys/i386/xen/clock.c
 ===================================================================
---- sys.orig/i386/xen/clock.c	2010-12-10 16:04:15.000000000 +1100
-+++ sys/i386/xen/clock.c	2010-12-12 11:47:03.000000000 +1100
+--- sys.orig/i386/xen/clock.c	2010-12-13 11:55:40.000000000 +1100
++++ sys/i386/xen/clock.c	2010-12-13 11:59:47.000000000 +1100
 @@ -5,6 +5,12 @@
   * This code is derived from software contributed to Berkeley by
   * William Jolitz and Don Ahn.
@@ -192,8 +192,8 @@ Index: sys/i386/xen/clock.c
  get_system_time(int ticks)
 Index: sys/kern/kern_tc.c
 ===================================================================
---- sys.orig/kern/kern_tc.c	2010-12-12 11:46:58.000000000 +1100
-+++ sys/kern/kern_tc.c	2010-12-12 11:49:31.000000000 +1100
+--- sys.orig/kern/kern_tc.c	2010-12-13 11:59:30.000000000 +1100
++++ sys/kern/kern_tc.c	2010-12-13 12:00:08.000000000 +1100
 @@ -345,6 +345,11 @@ getmicrotime(struct timeval *tvp)
   * All Feed-forward clock functions
   */
@@ -206,7 +206,11 @@ Index: sys/kern/kern_tc.c
  /* Global data structure containing clock estimates */
  static struct feedforward_clock ffclock;
  
-@@ -557,14 +562,28 @@ read_ffcounter(void)
+@@ -553,17 +558,32 @@ ffcounter_t
+ read_ffcounter(void)
+ {
+ 	struct timehands *th;
++	struct timecounter *tc;
  	u_int gen, delta;
  	ffcounter_t ffcounter;
  
@@ -227,12 +231,12 @@ Index: sys/kern/kern_tc.c
 +			delta = tc_delta(th);
 +			ffcounter = th->ffcounter_record;
 +		} while ( gen == 0 || gen != th->th_generation);
- 
--	return(ffcounter + delta);
++
 +		return(ffcounter + delta);
 +	}
 +}
-+
+ 
+-	return(ffcounter + delta);
 +static __inline uint64_t
 +tc_get_timecount_fake64(struct timecounter *tc)
 +{
@@ -242,7 +246,7 @@ Index: sys/kern/kern_tc.c
  }
  #endif	/* FFCLOCK */
  
-@@ -595,6 +614,13 @@ tc_init(struct timecounter *tc)
+@@ -594,6 +614,13 @@ tc_init(struct timecounter *tc)
  		    tc->tc_quality);
  	}
  
@@ -258,8 +262,8 @@ Index: sys/kern/kern_tc.c
  	/*
 Index: sys/sys/timetc.h
 ===================================================================
---- sys.orig/sys/timetc.h	2010-12-10 16:04:15.000000000 +1100
-+++ sys/sys/timetc.h	2010-12-12 11:47:03.000000000 +1100
+--- sys.orig/sys/timetc.h	2010-12-13 11:55:40.000000000 +1100
++++ sys/sys/timetc.h	2010-12-13 11:59:47.000000000 +1100
 @@ -6,6 +6,12 @@
   * this stuff is worth it, you can buy me a beer in return.   Poul-Henning Kamp
   * ----------------------------------------------------------------------------
