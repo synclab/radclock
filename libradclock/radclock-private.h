@@ -195,7 +195,6 @@ struct radclock
 	/* Syscalls */
 	int syscall_set_ffclock;	/* FreeBSD specific, so far */
 	int syscall_get_vcounter;
-	int syscall_get_vcounter_latency;
 
 	/* Output file descriptors */
 	FILE* stampout_fd;

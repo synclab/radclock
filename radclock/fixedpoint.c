@@ -111,6 +111,16 @@ int calculate_fixedpoint_data(vcounter_t vcounter_ref,
 	fpdata->time_shift = time_shift;
 	fpdata->countdiff_maxbits = countdiff_maxbits;
 	fpdata->vcounter_ref = vcounter_ref;
+
+/*
+verbose(LOG_ERR, "time_shift= %u, phat_shift= %u, maxbit= %u",
+		time_shift, phat_shift, countdiff_maxbits);
+
+verbose(LOG_ERR, "initffclock: phat_int= %llu, time_int= %llu\n",
+			(long long unsigned) fpdata->phat_int,
+			(long long unsigned) fpdata->time_int);
+*/
+
 	return 0;
 }
 

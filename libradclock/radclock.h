@@ -79,7 +79,6 @@ vcounter_t radclock_readtsc(void);
  * @return the current value of the vcounter
  */
 int radclock_get_vcounter(struct radclock *handle, vcounter_t *vcount);
-int radclock_get_vcounter_latency(struct radclock *handle, vcounter_t *vcount, vcounter_t *vcount_lat, tsc_t *tsc_lat);
 
 
 /**

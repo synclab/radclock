@@ -202,8 +202,6 @@ int radclock_init_vcounter_syscall(struct radclock *handle)
 	handle->syscall_get_vcounter = LINUX_SYSCALL_GET_VCOUNTER;
 	logger(RADLOG_NOTICE, "registered get_vcounter syscall at %d", handle->syscall_get_vcounter);
 
-	handle->syscall_get_vcounter_latency = LINUX_SYSCALL_GET_VCOUNTER_LATENCY;
-	logger(RADLOG_NOTICE, "registered get_vcounter_latency syscall at %d", handle->syscall_get_vcounter_latency);
 	return 0;
 }
 

@@ -90,7 +90,6 @@ struct radclock * radclock_create(void)
 	/* Syscall */
 	clock->syscall_set_ffclock = 0;
 	clock->syscall_get_vcounter = 0;
-	clock->syscall_get_vcounter_latency = 0;
 
 	/* PCAP */
 	clock->pcap_handle 	= NULL;

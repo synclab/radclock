@@ -164,16 +164,3 @@ int radclock_get_vcounter_syscall(struct radclock *handle, vcounter_t *vcount)
 
 
 
-
-int radclock_get_vcounter_latency(struct radclock *handle, vcounter_t *vcount, vcounter_t *vcount_lat, tsc_t *tsc_lat)
-{
-	int ret;
-	ret = syscall(handle->syscall_get_vcounter_latency, vcount, vcount_lat, tsc_lat);
-	
-	if ( ret < 0 ) {
-		logger(RADLOG_ERR, "error on syscall get_vcounter_latency: %s", strerror(errno));
-		return -1;
-	}
-	return 0;
-}
-

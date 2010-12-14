@@ -64,7 +64,7 @@ int found_ffwd_kernel_version(void)
 int radclock_init_vcounter_syscall(struct radclock *handle)
 {
 	handle->syscall_get_vcounter = 0;
-	handle->syscall_get_vcounter_latency = 0;
+	handle->syscall_set_ffclock = 0;
 	return 0;
 }
 
