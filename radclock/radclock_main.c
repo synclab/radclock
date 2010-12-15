@@ -512,6 +512,7 @@ int main (int argc, char *argv[])
 
 	/* Misc */
 	int err;
+	int have_fixed_point_thread = 0;
 
 	/* turn off buffering to allow results to be seen immediately if JDEBUG*/
 	#ifdef WITH_JDEBUG
@@ -925,10 +926,18 @@ int main (int argc, char *argv[])
 			/* To be able to provide the RADCLOCK timestamping
 			 * mode, we need to refresh the fixed point data in the kernel.
 			 * That's this guy's job.
+			 * XXX Update: with kernel version 2, the overflow problem is taking
+			 * care of by the kernel. The fixedpoint thread is deprecated and
+			 * should be removed in the future
 			 */
-			if ( (clock_handle->run_mode == RADCLOCK_SYNC_LIVE) && (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER) ) {
+			if ( (clock_handle->run_mode == RADCLOCK_SYNC_LIVE) 
+					&& (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER)
+			  		&& (clock_handle->kernel_version < 2) )
+			{
 				err = start_thread_FIXEDPOINT(clock_handle);
-				if (err < 0) 	return 1;
+				if (err < 0)
+					return 1;
+				have_fixed_point_thread = 1;
 			}
 
 			/* That's our main capture loop, it does not return until the end of
@@ -968,8 +977,12 @@ int main (int argc, char *argv[])
 			}
 			pthread_join(clock_handle->threads[PTH_TRIGGER], &thread_status);
 			verbose(LOG_NOTICE, "Trigger thread is dead.");
-			pthread_join(clock_handle->threads[PTH_FIXEDPOINT], &thread_status);
-			verbose(LOG_NOTICE, "Kernel fixedpoint thread is dead.");
+
+			if ( have_fixed_point_thread )
+			{
+				pthread_join(clock_handle->threads[PTH_FIXEDPOINT], &thread_status);
+				verbose(LOG_NOTICE, "Kernel fixedpoint thread is dead.");
+			}
 			
 			/* Join on TERM since algo has been told to die */
 			if (clock_handle->unix_signal != SIGHUP) 

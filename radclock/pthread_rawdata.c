@@ -460,50 +460,8 @@ int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 	process_bidir_stamp(clock_handle, peer, BST(&stamp), stamp.qual_warning);
 
 
-// XXX The following hasn't been used since r885 when we moved to fixed point
-// arithmetic. A single syscall for updating all data should be enough anyway.
-// TODO: all of this should be nuked, including os specific functions 
-	/* Update the radclock i.e. the global data 
-	 * Done only in the case of reading from a live device and if 
-	 * the update flag is on.
-	 */
-if (0)
-{
-	if ( (clock_handle->run_mode == RADCLOCK_SYNC_LIVE) && (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER) ) 
-	{
-		// Use the clock we just created to update the global data
-		if ( (radclock_set_kernelclock(clock_handle)) < 0) {
-			verbose(LOG_ERR, "Could not SET global data to the kernel clock");
-		}
-		else {
-			verbose(VERB_DEBUG, "Kernel clock updated");
-		}
-		if (VERB_LEVEL > 1) {
-			struct radclock *tmp_clock; 
-			tmp_clock = radclock_create();
-			*(PRIV_DATA(tmp_clock)) = *(PRIV_DATA(clock_handle));
- 
-			// This is an explicit call for an update of the user clock
-			if ( (radclock_read_kernelclock(tmp_clock)) < 0) {
-				verbose(LOG_ERR, "Could not GET global data from the kernel");
-			}
-			else {
-				verbose(VERB_DEBUG, "Kernel clock: last vcounter= %llu p= %.9lg Ca= %.9Lf",
-						RAD_DATA(tmp_clock)->last_changed, 
-						RAD_DATA(tmp_clock)->phat, RAD_DATA(tmp_clock)->ca);
-			}
-			radclock_destroy(tmp_clock);
-		}
-	}
-}
-// XXX nuke till here
-
-	/* Update any virtual machine store if configured */
-	if ( (clock_handle->run_mode == RADCLOCK_SYNC_LIVE) && (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER) ) 
-	{
-		RAD_VM(clock_handle)->push_data(clock_handle);
-	}
-
+// TODO: may have to kill the fixedpoint thread altogether with newer versions
+// of the kernel, need to make it conditional on version ...
 	/* To improve data accuracy, we kick a fixed point data update just after we
 	 * have preocessed a new stamp. Locking is handled by the kernel so we should
 	 * not have concurrency issue with the two threads updating the data
@@ -511,6 +469,12 @@ if (0)
 	if ( (clock_handle->run_mode == RADCLOCK_SYNC_LIVE) && (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER) ) {
 		update_kernel_fixed(clock_handle);
 		verbose(VERB_DEBUG, "Sync thread updated fixed point data to kernel.");
+	}
+
+	/* Update any virtual machine store if configured */
+	if ( (clock_handle->run_mode == RADCLOCK_SYNC_LIVE) && (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER) ) 
+	{
+		RAD_VM(clock_handle)->push_data(clock_handle);
 	}
 
 	/* Adjust the system clock, we only pass in here if we are not piggybacking
