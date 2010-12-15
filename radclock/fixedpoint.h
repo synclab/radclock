@@ -121,5 +121,6 @@
 
 int update_kernel_fixed(struct radclock *handle);
 
+int build_ffclock_data(struct radclock *clock_handle, struct ffclock_data *fdata);
 
 #endif

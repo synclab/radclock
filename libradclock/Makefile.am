@@ -19,7 +19,7 @@
 
 lib_LTLIBRARIES = libradclock.la
 include_HEADERS = radclock.h
-noinst_HEADERS = linux-private.h local-genetlink.h logger.h radclock-private.h
+noinst_HEADERS = local-genetlink.h logger.h radclock-private.h
 
 libradclock_la_SOURCES = radapi-base.c radapi-getset.c radapi-time.c radapi-pcap.c logger.c radclock-read.c radkernel-linux.c linux-private.h radkernel-fbsd.c radkernel-none.c local-genetlink.h
 

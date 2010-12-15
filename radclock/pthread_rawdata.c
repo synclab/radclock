@@ -27,6 +27,7 @@
 #include "sync_algo.h"
 #include "radclock.h"
 #include "radclock-private.h"
+#include "ffclock.h"
 #include "fixedpoint.h"
 #include "verbose.h"
 #include "proto_ntp.h"
@@ -466,9 +467,25 @@ int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 	 * have preocessed a new stamp. Locking is handled by the kernel so we should
 	 * not have concurrency issue with the two threads updating the data
 	 */ 	
-	if ( (clock_handle->run_mode == RADCLOCK_SYNC_LIVE) && (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER) ) {
-		update_kernel_fixed(clock_handle);
-		verbose(VERB_DEBUG, "Sync thread updated fixed point data to kernel.");
+	if ( (clock_handle->run_mode == RADCLOCK_SYNC_LIVE) 
+			&& (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER) )
+	{
+		if ( clock_handle->kernel_version < 2 )
+		{	
+			update_kernel_fixed(clock_handle);
+			verbose(VERB_DEBUG, "Sync pthread updated fixed point data to kernel.");
+		}
+		else {
+			/* If we are starting (or restarting), the last estimate in the kernel
+			 * may be better than ours after the very first stamp. Let's make sure we do
+			 * not push something too stupid
+			 */
+			if ( OUTPUT(clock_handle, n_stamps) < NTP_BURST )
+				return 0;
+
+			set_kernel_ffclock(clock_handle);
+			verbose(VERB_DEBUG, "Feed-forward kernel clock has been set.");
+		}
 	}
 
 	/* Update any virtual machine store if configured */

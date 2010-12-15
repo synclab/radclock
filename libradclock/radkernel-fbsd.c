@@ -22,12 +22,12 @@
 #ifdef WITH_RADKERNEL_FBSD
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
+//#include <unistd.h>
 #include <sys/types.h>
 #include <sys/time.h>
 #include <sys/ioctl.h>
 #include <sys/module.h>
-#include <sys/syscall.h>
+//#include <sys/syscall.h>
 #include <sys/sysctl.h>
 #include <sys/socket.h>
 #include <syslog.h>
@@ -37,25 +37,17 @@
 
 #include <pcap.h>
 
-#include <radclock.h>
+#include "radclock.h"
 #include "radclock-private.h"
 #include "logger.h"
 
 
 
-/* Old kernel patches for feed-forward support versions 0 and 1.
+/* XXX Deprecated
+ * Old kernel patches for feed-forward support versions 0 and 1.
  * Used to add more IOCTL to the BPF device. The actual IOCTL number depends on
  * the OS version, detected in configure script.
  */ 
-/* for setting global clock data */ 
-#ifndef BIOCSRADCLOCKDATA 
-#define BIOCSRADCLOCKDATA	_IOW('B', FREEBSD_RADCLOCK_IOCTL, struct radclock_data)
-#endif
-
-/* for getting global clock data */
-#ifndef BIOCGRADCLOCKDATA 
-#define BIOCGRADCLOCKDATA	_IOR('B', FREEBSD_RADCLOCK_IOCTL + 1, struct radclock_data)
-#endif
 
 /* for setting radclock timestamping mode */
 #ifndef BIOCSRADCLOCKTSMODE
@@ -67,10 +59,6 @@
 #define BIOCGRADCLOCKTSMODE	_IOR('B', FREEBSD_RADCLOCK_IOCTL + 3, int8_t)
 #endif
 
-/* for setting fixedpoint clock data */ 
-#ifndef BIOCSRADCLOCKFIXED 
-#define BIOCSRADCLOCKFIXED	_IOW('B', FREEBSD_RADCLOCK_IOCTL + 4, struct radclock_fixedpoint)
-#endif
 
 
 /* Kernel patches version 2 set the timestamping mode with new IOCTL calls.
@@ -96,7 +84,8 @@
 
 
 
-/* Redefinition of the BPF header as in bpf.h Just to avoid to have to include
+/* XXX Can we clean that ??
+ * Redefinition of the BPF header as in bpf.h Just to avoid to have to include
  * the file again and define the RADCLOCK symbol at compilation time.  Changed
  * name to avoid redefinition problem. pcap.h includes bpf.h but without the
  * vcount field.
@@ -113,50 +102,8 @@ struct vcount_bpf_hdr
 };
 
 
-
-/* Need to check that the passthrough mode is enabled and that the counter can
- * do the job. The latter is a bit "hard coded"
- */
-int has_vm_vcounter(void)
-{
-	int ret;
-	int	passthrough_counter = 0;
-	char timecounter[32];
-	size_t size_ctl;
-
-	size_ctl = sizeof(passthrough_counter);
-	ret = sysctlbyname("kern.timecounter.passthrough", &passthrough_counter, &size_ctl, NULL, 0);
-	if (ret == -1)
-	{
-		logger(RADLOG_ERR, "Cannot find kern.timecounter.passthrough in sysctl");
-		return 0;
-	}
-
-	if ( passthrough_counter == 0)
-	{
-		logger(RADLOG_ERR, "Timecounter not in pass-through mode. Cannot init virtual machine mode");
-		return 0;
-	}
-	logger(RADLOG_NOTICE, "Found timecounter in pass-through mode");
-
-	size_ctl = sizeof(timecounter);
-	ret = sysctlbyname("kern.timecounter.hardware", &timecounter[0], &size_ctl, NULL, 0);
-	if (ret == -1)
-	{
-		logger(RADLOG_ERR, "Cannot find kern.timecounter.hardware in sysctl");
-		return 0;
-	}
-
-	if ( (strcmp(timecounter, "TSC") != 0) && (strcmp(timecounter, "ixen") != 0) )
-		logger(RADLOG_WARNING, "Timecounter is neither TSC nor ixen. "
-				"There must be something wrong!!");
-	else
-		logger(RADLOG_WARNING, "Timecounter is %s", timecounter);
-
-	return 1;
-}
-
-
+// TODO move out of the library and use IPC call to retrieve the value from
+// radclock if needed ??
 int found_ffwd_kernel_version (void) 
 {
 	int ret;
@@ -287,163 +234,6 @@ int radclock_init_vcounter(struct radclock *handle)
 
 
 
-
-int radclock_init_kernel_support(struct radclock *handle)
-{
-	/* Kernel version 0 and 1 variables */
-	int fd = -1;
-	int devnum;
-	char fname[30];
-
-	/* Kernel version 2 variables */
-	int err;
-	struct module_stat stat;
-
-	switch (handle->kernel_version)
-	{
-
-	case 0:
-	case 1:
-		/* This is super ugly, we open a second BPF to write the clock data,
-		 * generic or fixed point. That's the very old way
-		 */
-		for (devnum=0; devnum < 255; devnum++)
-		{
-			sprintf(fname, "/dev/bpf%d", devnum);
-			fd = open(fname, O_RDONLY);
-			if (fd != -1) {
-				logger(RADLOG_NOTICE, "Found bpf descriptor on /dev/bpf%d", devnum);
-				break;
-			}
-		}
-		if ( devnum == 254 )
-		{
-			logger(RADLOG_ERR, "Cannot open a bpf descriptor");
-			return -1;
-		}
-		PRIV_DATA(handle)->dev_fd = fd;
-		break;
-
-	case 2:
-		/* Use radclock module syscall to update clock data */
-		stat.version = sizeof(stat);
-		err = modstat(modfind("set_ffclock"), &stat);
-		if (err < 0 ) {
-			logger(RADLOG_ERR, "Error on modstat (set_ffclock syscall): %s", strerror(errno));
-			logger(RADLOG_ERR, "Is the radclock kernel module loaded?");
-			return -1;
-		}
-		handle->syscall_set_ffclock = stat.data.intval;
-		logger(RADLOG_NOTICE, "Registered set_ffclock syscall at %d", handle->syscall_set_ffclock);
-		break;
-
-
-	default:
-		logger(LOG_ERR, "Unknown kernel version");
-		return -1;
-	}
-
-
-	logger(RADLOG_NOTICE, "Feed-Forward Kernel initialised");
-	return 0;
-}
-
-
-
-/*
- * Clock Data Routines
- */
-// TODO the 3 following functions should be redesigned.
-// we need to one call to set the clock data
-// and possibly one call to read them -- only way I see a use for this is if the
-// timecounter has changed
-
-inline int set_kernel_fixedpoint(struct radclock *handle, struct radclock_fixedpoint *fpdata)
-{
-	int err;
-	switch (handle->kernel_version)
-	{
-
-	case 0:
-	case 1:
-		err = ioctl(PRIV_DATA(handle)->dev_fd, BIOCSRADCLOCKFIXED, (caddr_t)fpdata);
-		if ( err < 0 ) 
-		{
-			logger(LOG_ERR, "Setting fixedpoint data failed");
-			return -1;
-		}
-		break;
-
-	case 2:	
-		err = syscall(handle->syscall_set_ffclock, fpdata);
-		if ( err < 0 ) {
-			logger(RADLOG_ERR, "error on syscall set_ffclock: %s", strerror(errno));
-			return -1;
-		}
-		break;
-
-	default:
-		logger(LOG_ERR, "Unknown kernel version");
-		return -1;
-	}
-
-	return 0;
-}
-
-
-/* Set global radclock data. */
-int radclock_set_kernelclock(struct radclock *handle)
-{ 
-	int err;
-	struct radclock_data knewclock;
-	knewclock.phat 				= GLOBAL_DATA(handle)->phat;
-	knewclock.phat_err 			= GLOBAL_DATA(handle)->phat_err;
-	knewclock.phat_local 		= GLOBAL_DATA(handle)->phat_local;
-	knewclock.phat_local_err 	= GLOBAL_DATA(handle)->phat_local_err;
-	knewclock.ca 				= GLOBAL_DATA(handle)->ca;
-	knewclock.ca_err 			= GLOBAL_DATA(handle)->ca_err;
-	knewclock.status 			= GLOBAL_DATA(handle)->status;
-	knewclock.last_changed 		= GLOBAL_DATA(handle)->last_changed;
-	knewclock.valid_till 		= GLOBAL_DATA(handle)->valid_till;
-
-	if ( (err = ioctl(PRIV_DATA(handle)->dev_fd, BIOCSRADCLOCKDATA, (caddr_t)&knewclock)) == -1) {
-		/* Set the status of the clock to error since can't read kernel globaldata */
-		DEL_STATUS(handle, STARAD_KCLOCK);
-		logger(LOG_ERR, "ioctl BIOCSRADCLOCKDATA failed - %s !!!", strerror(errno));
-		return err;
-	}
-	/* We manage to set the global data */
-	ADD_STATUS(handle, STARAD_KCLOCK);
-	return 0;
-}
-
-
-/* Read global clock data from the kernel. The structure actually used by the
- * sync algorithm should NEVER be passed to this function. The kernel data may
- * be completely outdated !
- */
-int radclock_read_kernelclock(struct radclock *handle)
-{    
-	int err;
-	struct radclock_data currclock;
-	err = ioctl(PRIV_DATA(handle)->dev_fd, BIOCGRADCLOCKDATA, (caddr_t)&currclock);
-	if ( err == -1) {
-		logger(LOG_ERR, "ioctl BIOCGRADCLOCKDATA failed - %s !!!", strerror(errno));
-		return err;
-	}
-	
-	GLOBAL_DATA(handle)->phat 			= currclock.phat;
-	GLOBAL_DATA(handle)->phat_err 		= currclock.phat_err;
-	GLOBAL_DATA(handle)->phat_local 	= currclock.phat_local;
-	GLOBAL_DATA(handle)->phat_local_err = currclock.phat_local_err;
-	GLOBAL_DATA(handle)->ca 			= currclock.ca;
-	GLOBAL_DATA(handle)->ca_err 		= currclock.ca_err;
-	GLOBAL_DATA(handle)->status			= currclock.status;
-	GLOBAL_DATA(handle)->last_changed	= currclock.last_changed;
-	GLOBAL_DATA(handle)->valid_till		= currclock.valid_till;
-	
-	return 0;
-}
 
 
 int descriptor_set_tsmode(struct radclock *handle, pcap_t *p_handle, int kmode)

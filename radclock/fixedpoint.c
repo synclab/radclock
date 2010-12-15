@@ -27,6 +27,7 @@
 #include "../config.h"
 #include "radclock.h"
 #include "radclock-private.h"
+#include "ffclock.h"
 #include "sync_algo.h"
 #include "proto_ntp.h"
 #include "fixedpoint.h"
@@ -82,6 +83,11 @@ inline uint8_t calculate_phat_shift(double phat, uint8_t countdiff_maxbit)
 }
 
 
+/*
+ * XXX Deprecated
+ * Old way of pushing clock updates to the kernel.
+ * TODO: comment out but keep for history record 
+ */
 int calculate_fixedpoint_data(vcounter_t vcounter_ref,
 		long double time_ref,
 		double phat,
@@ -126,6 +132,11 @@ verbose(LOG_ERR, "initffclock: phat_int= %llu, time_int= %llu\n",
 
 
 
+/*
+ * XXX Deprecated
+ * Old way of pushing clock updates to the kernel.
+ * TODO: comment out but keep for history record 
+ */
 int update_kernel_fixed(struct radclock *handle)
 {
 	JDEBUG
@@ -161,5 +172,67 @@ int update_kernel_fixed(struct radclock *handle)
 
 	return set_kernel_fixedpoint(handle, &fpdata);
 }
+
+
+
+/*
+ * Function is called every time a new stamp is processed.
+ * It assumes that the kernel supports update of the fixedpoint version of the
+ * clock estimates and that the last_changed stamp is updated on each call to
+ * process_bidir stamp.
+ * With this, no need to read the current time, rely on last_changed only.
+ * XXX: is the comment above accurate and true? 
+ */
+int build_ffclock_data(struct radclock *clock_handle, struct ffclock_data *fdata)
+{
+	JDEBUG
+	double phat;
+	vcounter_t vcount;
+	long double time_ref;
+	uint8_t time_shift;
+	uint8_t phat_shift;
+	uint8_t countdiff_maxbits;
+	long double time_int;
+	long double phat_int; 
+
+	vcount = GLOBAL_DATA(clock_handle)->last_changed;
+	phat = GLOBAL_DATA(clock_handle)->phat;
+
+	if (radclock_vcount_to_abstime_fp(clock_handle, &vcount, &time_ref))
+		verbose(LOG_ERR, "Error calculating time");
+	
+	/* Time shift */
+	time_shift = calculate_time_shift(time_ref);
+	time_int = time_ref * (long double) (1LL << time_shift);
+
+	/* counterdiff maximum size */
+	countdiff_maxbits = calculate_countdiff_maxbits(phat);
+
+	/* Phat shift */
+	phat_shift = calculate_phat_shift(phat, countdiff_maxbits);
+	phat_int = (long double) phat * (long double) (1LL << phat_shift);
+
+	/* Truncate phat and time_ref to unsigned integers */
+	fdata->phat_int = (uint64_t) phat_int;
+	fdata->time_int = (uint64_t) time_int;
+	fdata->vcounter_ref = vcount;
+	fdata->phat_shift = phat_shift;
+	fdata->time_shift = time_shift;
+	fdata->countdiff_maxbits = countdiff_maxbits;
+	fdata->status = GLOBAL_DATA(clock_handle)->status;
+	fdata->error_bound_avg = (uint32_t) RAD_ERROR(clock_handle)->error_bound_avg * 1e9;
+
+/*
+verbose(LOG_ERR, "time_shift= %u, phat_shift= %u, maxbit= %u",
+		time_shift, phat_shift, countdiff_maxbits);
+
+verbose(LOG_ERR, "initffclock: phat_int= %llu, time_int= %llu\n",
+			(long long unsigned) fpdata->phat_int,
+			(long long unsigned) fpdata->time_int);
+*/
+
+	return 0;
+}
+
 
 

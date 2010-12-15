@@ -31,7 +31,8 @@
 #include "sync_algo.h"
 #include "radclock.h"
 #include "radclock-private.h"
-#include "fixedpoint.h"
+#include "ffclock.h"		// this one can go once fixedpoint thread is removed
+#include "fixedpoint.h"		// this one can go once fixedpoint thread is removed
 #include "verbose.h"
 #include "stampoutput.h"
 #include "pthread_mgr.h"

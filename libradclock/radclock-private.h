@@ -93,28 +93,6 @@ struct radclock_data {
 };
 
 
-struct radclock_fixedpoint
-{
-	/** phat as an int shifted phat_shift to the left */
-	uint64_t phat_int;
-
-	/** the time reference to add a delta vcounter to as an int (<< TIME_SHIFT) */
-	uint64_t time_int;
-
-	/** the vcounter value corresponding to the time reference */
-	vcounter_t vcounter_ref;
-
-	/** the shift amount for phat_int */
-	uint8_t phat_shift;
-
-	/** the shift amount for ca_int */
-	uint8_t time_shift;
-
-	/** maximum bit for vcounter difference without overflow */
-	uint8_t countdiff_maxbits;
-};
-
-
 
 /* TODO: split it in 2, clock errors and peer clock tracking, recompose with
  * others for per peer algo
@@ -287,30 +265,11 @@ int found_ffwd_kernel_version(void);
 
 
 /**
- * Wrapper around reading the clock parameters for kernel global data.
- * @param  handle The private handle for accessing global data
- * @return 0 on success, non-zero on failure
- */
-int radclock_read_kernelclock(struct radclock *handle);
-
-
-/**
  * Init the kernel support. 
  * @param  handle The private handle for accessing global data
  * @return 0 on success, non-zero on failure
  */
 int radclock_init_kernel_support(struct radclock *handle);
-
-
-/**
- * Set the latest global data to the kernel copy of the clock.
- * This function is dedicated to the sync algorithm and should not be called by
- * a user application.
- * @param  handle The private handle for accessing global data
- * @param  data   Attempt to set the data from this.
- * @return 0 on success, non-zero on failure
- */
-int radclock_set_kernelclock(struct radclock *handle);
 
 
 /**
@@ -339,12 +298,6 @@ int descriptor_set_tsmode(struct radclock *handle, pcap_t *p_handle, int kmode);
 
 
 /**
- * Set fixedpoint data in the kernel for computing timestamps there 
- */
-inline int set_kernel_fixedpoint(struct radclock *handle, struct radclock_fixedpoint *fpdata);
-
-
-/**
  * System specific call for getting the capture mode on the pcap capture device.
  */
 inline int extract_vcount_stamp(
@@ -356,7 +309,6 @@ inline int extract_vcount_stamp(
 
 
 
-int has_vm_vcounter(void);
 int init_virtual_machine_mode(struct radclock *clock_handle);
 
 int radclock_init_vcounter_syscall(struct radclock *handle);

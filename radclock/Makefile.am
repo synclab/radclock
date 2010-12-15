@@ -19,12 +19,50 @@
 
 INCLUDES = -I$(top_srcdir)/libradclock/ -I$(ADD_INCLS)
 
-noinst_HEADERS = ntohll.h create_stamp.h proto_ntp.h sync_algo.h config_mgr.h pthread_mgr.h verbose.h rawdata.h fixedpoint.h sync_history.h jdebug.h
+noinst_HEADERS = ntohll.h \
+		 create_stamp.h \
+		 proto_ntp.h \
+		 sync_algo.h \
+		 config_mgr.h \
+		 pthread_mgr.h \
+		 verbose.h \
+		 rawdata.h \
+		 fixedpoint.h \
+		 ffclock.h \
+		 sync_history.h \
+		 jdebug.h
 
 
 bin_PROGRAMS = radclock
 
-radclock_SOURCES = sync_bidir.c sync_history.c fixedpoint.c create_stamp.c verbose.c config_mgr.c rawdata.c pthread_mgr.c pthread_ipcserver.c pthread_ntpserver.c pthread_rawdata.c pthread_trigger.c radclock_main.c stampinput.c stampinput.h stampinput_int.h stampinput-ascii.c stampinput-livepcap.c stampinput-tracefile.c stampinput-spy.c stampoutput.h stampoutput.c virtual_machine.c
+
+radclock_SOURCES = sync_bidir.c \
+		   sync_history.c \
+		   fixedpoint.c \
+		   ffclock-fbsd.c \
+		   ffclock-linux.c \
+		   ffclock-none.c \
+		   create_stamp.c \
+		   verbose.c \
+		   config_mgr.c \
+		   rawdata.c \
+		   pthread_mgr.c \
+		   pthread_ipcserver.c \
+		   pthread_ntpserver.c \
+		   pthread_rawdata.c \
+		   pthread_trigger.c \
+		   radclock_main.c \
+		   stampinput.c \
+		   stampinput.h \
+		   stampinput_int.h \
+		   stampinput-ascii.c \
+		   stampinput-livepcap.c \
+		   stampinput-tracefile.c \
+		   stampinput-spy.c \
+		   stampoutput.h \
+		   stampoutput.c \
+		   virtual_machine.c
+
 
 # Make sure the radclock binary is linked statically
 # Handy for not-installed runs

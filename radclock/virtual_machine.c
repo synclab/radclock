@@ -29,6 +29,7 @@
 #include "../config.h"
 #include "radclock.h"
 #include "radclock-private.h"
+#include "ffclock.h"
 #include "verbose.h"
 #include "sync_algo.h"
 #include "config_mgr.h"

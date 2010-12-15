@@ -39,8 +39,9 @@
 #include <errno.h>
 
 
-#include <radclock.h>
+#include "radclock.h"
 #include "radclock-private.h"
+#include "ffclock.h"
 #include "logger.h"
 
 
@@ -79,12 +80,6 @@ int radclock_init_kernel_support(struct radclock *handle)
 	return -ENOENT;
 }
 
-/* Read global clock data */
-int radclock_read_kernelclock(struct radclock *handle) 
-{
-	return -ENOENT;
-}
-
 
 int descriptor_set_tsmode(struct radclock *handle, pcap_t *p_handle, int kmode)
 {
@@ -109,23 +104,20 @@ int extract_vcount_stamp(
 
 
 
-/* ** Clock Data Routines ** */
-
-// TODO the 3 following functions should be redesigned.
 
 
-/* Set radclock data. */
-int radclock_set_kernelclock(struct radclock *handle) 
-{
-	return -ENOENT;
-}
-
-
+/* XXX Deprecated  */
 inline int set_kernel_fixedpoint(struct radclock *handle, struct radclock_fixedpoint *fpdata)
 {
 	return -ENOENT;
 }
 
+
+
+inline int set_kernel_ffclock(struct radclock *clock_handle)
+{
+	return -ENOENT;
+}
 
 #endif
 
