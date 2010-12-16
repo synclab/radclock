@@ -1,15 +1,15 @@
 Modification to the PPS-API to support ffcounter timestamps
 
 ---
- kern/kern_tc.c |   38 ++++++++++++++++++++++++++++++++++++++
- sys/timepps.h  |   56 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++
- 2 files changed, 94 insertions(+)
+ kern/kern_tc.c |   38 +++++++++++++++++++++++++++++++++
+ sys/timepps.h  |   64 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 102 insertions(+)
 
 Index: sys/kern/kern_tc.c
 ===================================================================
---- sys.orig/kern/kern_tc.c	2010-12-13 19:11:58.000000000 +1100
-+++ sys/kern/kern_tc.c	2010-12-14 15:48:07.000000000 +1100
-@@ -875,6 +875,9 @@ pps_ioctl(u_long cmd, caddr_t data, stru
+--- sys.orig/kern/kern_tc.c	2010-12-17 10:26:22.000000000 +1100
++++ sys/kern/kern_tc.c	2010-12-17 10:26:30.000000000 +1100
+@@ -918,6 +918,9 @@ pps_ioctl(u_long cmd, caddr_t data, stru
  {
  	pps_params_t *app;
  	struct pps_fetch_args *fapi;
@@ -19,7 +19,7 @@ Index: sys/kern/kern_tc.c
  #ifdef PPS_SYNC
  	struct pps_kcbind_args *kapi;
  #endif
-@@ -908,6 +911,17 @@ pps_ioctl(u_long cmd, caddr_t data, stru
+@@ -951,6 +954,17 @@ pps_ioctl(u_long cmd, caddr_t data, stru
  		pps->ppsinfo.current_mode = pps->ppsparam.mode;
  		fapi->pps_info_buf = pps->ppsinfo;
  		return (0);
@@ -37,7 +37,7 @@ Index: sys/kern/kern_tc.c
  	case PPS_IOC_KCBIND:
  #ifdef PPS_SYNC
  		kapi = (struct pps_kcbind_args *)data;
-@@ -960,6 +974,12 @@ pps_event(struct pps_state *pps, int eve
+@@ -1003,6 +1017,12 @@ pps_event(struct pps_state *pps, int eve
  	u_int tcount, *pcount;
  	int foff, fhard;
  	pps_seq_t *pseq;
@@ -50,7 +50,7 @@ Index: sys/kern/kern_tc.c
  
  	KASSERT(pps != NULL, ("NULL pps pointer in pps_event"));
  	/* If the timecounter was wound up underneath us, bail out. */
-@@ -974,6 +994,11 @@ pps_event(struct pps_state *pps, int eve
+@@ -1017,6 +1037,11 @@ pps_event(struct pps_state *pps, int eve
  		fhard = pps->kcmode & PPS_CAPTUREASSERT;
  		pcount = &pps->ppscount[0];
  		pseq = &pps->ppsinfo.assert_sequence;
@@ -62,7 +62,7 @@ Index: sys/kern/kern_tc.c
  	} else {
  		tsp = &pps->ppsinfo.clear_timestamp;
  		osp = &pps->ppsparam.clear_offset;
-@@ -981,6 +1006,11 @@ pps_event(struct pps_state *pps, int eve
+@@ -1024,6 +1049,11 @@ pps_event(struct pps_state *pps, int eve
  		fhard = pps->kcmode & PPS_CAPTURECLEAR;
  		pcount = &pps->ppscount[1];
  		pseq = &pps->ppsinfo.clear_sequence;
@@ -74,7 +74,7 @@ Index: sys/kern/kern_tc.c
  	}
  
  	/*
-@@ -997,6 +1027,9 @@ pps_event(struct pps_state *pps, int eve
+@@ -1040,6 +1070,9 @@ pps_event(struct pps_state *pps, int eve
  	/* Convert the count to a timespec. */
  	tcount = pps->capcount - pps->capth->th_offset_count;
  	tcount &= pps->capth->th_counter->tc_counter_mask;
@@ -84,7 +84,7 @@ Index: sys/kern/kern_tc.c
  	bt = pps->capth->th_offset;
  	bintime_addx(&bt, pps->capth->th_scale * tcount);
  	bintime_add(&bt, &boottimebin);
-@@ -1009,6 +1042,11 @@ pps_event(struct pps_state *pps, int eve
+@@ -1052,6 +1085,11 @@ pps_event(struct pps_state *pps, int eve
  	*pcount = pps->capcount;
  	(*pseq)++;
  	*tsp = ts;
@@ -98,9 +98,31 @@ Index: sys/kern/kern_tc.c
  		timespecadd(tsp, osp);
 Index: sys/sys/timepps.h
 ===================================================================
---- sys.orig/sys/timepps.h	2010-12-13 19:12:30.000000000 +1100
-+++ sys/sys/timepps.h	2010-12-14 15:48:07.000000000 +1100
-@@ -51,12 +51,34 @@ typedef struct {
+--- sys.orig/sys/timepps.h	2010-12-17 10:20:35.000000000 +1100
++++ sys/sys/timepps.h	2010-12-17 10:26:30.000000000 +1100
+@@ -12,6 +12,12 @@
+  * Portions of this software were developed by the University of Melbourne
+  * under sponsorship from the FreeBSD Foundation.
+  *
++ * Copyright (C) 2010 The University of Melbourne
++ * All rights reserved.
++ *
++ * Portions of this software were developed by the University of Melbourne
++ * under sponsorship from the FreeBSD Foundation.
++ *
+  * $FreeBSD: src/sys/sys/timepps.h,v 1.19 2005/01/07 02:29:24 imp Exp $
+  *
+  * The is a FreeBSD version of the RFC 2783 API for Pulse Per Second 
+@@ -23,6 +29,8 @@
+ 
+ #include "opt_ffclock.h"
+ 
++#include "opt_ffclock.h"
++
+ #include <sys/ioccom.h>
+ #include <sys/time.h>
+ 
+@@ -51,12 +59,34 @@ typedef struct {
  	int		current_mode;		/* current mode bits */
  } pps_info_t;
  
@@ -135,7 +157,7 @@ Index: sys/sys/timepps.h
  typedef struct {
  	int api_version;			/* API version # */
  	int mode;				/* mode bits */
-@@ -97,6 +119,14 @@ struct pps_fetch_args {
+@@ -97,6 +127,14 @@ struct pps_fetch_args {
  	struct timespec	timeout;
  };
  
@@ -150,7 +172,7 @@ Index: sys/sys/timepps.h
  struct pps_kcbind_args {
  	int kernel_consumer;
  	int edge;
-@@ -110,6 +140,9 @@ struct pps_kcbind_args {
+@@ -110,6 +148,9 @@ struct pps_kcbind_args {
  #define PPS_IOC_GETCAP		_IOR('1', 5, int)
  #define PPS_IOC_FETCH		_IOWR('1', 6, struct pps_fetch_args)
  #define PPS_IOC_KCBIND		_IOW('1', 7, struct pps_kcbind_args)
@@ -160,7 +182,7 @@ Index: sys/sys/timepps.h
  
  #ifdef _KERNEL
  
-@@ -122,6 +155,9 @@ struct pps_state {
+@@ -122,6 +163,9 @@ struct pps_state {
  	/* State information. */
  	pps_params_t	ppsparam;
  	pps_info_t	ppsinfo;
@@ -170,7 +192,7 @@ Index: sys/sys/timepps.h
  	int		kcmode;
  	int		ppscap;
  	struct timecounter *ppstc;
-@@ -191,6 +227,26 @@ time_pps_fetch(pps_handle_t handle, cons
+@@ -191,6 +235,26 @@ time_pps_fetch(pps_handle_t handle, cons
  	return (error);
  }
  
