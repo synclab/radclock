@@ -223,7 +223,7 @@ set_kernel_ffclock(struct radclock *clock)
 	 * Build the data structure to pass to the kernel
 	 */
 	build_ffclock_data(clock, &fdata);
-
+	
 	/* Push */
 	err = syscall(clock->syscall_set_ffclock, &fdata);
 	if ( err < 0 ) {

@@ -48,7 +48,8 @@ static inline uint8_t bitcountll(long long unsigned val)
 }
 
 
-/* We estimate how many bits are required to hold the number of seconds of the
+/* XXX Deprecated
+ * We estimate how many bits are required to hold the number of seconds of the
  * current time so that we can shift by the remaining number of bits.
  * We a bit generous and add 1 bit to cover the case we are close
  * to the event when a new bit is flipped.
@@ -66,9 +67,9 @@ inline uint8_t calculate_time_shift(long double time)
  * It does not mean the counter diff will never overflow, if we don't update
  * often enough, then things get screwed.
  */
-inline uint8_t calculate_countdiff_maxbits(double phat)
+inline uint8_t calculate_countdiff_maxbits(double phat, float delay)
 {
-	return ( bitcountll( COUNTERDIFF_MAX / phat ) );
+	return ( bitcountll( delay / phat ) );
 }
 
 
@@ -104,7 +105,7 @@ int calculate_fixedpoint_data(vcounter_t vcounter_ref,
 	time_int = time_ref * (long double) (1LL << time_shift);
 
 	/* counterdiff maximum size */
-	countdiff_maxbits = calculate_countdiff_maxbits(phat);
+	countdiff_maxbits = calculate_countdiff_maxbits(phat, COUNTERDIFF_MAX);
 
 	/* Phat shift */
 	phat_shift = calculate_phat_shift(phat, countdiff_maxbits);
@@ -174,6 +175,22 @@ int update_kernel_fixed(struct radclock *handle)
 }
 
 
+/*
+ * Version free from the math library
+ */
+static inline uint8_t bitcount(long long unsigned val)
+{
+	uint8_t bits;
+
+	bits = 0;
+	while ( val > 0 ) {
+		val = val >> 1;
+		bits++;
+	}
+	
+	return bits;
+}
+
 
 /*
  * Function is called every time a new stamp is processed.
@@ -188,48 +205,64 @@ int build_ffclock_data(struct radclock *clock_handle, struct ffclock_data *fdata
 	JDEBUG
 	double phat;
 	vcounter_t vcount;
-	long double time_ref;
-	uint8_t time_shift;
-	uint8_t phat_shift;
-	uint8_t countdiff_maxbits;
-	long double time_int;
-	long double phat_int; 
+	long long unsigned cycles;
+	long long unsigned period;
+	long double time;
+	uint8_t per_shift;
+	uint8_t ffdelta_max;
+	long double phat_int;
 
 	vcount = GLOBAL_DATA(clock_handle)->last_changed;
 	phat = GLOBAL_DATA(clock_handle)->phat;
 
-	if (radclock_vcount_to_abstime_fp(clock_handle, &vcount, &time_ref))
+
+	/* Convert vcount to long double time and to bintime */
+	if (radclock_vcount_to_abstime_fp(clock_handle, &vcount, &time))
 		verbose(LOG_ERR, "Error calculating time");
+
+	fdata->time.sec = (time_t) time;
+	fdata->time.frac = (time - (time_t) time) * (1LLU << 63); 
+
+
+	/* Given current phat, number of cycles for the maximum size interval
+	 * between two clock updates in the kernel. 0.5 sec is also assumed in the
+	 * kernel.
+	 */
+	cycles = (long long unsigned) (1 / phat * 0.5);	
+	ffdelta_max = bitcount(cycles);
+
+	for ( per_shift=63; per_shift>0; per_shift--)
+	{	
+		period = (long long unsigned) ((1LLU << per_shift) * phat);
+
+		verbose(LOG_ERR, "ffclock_data:  period = %llu , %u bits",
+			period, bitcount(period));
+
+		if ( bitcount(period) + ffdelta_max <= 64 )
+			break;
+	}
 	
-	/* Time shift */
-	time_shift = calculate_time_shift(time_ref);
-	time_int = time_ref * (long double) (1LL << time_shift);
+	phat_int = (long double) phat * (long double) (1LLU << per_shift);
 
-	/* counterdiff maximum size */
-	countdiff_maxbits = calculate_countdiff_maxbits(phat);
+	ffdelta_max = 64 - bitcount((uint64_t) phat_int);
 
-	/* Phat shift */
-	phat_shift = calculate_phat_shift(phat, countdiff_maxbits);
-	phat_int = (long double) phat * (long double) (1LL << phat_shift);
-
-	/* Truncate phat and time_ref to unsigned integers */
-	fdata->phat_int = (uint64_t) phat_int;
-	fdata->time_int = (uint64_t) time_int;
-	fdata->vcounter_ref = vcount;
-	fdata->phat_shift = phat_shift;
-	fdata->time_shift = time_shift;
-	fdata->countdiff_maxbits = countdiff_maxbits;
+	/* Truncate phat_int to unsigned integers */
+	fdata->period = (uint64_t) phat_int;
+	fdata->per_shift = per_shift;
+	fdata->ffcounter = vcount;
+	fdata->ffdelta_max = ffdelta_max;
 	fdata->status = GLOBAL_DATA(clock_handle)->status;
 	fdata->error_bound_avg = (uint32_t) RAD_ERROR(clock_handle)->error_bound_avg * 1e9;
 
-/*
-verbose(LOG_ERR, "time_shift= %u, phat_shift= %u, maxbit= %u",
-		time_shift, phat_shift, countdiff_maxbits);
 
-verbose(LOG_ERR, "initffclock: phat_int= %llu, time_int= %llu\n",
-			(long long unsigned) fpdata->phat_int,
-			(long long unsigned) fpdata->time_int);
-*/
+	verbose(LOG_ERR, "ffclock_data: time = %llu.%llu, "
+			"period = %llu, "
+			"per_shift = %u, ffdelta_max = %u",
+			(long long unsigned) fdata->time.sec,
+			(long long unsigned) fdata->time.frac,
+			(long long unsigned) fdata->period,
+			fdata->per_shift,
+			fdata->ffdelta_max);
 
 	return 0;
 }

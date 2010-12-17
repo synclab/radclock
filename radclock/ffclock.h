@@ -21,6 +21,19 @@
 #ifndef _FFCLOCK_H
 #define _FFCLOCK_H
 
+
+#include "../config.h"
+#ifdef WITH_RADKERNEL_FBSD
+#include <sys/time.h>
+#endif
+
+
+#ifdef WITH_RADKERNEL_LINUX
+#error "struct ffclock_data has to be defined (with ktime?)"
+#endif
+
+
+
 #include "radclock.h"
 
 /*
@@ -58,7 +71,35 @@ inline int set_kernel_fixedpoint(struct radclock *handle, struct radclock_fixedp
 
 
 
+#ifdef WITH_RADKERNEL_FBSD
+struct ffclock_data
+{
+    /* Time conversion of ffcounter below */
+    struct bintime time;
 
+    /* Last synchronization daemon update or update_ffclock() */
+    vcounter_t ffcounter;
+    
+	/* Timecounter period estimate (<< per_shift) */
+    uint64_t period;
+    
+	/* Clock status word */
+    uint32_t status;
+    
+	/* Average of clock error bound in [ns] */
+    uint32_t error_bound_avg;
+    
+	/* Period estimate shift */
+    uint8_t per_shift;
+    
+	/* Maximum bits holding ffcounter diff without overflow (2^ffdelta_max) */
+    uint8_t ffdelta_max;
+};
+#endif
+
+
+
+#if defined (__linux__)
 struct ffclock_data
 {
 	/** phat as an int shifted phat_shift to the left */
@@ -85,6 +126,9 @@ struct ffclock_data
 	/* Average of clock error bound in [ns] */
 	uint32_t error_bound_avg;
 };
+#endif
+
+
 
 
 
