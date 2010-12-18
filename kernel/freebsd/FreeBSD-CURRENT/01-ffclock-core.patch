@@ -3,16 +3,16 @@ FFclock core
 Core set of changes to support a feed-forward clock within the kernel.
 
 ---
- conf/NOTES     |   10 +
+ conf/NOTES     |   10 ++
  conf/options   |    1 
- kern/kern_tc.c |  345 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++
- sys/time.h     |   50 ++++++++
- 4 files changed, 406 insertions(+)
+ kern/kern_tc.c |  281 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ sys/time.h     |   46 +++++++++
+ 4 files changed, 338 insertions(+)
 
 Index: sys/kern/kern_tc.c
 ===================================================================
 --- sys.orig/kern/kern_tc.c	2010-12-17 10:26:19.000000000 +1100
-+++ sys/kern/kern_tc.c	2010-12-17 11:14:45.000000000 +1100
++++ sys/kern/kern_tc.c	2010-12-18 02:45:23.000000000 +1100
 @@ -5,6 +5,12 @@
   * can do whatever you want with this stuff. If we meet some day, and you think
   * this stuff is worth it, you can buy me a beer in return.   Poul-Henning Kamp
@@ -88,7 +88,7 @@ Index: sys/kern/kern_tc.c
  
  static struct timehands *volatile timehands = &th0;
  struct timecounter *timecounter = &dummy_timecounter;
-@@ -300,6 +340,295 @@ getmicrotime(struct timeval *tvp)
+@@ -300,6 +340,231 @@ getmicrotime(struct timeval *tvp)
  	} while (gen == 0 || gen != th->th_generation);
  }
  
@@ -128,10 +128,6 @@ Index: sys/kern/kern_tc.c
 +static void
 +reset_ffclock(struct feedforward_clock *ffclock, struct timehands *th)
 +{
-+	uint64_t freq;
-+	uint64_t period;
-+	int bits;
-+	int shift;
 +	struct timecounter *tc;
 +	struct ffclock_estimate *cest;
 +	struct ffclock_data *cdata;
@@ -164,44 +160,7 @@ Index: sys/kern/kern_tc.c
 +	cdata->time.sec = boottimebin.sec;
 +	cdata->time.frac = boottimebin.frac;
 +
-+	/* Quick optimisation of clock parameters.
-+	 * Maximise period estimate resolution but make sure we provision enough
-+	 * cycles for half a second between two calls to update_ffclock(). That
-+	 * should leave it plenty of opportunities to do its job even if things go
-+	 * wrong. Finally, calculate the final maximum interval between 2 ffcounter
-+	 * values when creating a bintime timestamp.
-+	 */
-+	freq = tc->tc_frequency;
-+	freq = freq >> 1;
-+	bits = 0;
-+	while ( freq > 0 ) {
-+		freq = freq >> 1;
-+		bits++;
-+	}
-+	cdata->ffdelta_max = bits;
-+
-+	freq = tc->tc_frequency;
-+	for ( shift=63; shift>0; shift--) {
-+		period = (1LLU << shift) / freq;
-+		bits = 0;
-+		while ( period > 0 ) {
-+			period = period >> 1;
-+			bits++;
-+		}
-+		if ( bits + cdata->ffdelta_max <= 64 ) {
-+			cdata->per_shift = shift;
-+			cdata->period = (1LLU << cdata->per_shift) / freq;
-+			break;
-+		}
-+	}
-+
-+	bits = 0;
-+	period = cdata->period;
-+	while ( period > 0 ) {
-+		period = period >> 1;
-+		bits++;
-+	}
-+	cdata->ffdelta_max = 64 - bits;
++	cdata->period = ((1LLU << 63) / tc->tc_frequency ) << 1;
 +
 +	cdata->status = 0;
 +	cdata->error_bound_avg = 0;
@@ -215,16 +174,12 @@ Index: sys/kern/kern_tc.c
 +	cdata = &(ffclock->cest->cdata);
 +
 +	bintime2timespec(&(cdata->time), &ts);
-+	printf("reset_ffclock: %s - period = %llu (%llu Hz), "
-+			"time = %lu.%lu , "
-+			"per_sh = %u, ffdelta_max = %u\n",
++	printf("reset_ffclock: %s - period = %llu (%llu Hz), time = %lu.%lu",
 +			tc->tc_name,
 +			(long long unsigned) cdata->period,
 +			(long long unsigned) tc->tc_frequency,
 +			(long unsigned) ts.tv_sec,
-+			(long unsigned) ts.tv_nsec,
-+			cdata->per_shift,
-+			cdata->ffdelta_max);
++			(long unsigned) ts.tv_nsec);
 +}
 +
 +
@@ -239,7 +194,13 @@ Index: sys/kern/kern_tc.c
 +	struct ffclock_data *cdata;
 +	struct timehands *th;
 +	ffcounter_t ffdelta;
-+	struct timespec ts;
++	struct bintime delta;
++	struct timespec ts1_debug;
++	struct timespec ts2_debug;
++	ts1_debug.tv_sec =0;
++	ts1_debug.tv_nsec =0;
++	ts2_debug.tv_sec =0;
++	ts2_debug.tv_nsec =0;
 +
 +	/*
 +	 * If the clock has been updated by the synchronisation daemon, this new
@@ -258,17 +219,13 @@ Index: sys/kern/kern_tc.c
 +		return;
 +	}
 +
-+	/*
-+	 * If we just changed the timecounter, we have nothing to do in here
-+	 */
++	/* If we just changed the timecounter, we have nothing to do in here */
 +	cdata = &(ffclock->cest->cdata);
 +	th = timehands;
 +	if ( cdata->ffcounter > th->ffcounter_record )
 +		return;
 +
-+	/*
-+	 * Update time mark
-+	 */
++	/* Update time mark */
 +	*(ffclock->ocest) = *(ffclock->cest);
 +	cdata = &(ffclock->ocest->cdata);
 +
@@ -276,33 +233,30 @@ Index: sys/kern/kern_tc.c
 +
 +	if ( ffcount == 5000 )
 +	{
-+		bintime2timespec(&(cdata->time), &ts);
-+		printf("update_ffclock: time = %lu.%lu, phat_int = %llu, ffdelta = %llu\n",
-+				(long unsigned) ts.tv_sec,
-+				(long unsigned) ts.tv_nsec,
-+				(long long unsigned) cdata->period,
-+				(long long unsigned) ffdelta);
++		bintime2timespec(&(cdata->time), &ts1_debug);
 +	}
 +
-+	// XXX Makes no sense, should make phat << 64 in the first place then
-+	bintime_addx(&(cdata->time), cdata->period * ffdelta << (64 - cdata->per_shift));
-+	cdata->ffcounter = th->ffcounter_record;
++	delta.sec = 0;
++	delta.frac = cdata->period;
++	bintime_mul(&delta, ffdelta);
 +
++	bintime_add(&(cdata->time), &delta);
++	cdata->ffcounter = th->ffcounter_record;
 +
 +	if ( ffcount == 5000 )
 +	{
-+		bintime2timespec(&(cdata->time), &ts);
-+		printf("update_ffclock: time = %lu.%lu, phat_int = %llu, ffdelta = %llu, delta = %llu\n",
-+				(long unsigned) ts.tv_sec,
-+				(long unsigned) ts.tv_nsec,
-+				(long long unsigned) cdata->period,
++		bintime2timespec(&(cdata->time), &ts2_debug);
++		printf("update_ffclock: time = ((%lu.%lu - %lu.%lu) - (%llu / 14318180.0)) * 1e9, period = %llu\n",
++				(long unsigned) ts2_debug.tv_sec,
++				(long unsigned) ts2_debug.tv_nsec,
++				(long unsigned) ts1_debug.tv_sec,
++				(long unsigned) ts1_debug.tv_nsec,
 +				(long long unsigned) ffdelta,
-+				(long long unsigned) ((cdata->period << 1) * ffdelta));
++				(long long unsigned) cdata->period);
 +		ffcount = 0;
 +	}
 +	else
 +		ffcount++;
-+
 +
 +
 +	if (++ffclock->ocest->gen == 0)
@@ -320,14 +274,8 @@ Index: sys/kern/kern_tc.c
 +{
 +	struct ffclock_data *cdata;
 +	ffcounter_t ffdelta;
++	struct bintime delta;
 +	uint8_t gen;
-+
-+	/*
-+	 * Synchronization algorithm (userland) should update the fixed point data
-+	 * often enough to make sure the timeval does not overflow. If no sync algo
-+	 * updates the data, we loose precision, but in that case, nobody is tracking
-+	 * the clock drift anyway ... so send warning and stop worrying.
-+	 */
 +
 +	/*
 +	 * No locking to prevent clock data to be updated. Check that the generation
@@ -337,25 +285,13 @@ Index: sys/kern/kern_tc.c
 +		gen = ffclock.cest->gen;
 +		cdata = &(ffclock.cest->cdata);
 +
-+		/*
-+		 * update_ffclock() should prevent countdiff to become to large and the
-+		 * corresponding time interval added to overflow. Just send warning in
-+		 * the unlikely event this is happening.
-+		 */
 +		ffdelta = *ffcounter - cdata->ffcounter;
-+		if (ffdelta & ~((1LLU << (cdata->ffdelta_max + 1)) - 1))
-+		{
-+			printf("ffclock: warning stamp overflow at %llu! "
-+					"(countdiff = %llu, maxbits = %u)\n",
-+					(long long unsigned) *ffcounter,
-+					(long long unsigned) ffdelta,
-+					cdata->ffdelta_max);
-+		}
-+
-+		/* Add the counter delta in second to the recorded fixed point time */
++		delta.sec = 0;
++		delta.frac = cdata->period;
++		bintime_mul(&delta, ffdelta);
 +		bt->sec = cdata->time.sec;
 +		bt->frac = cdata->time.frac;
-+		bintime_addx(bt, cdata->period * (ffdelta << (64 - cdata->per_shift)));
++		bintime_add(bt, &delta);
 +
 +	} while (gen == 0 || gen != ffclock.cest->gen);
 +}
@@ -384,7 +320,7 @@ Index: sys/kern/kern_tc.c
  /*
   * Initialize a new timecounter and possibly use it.
   */
-@@ -391,6 +720,10 @@ tc_setclock(struct timespec *ts)
+@@ -391,6 +656,10 @@ tc_setclock(struct timespec *ts)
  	boottimebin = bt;
  	bintime2timeval(&bt, &boottime);
  
@@ -395,7 +331,7 @@ Index: sys/kern/kern_tc.c
  	/* XXX fiddle all the little crinkly bits around the fiords... */
  	tc_windup();
  	nanotime(&taft);
-@@ -440,6 +773,9 @@ tc_windup(void)
+@@ -440,6 +709,9 @@ tc_windup(void)
  		ncount = timecounter->tc_get_timecount(timecounter);
  	else
  		ncount = 0;
@@ -405,7 +341,7 @@ Index: sys/kern/kern_tc.c
  	th->th_offset_count += delta;
  	th->th_offset_count &= th->th_counter->tc_counter_mask;
  	bintime_addx(&th->th_offset, th->th_scale * delta);
-@@ -486,6 +822,9 @@ tc_windup(void)
+@@ -486,6 +758,9 @@ tc_windup(void)
  		th->th_offset_count = ncount;
  		tc_min_ticktock_freq = max(1, timecounter->tc_frequency /
  		    (((uint64_t)timecounter->tc_counter_mask + 1) / 3));
@@ -415,7 +351,7 @@ Index: sys/kern/kern_tc.c
  	}
  
  	/*-
-@@ -780,6 +1119,9 @@ tc_ticktock(int cnt)
+@@ -780,6 +1055,9 @@ tc_ticktock(int cnt)
  		return;
  	count = 0;
  	tc_windup();
@@ -425,7 +361,7 @@ Index: sys/kern/kern_tc.c
  }
  
  static void
-@@ -802,6 +1144,9 @@ inittimecounter(void *dummy)
+@@ -802,6 +1080,9 @@ inittimecounter(void *dummy)
  	p = (tc_tick * 1000000) / hz;
  	printf("Timecounters tick every %d.%03u msec\n", p / 1000, p % 1000);
  
@@ -438,7 +374,7 @@ Index: sys/kern/kern_tc.c
 Index: sys/sys/time.h
 ===================================================================
 --- sys.orig/sys/time.h	2010-12-17 10:26:19.000000000 +1100
-+++ sys/sys/time.h	2010-12-17 10:55:30.000000000 +1100
++++ sys/sys/time.h	2010-12-18 01:43:52.000000000 +1100
 @@ -2,6 +2,12 @@
   * Copyright (C) 1982, 1986, 1993
   *	The Regents of the University of California.  All rights reserved.
@@ -452,7 +388,7 @@ Index: sys/sys/time.h
   * Redistribution and use in source and binary forms, with or without
   * modification, are permitted provided that the following conditions
   * are met:
-@@ -324,6 +330,50 @@ void	getbintime(struct bintime *bt);
+@@ -324,6 +330,46 @@ void	getbintime(struct bintime *bt);
  void	getnanotime(struct timespec *tsp);
  void	getmicrotime(struct timeval *tvp);
  
@@ -473,10 +409,6 @@ Index: sys/sys/time.h
 +    uint32_t status;
 +    /* Average of clock error bound in [ns] */
 +    uint32_t error_bound_avg;
-+    /* Period estimate shift */
-+    uint8_t per_shift;
-+    /* Maximum bits holding ffcounter diff without overflow (2^ffdelta_max) */
-+    uint8_t ffdelta_max;
 +};
 +
 +struct ffclock_estimate
