@@ -90,10 +90,10 @@ struct ffclock_data
     uint32_t error_bound_avg;
     
 	/* Period estimate shift */
-    uint8_t per_shift;
+//    uint8_t per_shift;
     
 	/* Maximum bits holding ffcounter diff without overflow (2^ffdelta_max) */
-    uint8_t ffdelta_max;
+//    uint8_t ffdelta_max;
 };
 #endif
 
@@ -132,7 +132,7 @@ struct ffclock_data
 
 
 
-inline int set_kernel_ffclock(struct radclock *clock_handle);
+int set_kernel_ffclock(struct radclock *clock_handle);
 
 int has_vm_vcounter(void);
 

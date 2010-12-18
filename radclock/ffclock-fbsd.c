@@ -206,12 +206,26 @@ set_kernel_fixedpoint(struct radclock *handle, struct radclock_fixedpoint *fpdat
 
 
 
-inline int
+/*
+ * Function is called every time a new stamp is processed.
+ * It assumes that the kernel supports update of the fixedpoint version of the
+ * clock estimates and that the last_changed stamp is updated on each call to
+ * process_bidir stamp.
+ * With this, no need to read the current time, rely on last_changed only.
+ * XXX: is the comment above accurate and true? 
+ */
+
+int
 set_kernel_ffclock(struct radclock *clock)
 {
 	JDEBUG
+
 	int err;
 	struct ffclock_data fdata;
+	vcounter_t vcount;
+	long double time;
+	uint64_t period;
+	uint64_t frac;
 
 	if (clock->kernel_version < 2)
 	{
@@ -222,8 +236,29 @@ set_kernel_ffclock(struct radclock *clock)
 	/*
 	 * Build the data structure to pass to the kernel
 	 */
-	build_ffclock_data(clock, &fdata);
-	
+	vcount = RAD_DATA(clock)->last_changed;
+
+	/* Convert vcount to long double time and to bintime */
+	if (radclock_vcount_to_abstime_fp(clock, &vcount, &time))
+		verbose(LOG_ERR, "Error calculating time");
+
+	/* What I would like to do is: 
+	 * fdata->time.frac = (time - (time_t) time) * (1LLU << 64);
+	 * but cannot push '1' by 64 bits, does not fit in LLU. So push 63 bits,
+	 * multiply for best resolution and loose resolution of 1/2^64.
+	 * Same for phat.
+	 */
+	fdata.time.sec = (time_t) time;
+	frac = (time - (time_t) time) * (1LLU << 63);
+	fdata.time.frac = frac << 1;
+
+	period = ((long double) RAD_DATA(clock)->phat) * (1LLU << 63);
+	fdata.period = period << 1;
+
+	fdata.ffcounter = vcount;
+	fdata.status = RAD_DATA(clock)->status;
+	fdata.error_bound_avg = (uint32_t) RAD_ERROR(clock)->error_bound_avg * 1e9;
+
 	/* Push */
 	err = syscall(clock->syscall_set_ffclock, &fdata);
 	if ( err < 0 ) {
