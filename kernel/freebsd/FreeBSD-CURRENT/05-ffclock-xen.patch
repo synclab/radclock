@@ -13,8 +13,8 @@ guests see the same time and allow live migration.
 
 Index: sys/amd64/amd64/tsc.c
 ===================================================================
---- sys.orig/amd64/amd64/tsc.c	2010-12-18 02:44:44.000000000 +1100
-+++ sys/amd64/amd64/tsc.c	2010-12-18 02:45:42.000000000 +1100
+--- sys.orig/amd64/amd64/tsc.c	2010-12-19 02:05:39.000000000 +1100
++++ sys/amd64/amd64/tsc.c	2010-12-19 02:09:43.000000000 +1100
 @@ -2,6 +2,12 @@
   * Copyright (C) 1998-2003 Poul-Henning Kamp
   * All rights reserved.
@@ -69,8 +69,8 @@ Index: sys/amd64/amd64/tsc.c
 +#endif
 Index: sys/i386/i386/tsc.c
 ===================================================================
---- sys.orig/i386/i386/tsc.c	2010-12-18 02:44:44.000000000 +1100
-+++ sys/i386/i386/tsc.c	2010-12-18 02:45:42.000000000 +1100
+--- sys.orig/i386/i386/tsc.c	2010-12-19 02:05:39.000000000 +1100
++++ sys/i386/i386/tsc.c	2010-12-19 02:09:43.000000000 +1100
 @@ -2,6 +2,12 @@
   * Copyright (C) 1998-2003 Poul-Henning Kamp
   * All rights reserved.
@@ -125,8 +125,8 @@ Index: sys/i386/i386/tsc.c
 +#endif
 Index: sys/i386/xen/clock.c
 ===================================================================
---- sys.orig/i386/xen/clock.c	2010-12-18 02:44:44.000000000 +1100
-+++ sys/i386/xen/clock.c	2010-12-18 02:45:42.000000000 +1100
+--- sys.orig/i386/xen/clock.c	2010-12-19 02:05:39.000000000 +1100
++++ sys/i386/xen/clock.c	2010-12-19 02:09:43.000000000 +1100
 @@ -5,6 +5,12 @@
   * This code is derived from software contributed to Berkeley by
   * William Jolitz and Don Ahn.
@@ -192,12 +192,12 @@ Index: sys/i386/xen/clock.c
  get_system_time(int ticks)
 Index: sys/kern/kern_tc.c
 ===================================================================
---- sys.orig/kern/kern_tc.c	2010-12-18 02:45:38.000000000 +1100
-+++ sys/kern/kern_tc.c	2010-12-18 02:45:42.000000000 +1100
-@@ -345,6 +345,11 @@ getmicrotime(struct timeval *tvp)
-  * All Feed-forward clock functions
-  */
+--- sys.orig/kern/kern_tc.c	2010-12-19 02:09:00.000000000 +1100
++++ sys/kern/kern_tc.c	2010-12-19 02:11:28.000000000 +1100
+@@ -343,6 +343,11 @@ getmicrotime(struct timeval *tvp)
+ 
  #ifdef FFCLOCK
+ 
 +static int sysctl_kern_timecounter_passthrough = 0;
 +SYSCTL_INT(_kern_timecounter, OID_AUTO, passthrough, CTLFLAG_RW,
 +	&sysctl_kern_timecounter_passthrough, 0,
@@ -206,7 +206,7 @@ Index: sys/kern/kern_tc.c
  /* Global data structure containing clock estimates */
  static struct feedforward_clock ffclock;
  
-@@ -550,17 +555,32 @@ ffcounter_t
+@@ -519,17 +524,32 @@ ffcounter_t
  read_ffcounter(void)
  {
  	struct timehands *th;
@@ -246,7 +246,7 @@ Index: sys/kern/kern_tc.c
  }
  #endif	/* FFCLOCK */
  
-@@ -591,6 +611,13 @@ tc_init(struct timecounter *tc)
+@@ -560,6 +580,13 @@ tc_init(struct timecounter *tc)
  		    tc->tc_quality);
  	}
  
@@ -262,8 +262,8 @@ Index: sys/kern/kern_tc.c
  	/*
 Index: sys/sys/timetc.h
 ===================================================================
---- sys.orig/sys/timetc.h	2010-12-18 02:44:44.000000000 +1100
-+++ sys/sys/timetc.h	2010-12-18 02:45:42.000000000 +1100
+--- sys.orig/sys/timetc.h	2010-12-19 02:05:39.000000000 +1100
++++ sys/sys/timetc.h	2010-12-19 02:09:43.000000000 +1100
 @@ -6,6 +6,12 @@
   * this stuff is worth it, you can buy me a beer in return.   Poul-Henning Kamp
   * ----------------------------------------------------------------------------
