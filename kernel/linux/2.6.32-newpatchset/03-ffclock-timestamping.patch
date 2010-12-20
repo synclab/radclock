@@ -1,0 +1,505 @@
+diff --git a/fs/compat_ioctl.c b/fs/compat_ioctl.c
+index d84e705..4a094c8 100644
+--- a/fs/compat_ioctl.c
++++ b/fs/compat_ioctl.c
+@@ -134,6 +134,29 @@ static int w_long(unsigned int fd, unsigned int cmd, unsigned long arg)
+ 		return -EFAULT;
+ 	return err;
+ }
++
++#ifdef CONFIG_FFCLOCK
++static int rw_long_long(unsigned int fd, unsigned int cmd, unsigned long arg)
++{
++	int err;
++	__u64 val;
++	mm_segment_t old_fs = get_fs();
++	u64 __user *argptr = compat_ptr(arg);
++
++	if (get_user(val, argptr))
++		return -EFAULT;
++
++	set_fs(KERNEL_DS);
++	err = sys_ioctl(fd, cmd, (unsigned long)&val);
++	set_fs(old_fs);
++
++	if (!err && put_user(val, argptr))
++		return -EFAULT;
++
++	return err;
++}
++#endif /* CONFIG_FFCLOCK */
++
+  
+ static int rw_long(unsigned int fd, unsigned int cmd, unsigned long arg)
+ {
+@@ -2588,6 +2611,11 @@ HANDLE_IOCTL(SIOCBRDELIF, dev_ifsioc)
+ HANDLE_IOCTL(SIOCRTMSG, ret_einval)
+ HANDLE_IOCTL(SIOCGSTAMP, do_siocgstamp)
+ HANDLE_IOCTL(SIOCGSTAMPNS, do_siocgstampns)
++#ifdef CONFIG_FFCLOCK
++HANDLE_IOCTL(SIOCGFFCLOCKTSMODE, rw_long)
++HANDLE_IOCTL(SIOCSFFCLOCKTSMODE, rw_long)
++HANDLE_IOCTL(SIOCGFFCLOCKSTAMP, rw_long_long)
++#endif /* CONFIG_FFCLOCK */
+ #endif
+ #ifdef CONFIG_BLOCK
+ HANDLE_IOCTL(SG_IO,sg_ioctl_trans)
+diff --git a/include/asm-generic/sockios.h b/include/asm-generic/sockios.h
+index 9a61a36..390ad37 100644
+--- a/include/asm-generic/sockios.h
++++ b/include/asm-generic/sockios.h
+@@ -9,5 +9,9 @@
+ #define SIOCATMARK	0x8905
+ #define SIOCGSTAMP	0x8906		/* Get stamp (timeval) */
+ #define SIOCGSTAMPNS	0x8907		/* Get stamp (timespec) */
++#ifdef CONFIG_FFCLOCK
++#define SIOCSFFCLOCKTSMODE	0x8908
++#define SIOCGFFCLOCKTSMODE	0x8909
++#endif /* CONFIG_FFCLOCK */
+ 
+ #endif /* __ASM_GENERIC_SOCKIOS_H */
+diff --git a/include/linux/skbuff.h b/include/linux/skbuff.h
+index bcdd660..228df6f 100644
+--- a/include/linux/skbuff.h
++++ b/include/linux/skbuff.h
+@@ -404,6 +404,11 @@ struct sk_buff {
+ 				*data;
+ 	unsigned int		truesize;
+ 	atomic_t		users;
++
++#ifdef CONFIG_FFCLOCK
++	ffcounter_t		ffclock_stamp;
++	ktime_t			tstamp_fair; /* FFClock Fair Compare Mode */
++#endif
+ };
+ 
+ #ifdef __KERNEL__
+diff --git a/include/linux/sockios.h b/include/linux/sockios.h
+index 241f179..e1bc369 100644
+--- a/include/linux/sockios.h
++++ b/include/linux/sockios.h
+@@ -83,6 +83,10 @@
+ 
+ #define SIOCWANDEV	0x894A		/* get/set netdev parameters	*/
+ 
++#ifdef CONFIG_FFCLOCK
++#define SIOCGFFCLOCKSTAMP 0x894B	/* get current ffcounter timestamp */
++#endif
++
+ /* ARP cache control calls. */
+ 		    /*  0x8950 - 0x8952  * obsolete calls, don't re-use */
+ #define SIOCDARP	0x8953		/* delete ARP table entry	*/
+diff --git a/include/net/sock.h b/include/net/sock.h
+index 9f96394..2141f3f 100644
+--- a/include/net/sock.h
++++ b/include/net/sock.h
+@@ -301,6 +301,12 @@ struct sock {
+   	int			(*sk_backlog_rcv)(struct sock *sk,
+ 						  struct sk_buff *skb);  
+ 	void                    (*sk_destruct)(struct sock *sk);
++
++#ifdef CONFIG_FFCLOCK
++	ffcounter_t		sk_ffclock_stamp;
++	ktime_t			sk_stamp_fair; /* FFClock Fair Compare Mode */
++	int			sk_ffclock_tsmode;
++#endif
+ };
+ 
+ /*
+diff --git a/net/core/dev.c b/net/core/dev.c
+index fe10551..a095229 100644
+--- a/net/core/dev.c
++++ b/net/core/dev.c
+@@ -1362,6 +1362,11 @@ static void dev_queue_xmit_nit(struct sk_buff *skb, struct net_device *dev)
+ {
+ 	struct packet_type *ptype;
+ 
++#ifdef CONFIG_FFCLOCK
++	ktime_t tv_fair;
++	ffcounter_t ffcount;
++#endif
++
+ #ifdef CONFIG_NET_CLS_ACT
+ 	if (!(skb->tstamp.tv64 && (G_TC_FROM(skb->tc_verd) & AT_INGRESS)))
+ 		net_timestamp(skb);
+@@ -1369,6 +1374,21 @@ static void dev_queue_xmit_nit(struct sk_buff *skb, struct net_device *dev)
+ 	net_timestamp(skb);
+ #endif
+ 
++#ifdef CONFIG_FFCLOCK
++	/* At this point, we have no way of knowing if we tap the packets
++	 * in FFCLOCK_TSMODE_FAIRCOMPARE mode or not. So we take another
++	 * timestamp we ensure to be 'fair'.
++	 */
++	rdtsc_barrier(); /* Make sure GCC doesn't mess up the compare */
++	tv_fair = ktime_get_real();
++	ffcount = read_ffcounter();
++	rdtsc_barrier(); /* Make sure GCC doesn't mess up the compare */
++
++	/* Copy the two specific FFclock timestamps to the skbuff */
++	skb->ffclock_stamp = ffcount;
++	skb->tstamp_fair = tv_fair;
++#endif /* CONFIG_FFCLOCK */
++
+ 	rcu_read_lock();
+ 	list_for_each_entry_rcu(ptype, &ptype_all, list) {
+ 		/* Never send packets back to the socket
+@@ -1998,10 +2018,30 @@ int netif_rx(struct sk_buff *skb)
+ 	struct softnet_data *queue;
+ 	unsigned long flags;
+ 
++#ifdef CONFIG_FFCLOCK
++	/* At this point, we have no way of knowing if we tap the packets
++	 * in FFCLOCK_TSMODE_FAIRCOMPARE mode or not. So we take another
++	 * timestamp we ensure to be 'fair'.
++	 */
++	ktime_t tv_fair;
++	ffcounter_t ffcount;
++
++	rdtsc_barrier(); /* Make sure GCC doesn't mess up the compare */
++	ffcount = read_ffcounter();
++	tv_fair = ktime_get_real();
++	rdtsc_barrier(); /* Make sure GCC doesn't mess up the compare */
++#endif /* CONFIG_FFCLOCK */
++
+ 	/* if netpoll wants it, pretend we never saw it */
+ 	if (netpoll_rx(skb))
+ 		return NET_RX_DROP;
+ 
++#ifdef CONFIG_FFCLOCK
++	/* Copy the two specific FFClock timestamps to the skbuff */
++	skb->ffclock_stamp = ffcount;
++	skb->tstamp_fair = tv_fair;
++#endif
++
+ 	if (!skb->tstamp.tv64)
+ 		net_timestamp(skb);
+ 
+@@ -2289,9 +2329,29 @@ int netif_receive_skb(struct sk_buff *skb)
+ 	int ret = NET_RX_DROP;
+ 	__be16 type;
+ 
++#ifdef CONFIG_FFCLOCK
++	/* At this point, we have no way of knowing if we tap the packets
++	 * in FFCLOCK_TSMODE_FAIRCOMPARE mode or not. So we take another
++	 * timestamp we ensure to be 'fair'.
++	 */
++	ktime_t tv_fair;
++	ffcounter_t ffcount;
++
++	rdtsc_barrier(); /* Make sure GCC doesn't mess up the compare */
++	ffcount = read_ffcounter();
++	tv_fair = ktime_get_real();
++	rdtsc_barrier(); /* Make sure GCC doesn't mess up the compare */
++#endif /* CONFIG_FFCLOCK */
++
+ 	if (!skb->tstamp.tv64)
+ 		net_timestamp(skb);
+ 
++#ifdef CONFIG_FFCLOCK
++	/* Copy the two specific FFClock timestamps to the skbuff */
++	skb->ffclock_stamp = ffcount;
++	skb->tstamp_fair = tv_fair;
++#endif
++
+ 	if (skb->vlan_tci && vlan_hwaccel_do_receive(skb))
+ 		return NET_RX_SUCCESS;
+ 
+diff --git a/net/core/skbuff.c b/net/core/skbuff.c
+index ec85681..2610af1 100644
+--- a/net/core/skbuff.c
++++ b/net/core/skbuff.c
+@@ -207,6 +207,10 @@ struct sk_buff *__alloc_skb(unsigned int size, gfp_t gfp_mask,
+ #ifdef NET_SKBUFF_DATA_USES_OFFSET
+ 	skb->mac_header = ~0U;
+ #endif
++#ifdef CONFIG_FFCLOCK
++	skb->ffclock_stamp = 0;
++	skb->tstamp_fair = ktime_set(-1L, -1L);
++#endif
+ 
+ 	/* make sure we initialize shinfo sequentially */
+ 	shinfo = skb_shinfo(skb);
+@@ -526,6 +530,10 @@ EXPORT_SYMBOL(skb_recycle_check);
+ static void __copy_skb_header(struct sk_buff *new, const struct sk_buff *old)
+ {
+ 	new->tstamp		= old->tstamp;
++#ifdef CONFIG_FFCLOCK
++	new->ffclock_stamp	= old->ffclock_stamp;
++	new->tstamp_fair	= old->tstamp_fair;
++#endif
+ 	new->dev		= old->dev;
+ 	new->transport_header	= old->transport_header;
+ 	new->network_header	= old->network_header;
+diff --git a/net/core/sock.c b/net/core/sock.c
+index 7626b6a..103265c 100644
+--- a/net/core/sock.c
++++ b/net/core/sock.c
+@@ -130,6 +130,10 @@
+ #include <net/tcp.h>
+ #endif
+ 
++#ifdef CONFIG_FFCLOCK
++int sysfs_ffclock_tsmode;
++#endif
++
+ /*
+  * Each address family might have different locking rules, so we have
+  * one slock key per address family:
+@@ -1881,6 +1885,11 @@ void sock_init_data(struct socket *sock, struct sock *sk)
+ 	sk->sk_sndtimeo		=	MAX_SCHEDULE_TIMEOUT;
+ 
+ 	sk->sk_stamp = ktime_set(-1L, 0);
++#ifdef CONFIG_FFCLOCK
++	sk->sk_ffclock_stamp = 0;
++	sk->sk_stamp_fair = ktime_set(-1L, -1L);
++	sk->sk_ffclock_tsmode = sysfs_ffclock_tsmode;
++#endif
+ 
+ 	/*
+ 	 * Before updating sk_refcnt, we must commit prior changes to memory
+diff --git a/net/packet/af_packet.c b/net/packet/af_packet.c
+index f2d116a..d3385f1 100644
+--- a/net/packet/af_packet.c
++++ b/net/packet/af_packet.c
+@@ -84,6 +84,10 @@
+ #include <net/inet_common.h>
+ #endif
+ 
++#ifdef CONFIG_FFCLOCK
++#include <linux/ffclock.h>
++#endif
++
+ /*
+    Assumptions:
+    - if device has no dev->hard_header routine, it adds and removes ll header
+@@ -667,6 +671,11 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev,
+ 	struct timeval tv;
+ 	struct timespec ts;
+ 
++#ifdef CONFIG_FFCLOCK
++	unsigned short ffclock_off;
++	ktime_t ffclock_ktime;
++#endif
++
+ 	if (skb->pkt_type == PACKET_LOOPBACK)
+ 		goto drop;
+ 
+@@ -697,13 +706,31 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev,
+ 		snaplen = res;
+ 
+ 	if (sk->sk_type == SOCK_DGRAM) {
++#ifdef CONFIG_FFCLOCK
++		/* We would prefer to push the timestamp in the tpacket header
++		 * instead of hiding it into the gap between the sockaddr_ll and
++		 * the mac/net header.  But this needs a new libpcap, so simply
++		 * ensure we make enough space for libpcap to play with all of
++		 * this without it stepping on our timestamp. Due to the 16bit
++		 * alignment, in most cases we should not use more memory.
++		 */
++		macoff = netoff = TPACKET_ALIGN(po->tp_hdrlen +	16 +
++				    sizeof(ffcounter_t)) + po->tp_reserve;
++#else
+ 		macoff = netoff = TPACKET_ALIGN(po->tp_hdrlen) + 16 +
+ 				  po->tp_reserve;
++#endif /* CONFIG_FFCLOCK */
+ 	} else {
+ 		unsigned maclen = skb_network_offset(skb);
++#ifdef CONFIG_FFCLOCK
++		netoff = TPACKET_ALIGN(po->tp_hdrlen +
++					(maclen < 16 ? 16 : maclen) +
++					sizeof(ffcounter_t)) + po->tp_reserve;
++#else
+ 		netoff = TPACKET_ALIGN(po->tp_hdrlen +
+ 				       (maclen < 16 ? 16 : maclen)) +
+ 			po->tp_reserve;
++#endif /* CONFIG_FFCLOCK */
+ 		macoff = netoff - maclen;
+ 	}
+ 
+@@ -741,6 +768,23 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev,
+ 
+ 	skb_copy_bits(skb, 0, h.raw + macoff, snaplen);
+ 
++#ifdef CONFIG_FFCLOCK
++	  /* Provide a timeval stamp build based on the FFclock or a timestamp
++	   * for fair comparison. Replace existing timestamp in the skbuff if in
++	   * the right mode. Default is to return normal stamp.
++	   */
++	switch (sk->sk_ffclock_tsmode) {
++	case FFCLOCK_TSMODE_FFCLOCK:
++		ffclock_fill_ktime(skb->ffclock_stamp, &ffclock_ktime);
++		skb->tstamp = ffclock_ktime;
++		break;
++
++	case FFCLOCK_TSMODE_FAIRCOMPARE:
++		skb->tstamp = skb->tstamp_fair;
++		break;
++	}
++#endif /* CONFIG_FFCLOCK */
++
+ 	switch (po->tp_version) {
+ 	case TPACKET_V1:
+ 		h.h1->tp_len = skb->len;
+@@ -784,6 +828,34 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev,
+ 	else
+ 		sll->sll_ifindex = dev->ifindex;
+ 
++#ifdef CONFIG_FFCLOCK
++	/* Insert vcount timestamp in here. It has to be inserted in front of
++	 * the pointer libpcap passes to the user callback. Because libpcap does
++	 * write in the gap between the SLL header and tp_mac, things are a bit
++	 * messy.  Mimic libpcap logic in here, which will hopefully not change
++	 * ...  Clearly this code depends on libpcap design, a poor feature, but
++	 * no other choice so far.
++	 */
++	ffclock_off = macoff;
++
++	/* If the socket has been open in mode DGRAM, libpcap will add a
++	 * sll_header (16bytes) (cooked interface)
++	 */
++	if (sk->sk_type == SOCK_DGRAM)
++		ffclock_off -= 16;
++
++	/* If packet of type 2 and vlan and enough data, libpcap will rebuild
++	 * the vlan tag in the header
++	 */
++	if (po->tp_version == TPACKET_V2 &&
++		h.h2->tp_vlan_tci && h.h2->tp_snaplen >= 2 * 6 /*ETH_ALEN*/)
++		ffclock_off -= 4; /*VLAN_TAG_LEN*/
++
++	/* Copy the vcount stamp just before where the mac/sll header wil be */
++	ffclock_off -= sizeof(ffcounter_t);
++	memcpy(h.raw + ffclock_off, &(skb->ffclock_stamp), sizeof(ffcounter_t));
++#endif /* FFCLOCK_CONFIG */
++
+ 	__packet_set_status(po, h.raw, status);
+ 	smp_mb();
+ 	{
+@@ -1119,6 +1191,15 @@ static int packet_snd(struct socket *sock,
+ 	if (err)
+ 		goto out_free;
+ 
++#ifdef CONFIG_FFCLOCK
++	/* Pass the two extra raw timestamps specific to the FFCLOCK to the
++	 * socket: the raw ffcounter and the timeval stamps used in the
++	 * FFCLOCK_TSMODE_FAIRCOMPARE mode.
++	 */
++	sk->sk_ffclock_stamp = skb->ffclock_stamp;
++	sk->sk_stamp_fair = skb->tstamp_fair;
++#endif /* CONFIG_FFCLOCK */
++
+ 	skb->protocol = proto;
+ 	skb->dev = dev;
+ 	skb->priority = sk->sk_priority;
+@@ -1472,6 +1553,14 @@ static int packet_recvmsg(struct kiocb *iocb, struct socket *sock,
+ 	if (err)
+ 		goto out_free;
+ 
++#ifdef CONFIG_FFCLOCK
++	/* Pass the two extra raw timestamps specific to the FFCLOCK to the
++	 * socket: the raw ffcounter and the timeval stamps used in the
++	 * FFCLOCK_TSMODE_FAIRCOMPARE mode.
++	 */
++	sk->sk_ffclock_stamp = skb->ffclock_stamp;
++	sk->sk_stamp_fair = skb->tstamp_fair;
++#endif
+ 	sock_recv_timestamp(msg, sk, skb);
+ 
+ 	if (msg->msg_name)
+@@ -1979,6 +2068,10 @@ static int packet_ioctl(struct socket *sock, unsigned int cmd,
+ {
+ 	struct sock *sk = sock->sk;
+ 
++#ifdef CONFIG_FFCLOCK
++	long tsmode = FFCLOCK_TSMODE_FFCLOCK;
++#endif
++
+ 	switch (cmd) {
+ 	case SIOCOUTQ:
+ 	{
+@@ -1999,9 +2092,55 @@ static int packet_ioctl(struct socket *sock, unsigned int cmd,
+ 		return put_user(amount, (int __user *)arg);
+ 	}
+ 	case SIOCGSTAMP:
++#ifdef CONFIG_FFCLOCK
++		if (sk->sk_ffclock_tsmode == FFCLOCK_TSMODE_FFCLOCK) {
++			/* timeval stamp build based on the FFClock */
++			ffclock_fill_ktime(sk->sk_ffclock_stamp,
++					    &(sk->sk_stamp));
++		} else if (sk->sk_ffclock_tsmode ==
++			    FFCLOCK_TSMODE_FAIRCOMPARE) {
++			/* We are in FAIRCOMPARE mode so happily overwrite the
++			 * timestamp that is returned right below
++			 */
++			sk->sk_stamp = sk->sk_stamp_fair;
++		}
++#endif /* CONFIG_FFCLOCK */
+ 		return sock_get_timestamp(sk, (struct timeval __user *)arg);
+ 	case SIOCGSTAMPNS:
++#ifdef CONFIG_FFCLOCK
++		if (sk->sk_ffclock_tsmode == FFCLOCK_TSMODE_FFCLOCK) {
++			/* timeval stamp build based on the FFClock */
++			ffclock_fill_ktime(sk->sk_ffclock_stamp,
++					    &(sk->sk_stamp));
++		} else if (sk->sk_ffclock_tsmode ==
++			    FFCLOCK_TSMODE_FAIRCOMPARE) {
++			/* We are in FAIRCOMPARE mode so happily overwrite the
++			 * timestamp that is returned right below
++			 */
++			sk->sk_stamp = sk->sk_stamp_fair;
++		}
++#endif /* CONFIG_FFCLOCK */
+ 		return sock_get_timestampns(sk, (struct timespec __user *)arg);
++#ifdef CONFIG_FFCLOCK
++	case SIOCSFFCLOCKTSMODE:
++		tsmode = *((long *)arg);
++
++		switch (tsmode) {
++		case FFCLOCK_TSMODE_FAIRCOMPARE:
++		case FFCLOCK_TSMODE_SYSCLOCK:
++		case FFCLOCK_TSMODE_FFCLOCK:
++			sk->sk_ffclock_tsmode = tsmode;
++			break;
++		default:
++			return -EINVAL;
++		}
++
++		*(long *)arg = tsmode;
++		return 0;
++	case SIOCGFFCLOCKTSMODE:
++		*(long *)arg = sk->sk_ffclock_tsmode ;
++		return 0;
++#endif
+ 
+ #ifdef CONFIG_INET
+ 	case SIOCADDRT:
+diff --git a/net/socket.c b/net/socket.c
+index 7565536..bc21637 100644
+--- a/net/socket.c
++++ b/net/socket.c
+@@ -899,6 +899,10 @@ static long sock_ioctl(struct file *file, unsigned cmd, unsigned long arg)
+ 	int pid, err;
+ 	struct net *net;
+ 
++#ifdef CONFIG_FFCLOCK
++	ffcounter_t *ffstamp = NULL;
++#endif
++
+ 	sock = file->private_data;
+ 	sk = sock->sk;
+ 	net = sock_net(sk);
+@@ -958,6 +962,13 @@ static long sock_ioctl(struct file *file, unsigned cmd, unsigned long arg)
+ 				err = dlci_ioctl_hook(cmd, argp);
+ 			mutex_unlock(&dlci_ioctl_mutex);
+ 			break;
++#ifdef CONFIG_FFCLOCK
++		case SIOCGFFCLOCKSTAMP:
++			ffstamp = (ffcounter_t *) arg;
++			*ffstamp = sock->sk->sk_ffclock_stamp;
++			err = 0;
++			break;
++#endif /* CONFIG_FFCLOCK */
+ 		default:
+ 			err = sock->ops->ioctl(sock, cmd, arg);
+ 

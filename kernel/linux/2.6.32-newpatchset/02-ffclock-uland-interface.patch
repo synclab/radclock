@@ -51,10 +51,10 @@ index 0000000..a1a007a
 +obj-$(CONFIG_FFCLOCK) += ffclock.o
 diff --git a/drivers/ffclock/ffclock.c b/drivers/ffclock/ffclock.c
 new file mode 100644
-index 0000000..0c1c0ad
+index 0000000..236a649
 --- /dev/null
 +++ b/drivers/ffclock/ffclock.c
-@@ -0,0 +1,504 @@
+@@ -0,0 +1,499 @@
 +/*
 + * Feed Forward Clock (FFClock)
 + *
@@ -95,6 +95,7 @@ index 0000000..0c1c0ad
 +#include <linux/sysdev.h>
 +#include <net/genetlink.h>
 +#include <net/sock.h>
++#include <linux/ffclock.h>
 +
 +
 +MODULE_AUTHOR("Thomas Young, Julien Ridoux");
@@ -184,12 +185,6 @@ index 0000000..0c1c0ad
 +		.policy = ffclock_policy,
 +	},
 +};
-+
-+
-+/* Timestamping functionality */
-+#define FFCLOCK_TSMODE_SYSCLOCK	1
-+#define FFCLOCK_TSMODE_FFCLOCK	2
-+#define FFCLOCK_TSMODE_FAIRCOMPARE 3
 +
 +
 +/* Sysfs functionality */
@@ -344,10 +339,10 @@ index 0000000..0c1c0ad
 +
 +
 +/*
-+ * ffclock_fill_ktime - Obtains ffclock information based on the 'vcounter'
++ * ffclock_fill_ktime - Obtains ffclock information based on the 'ffcounter'
 + * argument and returns the time as a ktime_t
 + */
-+void ffclock_fill_ktime(ffcounter_t vcounter, ktime_t *ktime)
++void ffclock_fill_ktime(ffcounter_t ffcounter, ktime_t *ktime)
 +{
 +	u64 time_f;
 +	u64 frac;
@@ -362,11 +357,11 @@ index 0000000..0c1c0ad
 +	 */
 +	down_read(&ffclock_fixedpoint_mtx);
 +
-+	countdiff = vcounter - ffclock_fp.vcount;
++	countdiff = ffcounter - ffclock_fp.vcount;
 +	if (countdiff & ~((1ll << (ffclock_fp.countdiff_maxbits + 1)) - 1))
 +		printk(KERN_WARNING "FFClock: warning stamp may overflow "
 +				    "timeval at %llu!\n",
-+				    (long long unsigned) vcounter);
++				    (long long unsigned)ffcounter);
 +
 +	/* Add the counter delta in second to the recorded fixed point time */
 +	time_f 	= ffclock_fp.time_int
@@ -559,6 +554,31 @@ index 0000000..0c1c0ad
 +
 +module_init(ffclock_register);
 +module_exit(ffclock_unregister);
+diff --git a/include/linux/ffclock.h b/include/linux/ffclock.h
+new file mode 100644
+index 0000000..8b223a7
+--- /dev/null
++++ b/include/linux/ffclock.h
+@@ -0,0 +1,19 @@
++#ifndef __LINUX_FFCLOCK_H
++#define __LINUX_FFCLOCK_H
++
++#include <linux/time.h>
++
++
++/* Timestamping modes for the FFClock */
++#define FFCLOCK_TSMODE_SYSCLOCK	1
++#define FFCLOCK_TSMODE_FFCLOCK	2
++#define FFCLOCK_TSMODE_FAIRCOMPARE 3
++
++
++/* Obtains ffclock information based on the 'ffcounter'
++ * argument and returns the time as a ktime_t
++ */
++extern void ffclock_fill_ktime(ffcounter_t ffcounter, ktime_t *ktime);
++
++
++#endif /* __LINUX_FFCLOCK_H */
 diff --git a/include/linux/time.h b/include/linux/time.h
 index 2824c9a..43064e2 100644
 --- a/include/linux/time.h
