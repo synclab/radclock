@@ -27,7 +27,6 @@
 #include "../config.h"
 #include "radclock.h"
 #include "radclock-private.h"
-#include "ffclock.h"
 #include "sync_algo.h"
 #include "proto_ntp.h"
 #include "fixedpoint.h"

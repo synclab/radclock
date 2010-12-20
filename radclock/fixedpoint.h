@@ -119,8 +119,40 @@
  */
 
 
+
+/*
+ * XXX Deprecated
+ * Old kernel data structure
+ * TODO: remove when backward compatibility for kernel versions < 2 is dropped.
+ */
+struct radclock_fixedpoint
+{
+	/** phat as an int shifted phat_shift to the left */
+	uint64_t phat_int;
+
+	/** the time reference to add a delta vcounter to as an int (<< TIME_SHIFT) */
+	uint64_t time_int;
+
+	/** the vcounter value corresponding to the time reference */
+	vcounter_t vcounter_ref;
+
+	/** the shift amount for phat_int */
+	uint8_t phat_shift;
+
+	/** the shift amount for ca_int */
+	uint8_t time_shift;
+
+	/** maximum bit for vcounter difference without overflow */
+	uint8_t countdiff_maxbits;
+};
+
+/*
+ * XXX Deprecated
+ * Set fixedpoint data in the kernel for computing timestamps there 
+ */
+inline int set_kernel_fixedpoint(struct radclock *handle, struct radclock_fixedpoint *fpdata);
+
 int update_kernel_fixed(struct radclock *handle);
 
-int build_ffclock_data(struct radclock *clock_handle, struct ffclock_data *fdata);
 
 #endif

@@ -233,6 +233,7 @@ set_kernel_ffclock(struct radclock *clock)
 		return -1;
 	}
 
+
 	/*
 	 * Build the data structure to pass to the kernel
 	 */
@@ -258,6 +259,7 @@ set_kernel_ffclock(struct radclock *clock)
 	fdata.ffcounter = vcount;
 	fdata.status = RAD_DATA(clock)->status;
 	fdata.error_bound_avg = (uint32_t) RAD_ERROR(clock)->error_bound_avg * 1e9;
+
 
 	/* Push */
 	err = syscall(clock->syscall_set_ffclock, &fdata);
