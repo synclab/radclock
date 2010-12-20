@@ -49,11 +49,6 @@
  */
 
 
-int has_vm_vcounter(void)
-{
-	return -ENOENT;
-}
-
 
 int found_ffwd_kernel_version(void) 
 {
@@ -101,22 +96,6 @@ int extract_vcount_stamp(
 	return -ENOENT;
 }
 
-
-
-
-
-/* XXX Deprecated  */
-inline int set_kernel_fixedpoint(struct radclock *handle, struct radclock_fixedpoint *fpdata)
-{
-	return -ENOENT;
-}
-
-
-
-inline int set_kernel_ffclock(struct radclock *clock_handle)
-{
-	return -ENOENT;
-}
 
 #endif
 

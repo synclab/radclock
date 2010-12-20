@@ -259,6 +259,7 @@ case "$target_os" in
 esac
 fi
 
+AM_CONDITIONAL(HAVE_FFKERNEL, test "x$tscexts" = "xyes")
 
 
 
@@ -322,6 +323,7 @@ case $target_os in
 		kernel_channel="no"
 	;;
 esac
+
 
 AC_SUBST([LIBRADCLOCK_LIBS])
 

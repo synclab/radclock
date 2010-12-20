@@ -23,7 +23,18 @@
 #ifdef WITH_RADKERNEL_NONE
 
 
+#include <stdint.h>
+#include <errno.h>
+
 #include "ffclock.h"
+#include "fixedpoint.h"
+
+
+int has_vm_vcounter(void)
+{
+	return -ENOENT;
+}
+
 
 /*
  * XXX Deprecated
