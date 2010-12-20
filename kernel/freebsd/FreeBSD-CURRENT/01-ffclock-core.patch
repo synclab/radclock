@@ -170,7 +170,7 @@ Index: sys/kern/kern_tc.c
 +	cdata = &(ffclock->cest->cdata);
 +
 +	bintime2timespec(&(cdata->time), &ts);
-+	printf("reset_ffclock: %s - period = %llu (%llu Hz), time = %lu.%lu",
++	printf("reset_ffclock: %s - period = %llu (%llu Hz), time = %lu.%09lu",
 +			tc->tc_name,
 +			(long long unsigned) cdata->period,
 +			(long long unsigned) tc->tc_frequency,
