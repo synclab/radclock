@@ -478,7 +478,7 @@ index 0000000..0c1c0ad
 +		memcpy(sysfs_user_input, buf, count);
 +	sysfs_user_input[count] = 0;
 +
-+	val = strict_strtol(sysfs_user_input, NULL, 10);
++	val = strict_strtol(sysfs_user_input, 10, NULL);
 +
 +	switch (val) {
 +	case FFCLOCK_TSMODE_SYSCLOCK:
