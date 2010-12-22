@@ -520,7 +520,7 @@ set_kernel_ffclock(struct radclock *clock)
 	period = ((long double) RAD_DATA(clock)->phat) * (1LLU << 63);
 	fdata.period = period << 1;
 
-	fdata.ffcounter = vcount;
+	fdata.last_update = vcount;
 	fdata.status = RAD_DATA(clock)->status;
 	fdata.error_bound_avg = (uint32_t) RAD_ERROR(clock)->error_bound_avg * 1e9;
 

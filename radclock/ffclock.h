@@ -27,7 +27,7 @@
  * This is very strongly inspired by the bintime structure in FreeBSD. See
  * sys/time.h there for the details.
  */
-#ifdef WITH_RADKERNEL_FBSD
+#if defined (__FreeBSD__)
 #include <sys/time.h>
 #else
 struct bintime {
@@ -35,7 +35,6 @@ struct bintime {
 	uint64_t frac;
 };
 #endif
-
 
 #include "radclock.h"
 
@@ -46,18 +45,17 @@ struct ffclock_data
     /* Time conversion of ffcounter below */
     struct bintime time;
 
-    /* Last synchronization daemon update or update_ffclock() */
-    vcounter_t ffcounter;
-    
-	/* Timecounter period estimate (<< per_shift) */
+	/* Timecounter period estimate */
     uint64_t period;
+
+    /* Last synchronization daemon update or update_ffclock() */
+    vcounter_t last_update;
     
 	/* Clock status word */
     uint32_t status;
     
 	/* Average of clock error bound in [ns] */
     uint32_t error_bound_avg;
-    
 };
 
 
