@@ -59,10 +59,21 @@ index 9a61a36..390ad37 100644
  
  #endif /* __ASM_GENERIC_SOCKIOS_H */
 diff --git a/include/linux/skbuff.h b/include/linux/skbuff.h
-index bcdd660..228df6f 100644
+index bcdd660..9fe7ddb 100644
 --- a/include/linux/skbuff.h
 +++ b/include/linux/skbuff.h
-@@ -404,6 +404,11 @@ struct sk_buff {
+@@ -30,6 +30,10 @@
+ #include <linux/dmaengine.h>
+ #include <linux/hrtimer.h>
+ 
++#ifdef CONFIG_FFCLOCK
++#include <linux/ffclock.h>
++#endif
++
+ /* Don't change this without changing skb_csum_unnecessary! */
+ #define CHECKSUM_NONE 0
+ #define CHECKSUM_UNNECESSARY 1
+@@ -404,6 +408,11 @@ struct sk_buff {
  				*data;
  	unsigned int		truesize;
  	atomic_t		users;
@@ -90,10 +101,21 @@ index 241f179..e1bc369 100644
  		    /*  0x8950 - 0x8952  * obsolete calls, don't re-use */
  #define SIOCDARP	0x8953		/* delete ARP table entry	*/
 diff --git a/include/net/sock.h b/include/net/sock.h
-index 9f96394..2141f3f 100644
+index 9f96394..6a4eb25 100644
 --- a/include/net/sock.h
 +++ b/include/net/sock.h
-@@ -301,6 +301,12 @@ struct sock {
+@@ -60,6 +60,10 @@
+ #include <net/dst.h>
+ #include <net/checksum.h>
+ 
++#ifdef CONFIG_FFCLOCK
++#include <linux/ffclock.h>
++#endif
++
+ /*
+  * This structure really needs to be cleaned up.
+  * Most of it is for TCP, and not used by any of
+@@ -301,6 +305,12 @@ struct sock {
    	int			(*sk_backlog_rcv)(struct sock *sk,
  						  struct sk_buff *skb);  
  	void                    (*sk_destruct)(struct sock *sk);

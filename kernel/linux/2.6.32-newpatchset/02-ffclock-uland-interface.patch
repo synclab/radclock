@@ -579,38 +579,3 @@ index 0000000..8b223a7
 +
 +
 +#endif /* __LINUX_FFCLOCK_H */
-diff --git a/include/linux/time.h b/include/linux/time.h
-index 2824c9a..43064e2 100644
---- a/include/linux/time.h
-+++ b/include/linux/time.h
-@@ -264,6 +264,9 @@ struct ffclock {
- 	struct ffclock_estimate *ocest;
- 	struct ffclock_estimate *tmp;
- };
-+
-+extern ffcounter_t read_ffcounter(void);
-+
- #endif /* CONFIG_FFCLOCK */
- #endif /* __KERNEL__ */
- 
-diff --git a/kernel/time/timekeeping.c b/kernel/time/timekeeping.c
-index b4458f2..218ee45 100644
---- a/kernel/time/timekeeping.c
-+++ b/kernel/time/timekeeping.c
-@@ -63,7 +63,6 @@ static void reset_ffclock(struct ffclock *ffclock,
- 			    const struct clocksource *clock,
- 			    int new_clocksource);
- static void update_ffclock(struct ffclock *ffclock);
--static ffcounter_t read_ffcounter(void);
- #endif /* CONFIG_FFCLOCK */
- 
- /**
-@@ -1018,7 +1017,7 @@ static void update_ffclock(struct ffclock *ffclock)
- /*
-  * read_ffcounter - Returns the hardware counter's value
-  */
--static ffcounter_t read_ffcounter(void)
-+ffcounter_t read_ffcounter(void)
- {
- 	cycle_t offset;
- 	struct clocksource *clock = timekeeper.clock;
