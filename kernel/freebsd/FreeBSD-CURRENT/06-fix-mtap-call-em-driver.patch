@@ -12,8 +12,8 @@ Disable all interrupt throttling. Tune low latency against throughput.
 
 Index: sys/dev/e1000/if_em.c
 ===================================================================
---- sys.orig/dev/e1000/if_em.c	2010-12-10 09:19:02.000000000 +1100
-+++ sys/dev/e1000/if_em.c	2010-12-10 15:27:44.000000000 +1100
+--- sys.orig/dev/e1000/if_em.c	2010-12-19 03:04:49.000000000 +1100
++++ sys/dev/e1000/if_em.c	2010-12-20 00:38:54.000000000 +1100
 @@ -251,7 +251,10 @@ static void	em_refresh_mbufs(struct rx_r
  static void	em_register_vlan(void *, struct ifnet *, u16);
  static void	em_unregister_vlan(void *, struct ifnet *, u16);
@@ -26,7 +26,7 @@ Index: sys/dev/e1000/if_em.c
  static int	em_dma_malloc(struct adapter *, bus_size_t,
  		    struct em_dma_alloc *, int);
  static void	em_dma_free(struct adapter *, struct em_dma_alloc *);
-@@ -846,14 +849,17 @@ em_mq_start_locked(struct ifnet *ifp, st
+@@ -847,14 +850,17 @@ em_mq_start_locked(struct ifnet *ifp, st
  
  	/* Process the queue */
  	while (next != NULL) {
@@ -46,7 +46,7 @@ Index: sys/dev/e1000/if_em.c
  		if ((ifp->if_drv_flags & IFF_DRV_RUNNING) == 0)
                          break;
  		if (txr->tx_avail < EM_MAX_SCATTER) {
-@@ -942,7 +948,10 @@ em_start_locked(struct ifnet *ifp, struc
+@@ -943,7 +949,10 @@ em_start_locked(struct ifnet *ifp, struc
  		 *  Encapsulation can modify our pointer, and or make it
  		 *  NULL on failure.  In that event, we can't requeue.
  		 */
@@ -58,7 +58,7 @@ Index: sys/dev/e1000/if_em.c
  			if (m_head == NULL)
  				break;
  			ifp->if_drv_flags |= IFF_DRV_OACTIVE;
-@@ -951,7 +960,11 @@ em_start_locked(struct ifnet *ifp, struc
+@@ -952,7 +961,11 @@ em_start_locked(struct ifnet *ifp, struc
  		}
  
  		/* Send a copy of the frame to the BPF listener */
@@ -71,7 +71,7 @@ Index: sys/dev/e1000/if_em.c
  
  		/* Set timeout in case hardware has problems transmitting. */
  		txr->watchdog_time = ticks;
-@@ -1743,8 +1756,11 @@ em_media_change(struct ifnet *ifp)
+@@ -1744,8 +1757,11 @@ em_media_change(struct ifnet *ifp)
   *  return 0 on success, positive on failure
   **********************************************************************/
  
@@ -84,7 +84,7 @@ Index: sys/dev/e1000/if_em.c
  {
  	struct adapter		*adapter = txr->adapter;
  	bus_dma_segment_t	segs[EM_MAX_SCATTER];
-@@ -2034,6 +2050,9 @@ em_xmit(struct tx_ring *txr, struct mbuf
+@@ -2035,6 +2051,9 @@ em_xmit(struct tx_ring *txr, struct mbuf
  	/* Update the watchdog time early and often */
  	txr->watchdog_time = ticks;
  
@@ -94,7 +94,7 @@ Index: sys/dev/e1000/if_em.c
  	/*
  	 * Advance the Transmit Descriptor Tail (TDT), this tells the E1000
  	 * that this frame is available to transmit.
-@@ -4071,7 +4090,10 @@ em_initialize_receive_unit(struct adapte
+@@ -4070,7 +4089,10 @@ em_initialize_receive_unit(struct adapte
  	 * Set the interrupt throttling rate. Value is calculated
  	 * as DEFAULT_ITR = 1/(MAX_INTS_PER_SEC * 256ns)
  	 */

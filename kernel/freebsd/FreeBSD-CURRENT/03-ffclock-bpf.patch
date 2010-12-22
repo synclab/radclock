@@ -4,14 +4,14 @@ Add ffcounter timestamps to the BPF header for export via libpcap.
 Allow to choose between feedback and feed-forward clock for timestamping.
 
 ---
- net/bpf.c |  123 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
- net/bpf.h |   44 ++++++++++++++++++++++
- 2 files changed, 167 insertions(+)
+ net/bpf.c |  103 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ net/bpf.h |   44 ++++++++++++++++++++++++++
+ 2 files changed, 147 insertions(+)
 
 Index: sys/net/bpf.h
 ===================================================================
---- sys.orig/net/bpf.h	2010-12-13 19:11:08.000000000 +1100
-+++ sys/net/bpf.h	2010-12-13 19:11:13.000000000 +1100
+--- sys.orig/net/bpf.h	2010-12-22 02:25:08.000000000 +1100
++++ sys/net/bpf.h	2010-12-22 17:29:06.000000000 +1100
 @@ -7,6 +7,12 @@
   * to Berkeley by Steven McCanne and Van Jacobson both of Lawrence
   * Berkeley Laboratory.
@@ -109,8 +109,8 @@ Index: sys/net/bpf.h
  #define	MTAG_BPF_TIMESTAMP	0
 Index: sys/net/bpf.c
 ===================================================================
---- sys.orig/net/bpf.c	2010-12-13 19:11:08.000000000 +1100
-+++ sys/net/bpf.c	2010-12-13 19:11:13.000000000 +1100
+--- sys.orig/net/bpf.c	2010-12-22 02:25:08.000000000 +1100
++++ sys/net/bpf.c	2010-12-22 17:36:26.000000000 +1100
 @@ -7,6 +7,12 @@
   * to Berkeley by Steven McCanne and Van Jacobson both of Lawrence
   * Berkeley Laboratory.
@@ -309,19 +309,7 @@ Index: sys/net/bpf.c
  {
  	struct bpf_xhdr hdr;
  #ifndef BURN_BRIDGES
-@@ -2049,6 +2129,11 @@ catchpacket(struct bpf_d *d, u_char *pkt
- 	int do_timestamp;
- 	int tstype;
- 
-+// XXX FFCLOCK DEBUG XXX
-+//	struct bpf_if *bp;
-+//	bp = d->bd_bif;
-+// XXX FFCLOCK DEBUG XXX
-+
- 	BPFD_LOCK_ASSERT(d);
- 
- 	/*
-@@ -2118,17 +2203,33 @@ catchpacket(struct bpf_d *d, u_char *pkt
+@@ -2118,17 +2198,28 @@ catchpacket(struct bpf_d *d, u_char *pkt
  	if (tstype == BPF_T_NONE || BPF_T_FORMAT(tstype) == BPF_T_MICROTIME) {
  		struct bpf_ts ts;
  		if (do_timestamp)
@@ -347,15 +335,10 @@ Index: sys/net/bpf.c
  			hdr32_old.bh_hdrlen = hdrlen;
  			hdr32_old.bh_caplen = caplen;
 +
-+// XXX FFCLOCK DEBUG XXX
-+//if_printf(bp->bif_ifp, "radcatch: hdr32_old with hdrlen= %d, ffcounter= %llu\n",
-+//	   	hdrlen, (long long unsigned) *ffcounter);
-+// XXX FFCLOCK DEBUG XXX
-+
  			bpf_append_bytes(d, d->bd_sbuf, curlen, &hdr32_old,
  			    sizeof(hdr32_old));
  			goto copy;
-@@ -2136,12 +2237,21 @@ catchpacket(struct bpf_d *d, u_char *pkt
+@@ -2136,12 +2227,16 @@ catchpacket(struct bpf_d *d, u_char *pkt
  #endif
  		bzero(&hdr_old, sizeof(hdr_old));
  		if (do_timestamp) {
@@ -369,15 +352,10 @@ Index: sys/net/bpf.c
  		hdr_old.bh_hdrlen = hdrlen;
  		hdr_old.bh_caplen = caplen;
 +
-+// XXX FFCLOCK DEBUG XXX
-+//if_printf(bp->bif_ifp, "radcatch: hdr_old with hdrlen= %d, ffcounter= %llu\n",
-+//	   	hdrlen, (long long unsigned) *ffcounter);
-+// XXX FFCLOCK DEBUG XXX
-+
  		bpf_append_bytes(d, d->bd_sbuf, curlen, &hdr_old,
  		    sizeof(hdr_old));
  		goto copy;
-@@ -2154,10 +2264,23 @@ catchpacket(struct bpf_d *d, u_char *pkt
+@@ -2154,10 +2249,18 @@ catchpacket(struct bpf_d *d, u_char *pkt
  	 */
  	bzero(&hdr, sizeof(hdr));
  	if (do_timestamp)
@@ -392,11 +370,6 @@ Index: sys/net/bpf.c
  	hdr.bh_datalen = pktlen;
  	hdr.bh_hdrlen = hdrlen;
  	hdr.bh_caplen = caplen;
-+
-+// XXX FFCLOCK DEBUG XXX
-+//if_printf(bp->bif_ifp, "radcatch: xhdr with hdrlen= %d, ffcounter= %llu\n",
-+//	   	hdrlen, (long long unsigned) *ffcounter);
-+// XXX FFCLOCK DEBUG XXX
 +
  	bpf_append_bytes(d, d->bd_sbuf, curlen, &hdr, sizeof(hdr));
  

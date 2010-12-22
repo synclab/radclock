@@ -7,9 +7,9 @@ Modification to the PPS-API to support ffcounter timestamps
 
 Index: sys/kern/kern_tc.c
 ===================================================================
---- sys.orig/kern/kern_tc.c	2010-12-19 08:58:07.000000000 +1100
-+++ sys/kern/kern_tc.c	2010-12-19 08:58:42.000000000 +1100
-@@ -849,6 +849,9 @@ pps_ioctl(u_long cmd, caddr_t data, stru
+--- sys.orig/kern/kern_tc.c	2010-12-22 20:25:11.000000000 +1100
++++ sys/kern/kern_tc.c	2010-12-22 20:26:46.000000000 +1100
+@@ -845,6 +845,9 @@ pps_ioctl(u_long cmd, caddr_t data, stru
  {
  	pps_params_t *app;
  	struct pps_fetch_args *fapi;
@@ -19,7 +19,7 @@ Index: sys/kern/kern_tc.c
  #ifdef PPS_SYNC
  	struct pps_kcbind_args *kapi;
  #endif
-@@ -882,6 +885,17 @@ pps_ioctl(u_long cmd, caddr_t data, stru
+@@ -878,6 +881,17 @@ pps_ioctl(u_long cmd, caddr_t data, stru
  		pps->ppsinfo.current_mode = pps->ppsparam.mode;
  		fapi->pps_info_buf = pps->ppsinfo;
  		return (0);
@@ -37,7 +37,7 @@ Index: sys/kern/kern_tc.c
  	case PPS_IOC_KCBIND:
  #ifdef PPS_SYNC
  		kapi = (struct pps_kcbind_args *)data;
-@@ -934,6 +948,12 @@ pps_event(struct pps_state *pps, int eve
+@@ -930,6 +944,12 @@ pps_event(struct pps_state *pps, int eve
  	u_int tcount, *pcount;
  	int foff, fhard;
  	pps_seq_t *pseq;
@@ -50,7 +50,7 @@ Index: sys/kern/kern_tc.c
  
  	KASSERT(pps != NULL, ("NULL pps pointer in pps_event"));
  	/* If the timecounter was wound up underneath us, bail out. */
-@@ -948,6 +968,11 @@ pps_event(struct pps_state *pps, int eve
+@@ -944,6 +964,11 @@ pps_event(struct pps_state *pps, int eve
  		fhard = pps->kcmode & PPS_CAPTUREASSERT;
  		pcount = &pps->ppscount[0];
  		pseq = &pps->ppsinfo.assert_sequence;
@@ -62,7 +62,7 @@ Index: sys/kern/kern_tc.c
  	} else {
  		tsp = &pps->ppsinfo.clear_timestamp;
  		osp = &pps->ppsparam.clear_offset;
-@@ -955,6 +980,11 @@ pps_event(struct pps_state *pps, int eve
+@@ -951,6 +976,11 @@ pps_event(struct pps_state *pps, int eve
  		fhard = pps->kcmode & PPS_CAPTURECLEAR;
  		pcount = &pps->ppscount[1];
  		pseq = &pps->ppsinfo.clear_sequence;
@@ -74,7 +74,7 @@ Index: sys/kern/kern_tc.c
  	}
  
  	/*
-@@ -971,6 +1001,9 @@ pps_event(struct pps_state *pps, int eve
+@@ -967,6 +997,9 @@ pps_event(struct pps_state *pps, int eve
  	/* Convert the count to a timespec. */
  	tcount = pps->capcount - pps->capth->th_offset_count;
  	tcount &= pps->capth->th_counter->tc_counter_mask;
@@ -84,7 +84,7 @@ Index: sys/kern/kern_tc.c
  	bt = pps->capth->th_offset;
  	bintime_addx(&bt, pps->capth->th_scale * tcount);
  	bintime_add(&bt, &boottimebin);
-@@ -983,6 +1016,11 @@ pps_event(struct pps_state *pps, int eve
+@@ -979,6 +1012,11 @@ pps_event(struct pps_state *pps, int eve
  	*pcount = pps->capcount;
  	(*pseq)++;
  	*tsp = ts;
@@ -98,8 +98,8 @@ Index: sys/kern/kern_tc.c
  		timespecadd(tsp, osp);
 Index: sys/sys/timepps.h
 ===================================================================
---- sys.orig/sys/timepps.h	2005-01-07 13:29:24.000000000 +1100
-+++ sys/sys/timepps.h	2010-12-19 08:58:42.000000000 +1100
+--- sys.orig/sys/timepps.h	2010-12-22 19:03:01.000000000 +1100
++++ sys/sys/timepps.h	2010-12-22 20:26:46.000000000 +1100
 @@ -6,6 +6,12 @@
   * this stuff is worth it, you can buy me a beer in return.   Poul-Henning Kamp
   * ----------------------------------------------------------------------------

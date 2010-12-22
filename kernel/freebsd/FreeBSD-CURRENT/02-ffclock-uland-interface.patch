@@ -6,16 +6,16 @@ Allows feed-forward synchronisation daemon to update the kernel feed-forward
 clock.
 
 ---
- kern/ffclock.c           |  249 +++++++++++++++++++++++++++++++++++++++++++++++
+ kern/ffclock.c           |  250 +++++++++++++++++++++++++++++++++++++++++++++++
  modules/Makefile         |    1 
  modules/ffclock/Makefile |   16 +++
- 3 files changed, 266 insertions(+)
+ 3 files changed, 267 insertions(+)
 
 Index: sys/kern/ffclock.c
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ sys/kern/ffclock.c	2010-12-19 08:58:31.000000000 +1100
-@@ -0,0 +1,249 @@
++++ sys/kern/ffclock.c	2010-12-22 17:10:37.000000000 +1100
+@@ -0,0 +1,250 @@
 +/*-
 + * Copyright (C) 2010 University of Melbourne
 + * All rights reserved.
@@ -65,7 +65,8 @@ Index: sys/kern/ffclock.c
 +#include <sys/sysctl.h>
 +
 +
-+extern struct feedforward_clock ffclock;
++extern struct ffclock_estimate ffclock;
++extern uint8_t ffclock_fetch_update;
 +
 +static struct mtx ffclock_mtx;	/* lock against concurrent updates of the ffclock estimates */
 +
@@ -173,7 +174,7 @@ Index: sys/kern/ffclock.c
 + */
 +
 +struct set_ffclock_args {
-+	struct ffclock_data *cdata;
++	struct ffclock_estimate *cest;
 +};
 +
 +
@@ -192,12 +193,12 @@ Index: sys/kern/ffclock.c
 +	struct set_ffclock_args *uap;
 +
 +	uap = (struct set_ffclock_args *) syscall_args;
-+	if ( uap->cdata == NULL )
++	if ( uap->cest == NULL )
 +		return -1;
 +
 +	mtx_lock(&ffclock_mtx);
-+	error = copyin(uap->cdata, &(ffclock.ucest->cdata), sizeof(struct ffclock_data));
-+	ffclock.updated = 1;
++	error = copyin(uap->cest, &(ffclock), sizeof(struct ffclock_estimate));
++	ffclock_fetch_update = 1;
 +	mtx_unlock(&ffclock_mtx);
 +
 +	return(error);
@@ -267,8 +268,8 @@ Index: sys/kern/ffclock.c
 +
 Index: sys/modules/Makefile
 ===================================================================
---- sys.orig/modules/Makefile	2010-12-19 03:49:59.000000000 +1100
-+++ sys/modules/Makefile	2010-12-19 08:58:31.000000000 +1100
+--- sys.orig/modules/Makefile	2010-12-22 02:34:42.000000000 +1100
++++ sys/modules/Makefile	2010-12-22 17:06:57.000000000 +1100
 @@ -242,6 +242,7 @@ SUBDIR=	${_3dfx} \
  	${_pst} \
  	pty  \
@@ -280,7 +281,7 @@ Index: sys/modules/Makefile
 Index: sys/modules/ffclock/Makefile
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ sys/modules/ffclock/Makefile	2010-12-19 08:58:31.000000000 +1100
++++ sys/modules/ffclock/Makefile	2010-12-22 17:06:57.000000000 +1100
 @@ -0,0 +1,16 @@
 +# This make file creates the .ko module for retrieving the vitual counter through syscall.
 +

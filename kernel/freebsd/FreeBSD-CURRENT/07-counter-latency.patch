@@ -10,9 +10,9 @@ Useful to measure the in-kernel latency of a given counter. Very dirty.
 
 Index: sys/kern/ffclock.c
 ===================================================================
---- sys.orig/kern/ffclock.c	2010-12-10 14:34:08.000000000 +1100
-+++ sys/kern/ffclock.c	2010-12-10 15:34:57.000000000 +1100
-@@ -246,4 +246,101 @@ static moduledata_t set_ffclock_mod = {
+--- sys.orig/kern/ffclock.c	2010-12-22 20:26:44.000000000 +1100
++++ sys/kern/ffclock.c	2010-12-22 20:30:54.000000000 +1100
+@@ -247,4 +247,101 @@ static moduledata_t set_ffclock_mod = {
  DECLARE_MODULE(set_ffclock, set_ffclock_mod, SI_SUB_SYSCALLS, SI_ORDER_MIDDLE);
  
  
