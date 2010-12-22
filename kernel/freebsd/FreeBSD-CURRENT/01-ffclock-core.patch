@@ -12,7 +12,7 @@ Core set of changes to support a feed-forward clock within the kernel.
 Index: sys/kern/kern_tc.c
 ===================================================================
 --- sys.orig/kern/kern_tc.c	2010-12-23 00:13:49.000000000 +1100
-+++ sys/kern/kern_tc.c	2010-12-23 01:28:02.000000000 +1100
++++ sys/kern/kern_tc.c	2010-12-23 10:46:39.000000000 +1100
 @@ -5,12 +5,19 @@
   * can do whatever you want with this stuff. If we meet some day, and you think
   * this stuff is worth it, you can buy me a beer in return.   Poul-Henning Kamp
@@ -201,13 +201,13 @@ Index: sys/kern/kern_tc.c
 +	/* Update ffcounter and time marks of next fftimehands */
 +	if ( ffclock_fetch_update )
 +	{
-+		bcopy(cest, &ffclock, sizeof(struct ffclock_estimate));
++		bcopy(&ffclock, cest, sizeof(struct ffclock_estimate));
 +		ffdelta = ffth->ffcounter_mark - cest->last_update;
 +		ffth->time_mark = cest->time;
 +		ffclock_fetch_update = 0;
 +	}
 +	else {
-+		bcopy(cest, &(fftimehands->cest), sizeof(struct ffclock_estimate));
++		bcopy(&(fftimehands->cest), cest, sizeof(struct ffclock_estimate));
 +		ffth->time_mark = fftimehands->time_mark;
 +	}
 +
@@ -323,7 +323,7 @@ Index: sys/kern/kern_tc.c
 Index: sys/sys/time.h
 ===================================================================
 --- sys.orig/sys/time.h	2010-12-23 00:13:49.000000000 +1100
-+++ sys/sys/time.h	2010-12-23 00:13:53.000000000 +1100
++++ sys/sys/time.h	2010-12-23 09:45:47.000000000 +1100
 @@ -2,6 +2,12 @@
   * Copyright (C) 1982, 1986, 1993
   *	The Regents of the University of California.  All rights reserved.
