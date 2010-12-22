@@ -12,8 +12,8 @@ guests see the same time and allow live migration.
 
 Index: sys/i386/xen/clock.c
 ===================================================================
---- sys.orig/i386/xen/clock.c	2010-12-22 02:25:08.000000000 +1100
-+++ sys/i386/xen/clock.c	2010-12-22 20:27:04.000000000 +1100
+--- sys.orig/i386/xen/clock.c	2010-12-23 01:20:31.000000000 +1100
++++ sys/i386/xen/clock.c	2010-12-23 01:21:26.000000000 +1100
 @@ -5,6 +5,12 @@
   * This code is derived from software contributed to Berkeley by
   * William Jolitz and Don Ahn.
@@ -79,8 +79,8 @@ Index: sys/i386/xen/clock.c
  get_system_time(int ticks)
 Index: sys/kern/kern_tc.c
 ===================================================================
---- sys.orig/kern/kern_tc.c	2010-12-22 20:26:46.000000000 +1100
-+++ sys/kern/kern_tc.c	2010-12-22 20:30:29.000000000 +1100
+--- sys.orig/kern/kern_tc.c	2010-12-23 01:21:21.000000000 +1100
++++ sys/kern/kern_tc.c	2010-12-23 01:21:26.000000000 +1100
 @@ -314,6 +314,11 @@ getmicrotime(struct timeval *tvp)
  
  
@@ -93,7 +93,7 @@ Index: sys/kern/kern_tc.c
  /* Global data structure containing clock estimates */
  /*
   * Feed-Forward Clock
-@@ -512,21 +517,36 @@ read_ffcounter(void)
+@@ -513,21 +518,36 @@ read_ffcounter(void)
  	struct fftimehands *ffth;
  	u_int gen, delta;
  	ffcounter_t ffcounter;
@@ -137,7 +137,7 @@ Index: sys/kern/kern_tc.c
  #endif	/* FFCLOCK */
  
  
-@@ -556,6 +576,13 @@ tc_init(struct timecounter *tc)
+@@ -557,6 +577,13 @@ tc_init(struct timecounter *tc)
  		    tc->tc_quality);
  	}
  
@@ -153,8 +153,8 @@ Index: sys/kern/kern_tc.c
  	/*
 Index: sys/sys/timetc.h
 ===================================================================
---- sys.orig/sys/timetc.h	2010-12-22 02:25:08.000000000 +1100
-+++ sys/sys/timetc.h	2010-12-22 20:27:04.000000000 +1100
+--- sys.orig/sys/timetc.h	2010-12-23 01:20:31.000000000 +1100
++++ sys/sys/timetc.h	2010-12-23 01:21:26.000000000 +1100
 @@ -6,6 +6,12 @@
   * this stuff is worth it, you can buy me a beer in return.   Poul-Henning Kamp
   * ----------------------------------------------------------------------------
@@ -194,8 +194,8 @@ Index: sys/sys/timetc.h
  extern struct timecounter *timecounter;
 Index: sys/x86/x86/tsc.c
 ===================================================================
---- sys.orig/x86/x86/tsc.c	2010-12-22 02:25:08.000000000 +1100
-+++ sys/x86/x86/tsc.c	2010-12-22 20:27:04.000000000 +1100
+--- sys.orig/x86/x86/tsc.c	2010-12-23 01:20:31.000000000 +1100
++++ sys/x86/x86/tsc.c	2010-12-23 01:21:26.000000000 +1100
 @@ -2,6 +2,12 @@
   * Copyright (C) 1998-2003 Poul-Henning Kamp
   * All rights reserved.

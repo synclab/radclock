@@ -5,14 +5,14 @@ Core set of changes to support a feed-forward clock within the kernel.
 ---
  conf/NOTES     |    8 +
  conf/options   |    1 
- kern/kern_tc.c |  244 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ kern/kern_tc.c |  245 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++
  sys/time.h     |   36 ++++++++
- 4 files changed, 289 insertions(+)
+ 4 files changed, 290 insertions(+)
 
 Index: sys/kern/kern_tc.c
 ===================================================================
---- sys.orig/kern/kern_tc.c	2010-12-22 19:50:34.000000000 +1100
-+++ sys/kern/kern_tc.c	2010-12-22 20:25:11.000000000 +1100
+--- sys.orig/kern/kern_tc.c	2010-12-23 00:13:49.000000000 +1100
++++ sys/kern/kern_tc.c	2010-12-23 01:28:02.000000000 +1100
 @@ -5,12 +5,19 @@
   * can do whatever you want with this stuff. If we meet some day, and you think
   * this stuff is worth it, you can buy me a beer in return.   Poul-Henning Kamp
@@ -52,7 +52,7 @@ Index: sys/kern/kern_tc.c
  static struct timehands *volatile timehands = &th0;
  struct timecounter *timecounter = &dummy_timecounter;
  static struct timecounter *timecounters = &dummy_timecounter;
-@@ -300,6 +312,224 @@ getmicrotime(struct timeval *tvp)
+@@ -300,6 +312,225 @@ getmicrotime(struct timeval *tvp)
  	} while (gen == 0 || gen != th->th_generation);
  }
  
@@ -140,23 +140,22 @@ Index: sys/kern/kern_tc.c
 +	 */
 +	if (th) {
 +		tc = th->th_counter;
++		ffclock.time = fftimehands->time_mark;
 +	}
 +	else {
 +		/*
 +		 * Strictly speaking, we should record the ffcounter when the RTC clock is
 +		 * read from initoddr(), but RCT is probably not good enough to bother.
 +		 */
-+		ffth->ffcounter_mark = read_ffcounter();
-+		ffth->time_mark = boottimebin;
++		ffclock.time = boottimebin;
 +		tc = timehands->th_counter;
 +	}
 +
 +	/* Use boottime and timecounter nominal frequency as a starting point */
-+	ffclock.time = ffth->time_mark;
++	ffclock.last_update = 0;
 +	ffclock.period = ((1LLU << 63) / tc->tc_frequency ) << 1;
 +	ffclock.status = 0;
 +	ffclock.error_bound_avg = 0;
-+	ffclock.last_update = ffth->ffcounter_mark;
 +
 +	ffclock_fetch_update = 1;
 +
@@ -192,6 +191,7 @@ Index: sys/kern/kern_tc.c
 +	ffth->gen = 0;
 +	cest = &(ffth->cest);
 +
++	ffth->ffcounter_mark = fftimehands->ffcounter_mark;
 +	ffth->ffcounter_mark += ffdelta;
 +
 +	/*
@@ -208,6 +208,7 @@ Index: sys/kern/kern_tc.c
 +	}
 +	else {
 +		bcopy(cest, &(fftimehands->cest), sizeof(struct ffclock_estimate));
++		ffth->time_mark = fftimehands->time_mark;
 +	}
 +
 +	delta.sec = 0;
@@ -277,7 +278,7 @@ Index: sys/kern/kern_tc.c
  /*
   * Initialize a new timecounter and possibly use it.
   */
-@@ -391,6 +621,10 @@ tc_setclock(struct timespec *ts)
+@@ -391,6 +622,10 @@ tc_setclock(struct timespec *ts)
  	boottimebin = bt;
  	bintime2timeval(&bt, &boottime);
  
@@ -288,7 +289,7 @@ Index: sys/kern/kern_tc.c
  	/* XXX fiddle all the little crinkly bits around the fiords... */
  	tc_windup();
  	nanotime(&taft);
-@@ -440,6 +674,9 @@ tc_windup(void)
+@@ -440,6 +675,9 @@ tc_windup(void)
  		ncount = timecounter->tc_get_timecount(timecounter);
  	else
  		ncount = 0;
@@ -298,7 +299,7 @@ Index: sys/kern/kern_tc.c
  	th->th_offset_count += delta;
  	th->th_offset_count &= th->th_counter->tc_counter_mask;
  	while (delta > th->th_counter->tc_frequency) {
-@@ -496,6 +733,9 @@ tc_windup(void)
+@@ -496,6 +734,9 @@ tc_windup(void)
  		th->th_offset_count = ncount;
  		tc_min_ticktock_freq = max(1, timecounter->tc_frequency /
  		    (((uint64_t)timecounter->tc_counter_mask + 1) / 3));
@@ -308,7 +309,7 @@ Index: sys/kern/kern_tc.c
  	}
  
  	/*-
-@@ -814,6 +1054,10 @@ inittimecounter(void *dummy)
+@@ -814,6 +1055,10 @@ inittimecounter(void *dummy)
  	p = (tc_tick * 1000000) / hz;
  	printf("Timecounters tick every %d.%03u msec\n", p / 1000, p % 1000);
  
@@ -321,8 +322,8 @@ Index: sys/kern/kern_tc.c
  	(void)timecounter->tc_get_timecount(timecounter);
 Index: sys/sys/time.h
 ===================================================================
---- sys.orig/sys/time.h	2010-12-22 19:50:34.000000000 +1100
-+++ sys/sys/time.h	2010-12-22 19:57:17.000000000 +1100
+--- sys.orig/sys/time.h	2010-12-23 00:13:49.000000000 +1100
++++ sys/sys/time.h	2010-12-23 00:13:53.000000000 +1100
 @@ -2,6 +2,12 @@
   * Copyright (C) 1982, 1986, 1993
   *	The Regents of the University of California.  All rights reserved.
@@ -375,8 +376,8 @@ Index: sys/sys/time.h
  #ifdef _KERNEL
 Index: sys/conf/NOTES
 ===================================================================
---- sys.orig/conf/NOTES	2010-12-22 19:50:34.000000000 +1100
-+++ sys/conf/NOTES	2010-12-22 19:50:41.000000000 +1100
+--- sys.orig/conf/NOTES	2010-12-23 00:13:49.000000000 +1100
++++ sys/conf/NOTES	2010-12-23 00:13:53.000000000 +1100
 @@ -1178,6 +1178,14 @@ options 	HZ=100
  
  options 	PPS_SYNC
@@ -394,8 +395,8 @@ Index: sys/conf/NOTES
  # SCSI DEVICES
 Index: sys/conf/options
 ===================================================================
---- sys.orig/conf/options	2010-12-22 19:50:34.000000000 +1100
-+++ sys/conf/options	2010-12-22 19:50:41.000000000 +1100
+--- sys.orig/conf/options	2010-12-23 00:13:49.000000000 +1100
++++ sys/conf/options	2010-12-23 00:13:53.000000000 +1100
 @@ -75,6 +75,7 @@ COMPRESS_USER_CORES opt_core.h
  CY_PCI_FASTINTR
  DEADLKRES	opt_watchdog.h
