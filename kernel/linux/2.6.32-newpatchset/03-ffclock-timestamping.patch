@@ -1,5 +1,5 @@
 diff --git a/fs/compat_ioctl.c b/fs/compat_ioctl.c
-index d84e705..4a094c8 100644
+index d84e705..7f158c2 100644
 --- a/fs/compat_ioctl.c
 +++ b/fs/compat_ioctl.c
 @@ -134,6 +134,29 @@ static int w_long(unsigned int fd, unsigned int cmd, unsigned long arg)
@@ -10,10 +10,10 @@ index d84e705..4a094c8 100644
 +#ifdef CONFIG_FFCLOCK
 +static int rw_long_long(unsigned int fd, unsigned int cmd, unsigned long arg)
 +{
-+	int err;
-+	__u64 val;
 +	mm_segment_t old_fs = get_fs();
 +	u64 __user *argptr = compat_ptr(arg);
++	int err;
++	__u64 val;
 +
 +	if (get_user(val, argptr))
 +		return -EFAULT;
@@ -59,7 +59,7 @@ index 9a61a36..390ad37 100644
  
  #endif /* __ASM_GENERIC_SOCKIOS_H */
 diff --git a/include/linux/skbuff.h b/include/linux/skbuff.h
-index bcdd660..9fe7ddb 100644
+index bcdd660..cb0517e 100644
 --- a/include/linux/skbuff.h
 +++ b/include/linux/skbuff.h
 @@ -30,6 +30,10 @@
@@ -73,14 +73,13 @@ index bcdd660..9fe7ddb 100644
  /* Don't change this without changing skb_csum_unnecessary! */
  #define CHECKSUM_NONE 0
  #define CHECKSUM_UNNECESSARY 1
-@@ -404,6 +408,11 @@ struct sk_buff {
+@@ -404,6 +408,10 @@ struct sk_buff {
  				*data;
  	unsigned int		truesize;
  	atomic_t		users;
 +
 +#ifdef CONFIG_FFCLOCK
 +	ffcounter_t		ffclock_stamp;
-+	ktime_t			tstamp_fair; /* FFClock Fair Compare Mode */
 +#endif
  };
  
@@ -101,7 +100,7 @@ index 241f179..e1bc369 100644
  		    /*  0x8950 - 0x8952  * obsolete calls, don't re-use */
  #define SIOCDARP	0x8953		/* delete ARP table entry	*/
 diff --git a/include/net/sock.h b/include/net/sock.h
-index 9f96394..6a4eb25 100644
+index 9f96394..f22017b 100644
 --- a/include/net/sock.h
 +++ b/include/net/sock.h
 @@ -60,6 +60,10 @@
@@ -115,146 +114,90 @@ index 9f96394..6a4eb25 100644
  /*
   * This structure really needs to be cleaned up.
   * Most of it is for TCP, and not used by any of
-@@ -301,6 +305,12 @@ struct sock {
+@@ -301,6 +305,11 @@ struct sock {
    	int			(*sk_backlog_rcv)(struct sock *sk,
  						  struct sk_buff *skb);  
  	void                    (*sk_destruct)(struct sock *sk);
 +
 +#ifdef CONFIG_FFCLOCK
 +	ffcounter_t		sk_ffclock_stamp;
-+	ktime_t			sk_stamp_fair; /* FFClock Fair Compare Mode */
 +	int			sk_ffclock_tsmode;
 +#endif
  };
  
  /*
 diff --git a/net/core/dev.c b/net/core/dev.c
-index fe10551..a095229 100644
+index fe10551..7345938 100644
 --- a/net/core/dev.c
 +++ b/net/core/dev.c
-@@ -1362,6 +1362,11 @@ static void dev_queue_xmit_nit(struct sk_buff *skb, struct net_device *dev)
- {
- 	struct packet_type *ptype;
- 
-+#ifdef CONFIG_FFCLOCK
-+	ktime_t tv_fair;
-+	ffcounter_t ffcount;
-+#endif
-+
- #ifdef CONFIG_NET_CLS_ACT
- 	if (!(skb->tstamp.tv64 && (G_TC_FROM(skb->tc_verd) & AT_INGRESS)))
- 		net_timestamp(skb);
-@@ -1369,6 +1374,21 @@ static void dev_queue_xmit_nit(struct sk_buff *skb, struct net_device *dev)
+@@ -1369,6 +1369,13 @@ static void dev_queue_xmit_nit(struct sk_buff *skb, struct net_device *dev)
  	net_timestamp(skb);
  #endif
  
 +#ifdef CONFIG_FFCLOCK
-+	/* At this point, we have no way of knowing if we tap the packets
-+	 * in FFCLOCK_TSMODE_FAIRCOMPARE mode or not. So we take another
-+	 * timestamp we ensure to be 'fair'.
-+	 */
-+	rdtsc_barrier(); /* Make sure GCC doesn't mess up the compare */
-+	tv_fair = ktime_get_real();
-+	ffcount = read_ffcounter();
-+	rdtsc_barrier(); /* Make sure GCC doesn't mess up the compare */
-+
-+	/* Copy the two specific FFclock timestamps to the skbuff */
-+	skb->ffclock_stamp = ffcount;
-+	skb->tstamp_fair = tv_fair;
++	/* Updated the counter */
++	rdtsc_barrier();
++	skb->ffclock_stamp = read_ffcounter();
++	rdtsc_barrier();
 +#endif /* CONFIG_FFCLOCK */
 +
  	rcu_read_lock();
  	list_for_each_entry_rcu(ptype, &ptype_all, list) {
  		/* Never send packets back to the socket
-@@ -1998,10 +2018,30 @@ int netif_rx(struct sk_buff *skb)
- 	struct softnet_data *queue;
- 	unsigned long flags;
- 
-+#ifdef CONFIG_FFCLOCK
-+	/* At this point, we have no way of knowing if we tap the packets
-+	 * in FFCLOCK_TSMODE_FAIRCOMPARE mode or not. So we take another
-+	 * timestamp we ensure to be 'fair'.
-+	 */
-+	ktime_t tv_fair;
-+	ffcounter_t ffcount;
-+
-+	rdtsc_barrier(); /* Make sure GCC doesn't mess up the compare */
-+	ffcount = read_ffcounter();
-+	tv_fair = ktime_get_real();
-+	rdtsc_barrier(); /* Make sure GCC doesn't mess up the compare */
-+#endif /* CONFIG_FFCLOCK */
-+
- 	/* if netpoll wants it, pretend we never saw it */
+@@ -2002,6 +2009,13 @@ int netif_rx(struct sk_buff *skb)
  	if (netpoll_rx(skb))
  		return NET_RX_DROP;
  
 +#ifdef CONFIG_FFCLOCK
-+	/* Copy the two specific FFClock timestamps to the skbuff */
-+	skb->ffclock_stamp = ffcount;
-+	skb->tstamp_fair = tv_fair;
++	/* Update the counter */
++	rdtsc_barrier();
++	skb->ffclock_stamp = read_ffcounter();
++	rdtsc_barrier();
 +#endif
 +
  	if (!skb->tstamp.tv64)
  		net_timestamp(skb);
  
-@@ -2289,9 +2329,29 @@ int netif_receive_skb(struct sk_buff *skb)
+@@ -2289,6 +2303,13 @@ int netif_receive_skb(struct sk_buff *skb)
  	int ret = NET_RX_DROP;
  	__be16 type;
  
 +#ifdef CONFIG_FFCLOCK
-+	/* At this point, we have no way of knowing if we tap the packets
-+	 * in FFCLOCK_TSMODE_FAIRCOMPARE mode or not. So we take another
-+	 * timestamp we ensure to be 'fair'.
-+	 */
-+	ktime_t tv_fair;
-+	ffcounter_t ffcount;
-+
-+	rdtsc_barrier(); /* Make sure GCC doesn't mess up the compare */
-+	ffcount = read_ffcounter();
-+	tv_fair = ktime_get_real();
-+	rdtsc_barrier(); /* Make sure GCC doesn't mess up the compare */
++	/* Update the counter */
++	rdtsc_barrier();
++	skb->ffclock_stamp = read_ffcounter();
++	rdtsc_barrier();
 +#endif /* CONFIG_FFCLOCK */
 +
  	if (!skb->tstamp.tv64)
  		net_timestamp(skb);
  
-+#ifdef CONFIG_FFCLOCK
-+	/* Copy the two specific FFClock timestamps to the skbuff */
-+	skb->ffclock_stamp = ffcount;
-+	skb->tstamp_fair = tv_fair;
-+#endif
-+
- 	if (skb->vlan_tci && vlan_hwaccel_do_receive(skb))
- 		return NET_RX_SUCCESS;
- 
 diff --git a/net/core/skbuff.c b/net/core/skbuff.c
-index ec85681..2610af1 100644
+index ec85681..e9c6812 100644
 --- a/net/core/skbuff.c
 +++ b/net/core/skbuff.c
-@@ -207,6 +207,10 @@ struct sk_buff *__alloc_skb(unsigned int size, gfp_t gfp_mask,
+@@ -207,6 +207,9 @@ struct sk_buff *__alloc_skb(unsigned int size, gfp_t gfp_mask,
  #ifdef NET_SKBUFF_DATA_USES_OFFSET
  	skb->mac_header = ~0U;
  #endif
 +#ifdef CONFIG_FFCLOCK
 +	skb->ffclock_stamp = 0;
-+	skb->tstamp_fair = ktime_set(-1L, -1L);
 +#endif
  
  	/* make sure we initialize shinfo sequentially */
  	shinfo = skb_shinfo(skb);
-@@ -526,6 +530,10 @@ EXPORT_SYMBOL(skb_recycle_check);
+@@ -526,6 +529,9 @@ EXPORT_SYMBOL(skb_recycle_check);
  static void __copy_skb_header(struct sk_buff *new, const struct sk_buff *old)
  {
  	new->tstamp		= old->tstamp;
 +#ifdef CONFIG_FFCLOCK
 +	new->ffclock_stamp	= old->ffclock_stamp;
-+	new->tstamp_fair	= old->tstamp_fair;
 +#endif
  	new->dev		= old->dev;
  	new->transport_header	= old->transport_header;
  	new->network_header	= old->network_header;
 diff --git a/net/core/sock.c b/net/core/sock.c
-index 7626b6a..103265c 100644
+index 7626b6a..0dd3657 100644
 --- a/net/core/sock.c
 +++ b/net/core/sock.c
 @@ -130,6 +130,10 @@
@@ -268,20 +211,19 @@ index 7626b6a..103265c 100644
  /*
   * Each address family might have different locking rules, so we have
   * one slock key per address family:
-@@ -1881,6 +1885,11 @@ void sock_init_data(struct socket *sock, struct sock *sk)
+@@ -1881,6 +1885,10 @@ void sock_init_data(struct socket *sock, struct sock *sk)
  	sk->sk_sndtimeo		=	MAX_SCHEDULE_TIMEOUT;
  
  	sk->sk_stamp = ktime_set(-1L, 0);
 +#ifdef CONFIG_FFCLOCK
 +	sk->sk_ffclock_stamp = 0;
-+	sk->sk_stamp_fair = ktime_set(-1L, -1L);
 +	sk->sk_ffclock_tsmode = sysfs_ffclock_tsmode;
 +#endif
  
  	/*
  	 * Before updating sk_refcnt, we must commit prior changes to memory
 diff --git a/net/packet/af_packet.c b/net/packet/af_packet.c
-index f2d116a..4ca3b3b 100644
+index f2d116a..47eabbd 100644
 --- a/net/packet/af_packet.c
 +++ b/net/packet/af_packet.c
 @@ -84,6 +84,10 @@
@@ -320,7 +262,7 @@ index f2d116a..4ca3b3b 100644
 +		 * alignment, in most cases we should not use more memory.
 +		 */
 +		macoff = netoff = TPACKET_ALIGN(po->tp_hdrlen +	16 +
-+				    sizeof(ffcounter_t)) + po->tp_reserve;
++				  sizeof(ffcounter_t)) + po->tp_reserve;
 +#else
  		macoff = netoff = TPACKET_ALIGN(po->tp_hdrlen) + 16 +
  				  po->tp_reserve;
@@ -329,8 +271,8 @@ index f2d116a..4ca3b3b 100644
  		unsigned maclen = skb_network_offset(skb);
 +#ifdef CONFIG_FFCLOCK
 +		netoff = TPACKET_ALIGN(po->tp_hdrlen +
-+					(maclen < 16 ? 16 : maclen) +
-+					sizeof(ffcounter_t)) + po->tp_reserve;
++				       (maclen < 16 ? 16 : maclen) +
++				       sizeof(ffcounter_t)) + po->tp_reserve;
 +#else
  		netoff = TPACKET_ALIGN(po->tp_hdrlen +
  				       (maclen < 16 ? 16 : maclen)) +
@@ -339,32 +281,24 @@ index f2d116a..4ca3b3b 100644
  		macoff = netoff - maclen;
  	}
  
-@@ -741,6 +768,24 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev,
+@@ -741,6 +768,16 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev,
  
  	skb_copy_bits(skb, 0, h.raw + macoff, snaplen);
  
 +#ifdef CONFIG_FFCLOCK
-+	  /* Provide a timeval stamp build based on the FFclock or a timestamp
-+	   * for fair comparison. Replace existing timestamp in the skbuff if in
-+	   * the right mode. Default is to return normal stamp.
-+	   */
++	  /* Provide a timeval stamp build based on the FFClock */
 +	switch (sk->sk_ffclock_tsmode) {
 +	case FFCLOCK_TSMODE_FFCLOCK:
 +		ffcounter_to_ktime(&skb->ffclock_stamp, &ffclock_ktime);
 +		skb->tstamp = ffclock_ktime;
 +		break;
-+/*
-+	case FFCLOCK_TSMODE_FAIRCOMPARE:
-+		skb->tstamp = skb->tstamp_fair;
-+		break;
-+*/
 +	}
 +#endif /* CONFIG_FFCLOCK */
 +
  	switch (po->tp_version) {
  	case TPACKET_V1:
  		h.h1->tp_len = skb->len;
-@@ -784,6 +829,34 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev,
+@@ -784,6 +821,34 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev,
  	else
  		sll->sll_ifindex = dev->ifindex;
  
@@ -399,38 +333,30 @@ index f2d116a..4ca3b3b 100644
  	__packet_set_status(po, h.raw, status);
  	smp_mb();
  	{
-@@ -1119,6 +1192,15 @@ static int packet_snd(struct socket *sock,
+@@ -1119,6 +1184,11 @@ static int packet_snd(struct socket *sock,
  	if (err)
  		goto out_free;
  
 +#ifdef CONFIG_FFCLOCK
-+	/* Pass the two extra raw timestamps specific to the FFCLOCK to the
-+	 * socket: the raw ffcounter and the timeval stamps used in the
-+	 * FFCLOCK_TSMODE_FAIRCOMPARE mode.
-+	 */
++	/* Pass the raw timestamp specific to the FFCLOCK to the socket */
 +	sk->sk_ffclock_stamp = skb->ffclock_stamp;
-+	sk->sk_stamp_fair = skb->tstamp_fair;
-+#endif /* CONFIG_FFCLOCK */
++#endif
 +
  	skb->protocol = proto;
  	skb->dev = dev;
  	skb->priority = sk->sk_priority;
-@@ -1472,6 +1554,14 @@ static int packet_recvmsg(struct kiocb *iocb, struct socket *sock,
+@@ -1472,6 +1542,10 @@ static int packet_recvmsg(struct kiocb *iocb, struct socket *sock,
  	if (err)
  		goto out_free;
  
 +#ifdef CONFIG_FFCLOCK
-+	/* Pass the two extra raw timestamps specific to the FFCLOCK to the
-+	 * socket: the raw ffcounter and the timeval stamps used in the
-+	 * FFCLOCK_TSMODE_FAIRCOMPARE mode.
-+	 */
++	/* Pass the raw timestamp specific to the FFCLOCK to the socket */
 +	sk->sk_ffclock_stamp = skb->ffclock_stamp;
-+	sk->sk_stamp_fair = skb->tstamp_fair;
 +#endif
  	sock_recv_timestamp(msg, sk, skb);
  
  	if (msg->msg_name)
-@@ -1979,6 +2069,10 @@ static int packet_ioctl(struct socket *sock, unsigned int cmd,
+@@ -1979,6 +2053,10 @@ static int packet_ioctl(struct socket *sock, unsigned int cmd,
  {
  	struct sock *sk = sock->sk;
  
@@ -441,7 +367,7 @@ index f2d116a..4ca3b3b 100644
  	switch (cmd) {
  	case SIOCOUTQ:
  	{
-@@ -1999,9 +2093,61 @@ static int packet_ioctl(struct socket *sock, unsigned int cmd,
+@@ -1999,9 +2077,42 @@ static int packet_ioctl(struct socket *sock, unsigned int cmd,
  		return put_user(amount, (int __user *)arg);
  	}
  	case SIOCGSTAMP:
@@ -451,15 +377,6 @@ index f2d116a..4ca3b3b 100644
 +			ffcounter_to_ktime(&sk->sk_ffclock_stamp,
 +					    &(sk->sk_stamp));
 +		}
-+#if 0 /* Ignore FFClock FAIRCOMPARE logic */
-+		else if (sk->sk_ffclock_tsmode ==
-+			    FFCLOCK_TSMODE_FAIRCOMPARE) {
-+			/* We are in FAIRCOMPARE mode so happily overwrite the
-+			 * timestamp that is returned right below
-+			 */
-+			sk->sk_stamp = sk->sk_stamp_fair;
-+		}
-+#endif /* if 0 */
 +#endif /* CONFIG_FFCLOCK */
  		return sock_get_timestamp(sk, (struct timeval __user *)arg);
  	case SIOCGSTAMPNS:
@@ -469,15 +386,6 @@ index f2d116a..4ca3b3b 100644
 +			ffcounter_to_ktime(&sk->sk_ffclock_stamp,
 +					    &(sk->sk_stamp));
 +		}
-+#if 0 /* Ignore FFClock FAIRCOMPARE logic */
-+		else if (sk->sk_ffclock_tsmode ==
-+			    FFCLOCK_TSMODE_FAIRCOMPARE) {
-+			/* We are in FAIRCOMPARE mode so happily overwrite the
-+			 * timestamp that is returned right below
-+			 */
-+			sk->sk_stamp = sk->sk_stamp_fair;
-+		}
-+#endif /* if 0 */
 +#endif /* CONFIG_FFCLOCK */
  		return sock_get_timestampns(sk, (struct timespec __user *)arg);
 +#ifdef CONFIG_FFCLOCK
@@ -485,7 +393,6 @@ index f2d116a..4ca3b3b 100644
 +		tsmode = *((long *)arg);
 +
 +		switch (tsmode) {
-+		/* case FFCLOCK_TSMODE_FAIRCOMPARE: */
 +		case FFCLOCK_TSMODE_SYSCLOCK:
 +		case FFCLOCK_TSMODE_FFCLOCK:
 +			sk->sk_ffclock_tsmode = tsmode;
