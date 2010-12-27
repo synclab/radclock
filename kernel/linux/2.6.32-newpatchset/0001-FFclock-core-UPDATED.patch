@@ -1,0 +1,407 @@
+diff --git a/include/linux/ffclock.h b/include/linux/ffclock.h
+new file mode 100644
+index 0000000..0b15688
+--- /dev/null
++++ b/include/linux/ffclock.h
+@@ -0,0 +1,85 @@
++#ifndef __LINUX_FFCLOCK_H
++#define __LINUX_FFCLOCK_H
++
++#include <linux/ktime.h>
++
++
++#ifdef CONFIG_FFCLOCK
++/* Feed-forward time type (ffclock) */
++typedef u64 ffcounter_t;
++
++
++/* Managed by both the FFClock module and timekeeping.c */
++extern struct feedforward_clock ffclock;
++
++
++/* XXX XXX XXX TODO XXX XXX XXX
++ *
++ * Copyright / Licence issues !!! This is BSD code, we will have to change this
++ * to make sure we do not create trouble.
++ *
++ * XXX XXX XXX TODO XXX XXX XXX
++ */
++struct bintime {
++	int64_t sec;
++	uint64_t frac;
++};
++
++static inline void bintime_add(struct bintime *bt, const struct bintime *bt2)
++{
++	uint64_t u;
++
++	u = bt->frac;
++	bt->frac += bt2->frac;
++	if (u > bt->frac)
++		bt->sec++;
++	bt->sec += bt2->sec;
++}
++
++static inline void bintime_mul(struct bintime *bt, u_int x)
++{
++	uint64_t p1, p2;
++
++	p1 = (bt->frac & 0xffffffffull) * x;
++	p2 = (bt->frac >> 32) * x + (p1 >> 32);
++	bt->sec *= x;
++	bt->sec += (p2 >> 32);
++	bt->frac = (p2 << 32) | (p1 & 0xffffffffull);
++}
++
++/* XXX XXX XXX XXX XXX XXX XXX XXX */
++
++struct ffclock_data {
++	/* Time conversion of ffcounter below */
++	struct bintime time;
++	/* Last synchronization daemon update or update_ffclock() */
++	ffcounter_t ffcounter;
++	/* Timecounter period estimate (<< per_shift) in nanoseconds */
++	uint64_t period;
++	/* Clock status word */
++	uint32_t status;
++	/* Average of clock error bound in nanoseconds */
++	uint32_t error_bound_avg;
++};
++
++struct ffclock_estimate {
++	uint8_t gen;
++	struct ffclock_data cdata;
++};
++
++/* Current feed-forward estimation of time and the previous estimate */
++struct feedforward_clock {
++	uint8_t updated;
++	struct ffclock_estimate *cest;
++	struct ffclock_estimate *ocest;
++	struct ffclock_estimate *ucest;
++};
++
++
++ffcounter_t read_ffcounter(void);
++void ffcounter_to_ktime(const ffcounter_t *ffcounter, ktime_t *ktime);
++
++#endif /* CONFIG_FFCLOCK */
++
++
++#endif /* __LINUX_FFCLOCK_H */
+diff --git a/kernel/time/Kconfig b/kernel/time/Kconfig
+index 95ed429..504ca28 100644
+--- a/kernel/time/Kconfig
++++ b/kernel/time/Kconfig
+@@ -27,3 +27,10 @@ config GENERIC_CLOCKEVENTS_BUILD
+ 	default y
+ 	depends on GENERIC_CLOCKEVENTS || GENERIC_CLOCKEVENTS_MIGR
+ 
++config FFCLOCK
++        bool
++        depends on EXPERIMENTAL
++        default y
++        help
++          This option enables feed-forward clock estimation ideally based on
++          the hardware counter value of the system's clock.
+diff --git a/kernel/time/timekeeping.c b/kernel/time/timekeeping.c
+index c3a4e29..f969646 100644
+--- a/kernel/time/timekeeping.c
++++ b/kernel/time/timekeeping.c
+@@ -21,6 +21,10 @@
+ #include <linux/tick.h>
+ #include <linux/stop_machine.h>
+ 
++#ifdef CONFIG_FFCLOCK
++#include <linux/ffclock.h>
++#endif
++
+ /* Structure holding internal timekeeping values. */
+ struct timekeeper {
+ 	/* Current clocksource used for timekeeping. */
+@@ -45,10 +49,26 @@ struct timekeeper {
+ 	int	ntp_error_shift;
+ 	/* NTP adjusted clock multiplier */
+ 	u32	mult;
++
++#ifdef CONFIG_FFCLOCK
++	/* Feed-forward counter record for the timekeeper */
++	ffcounter_t       ffcounter_record;
++#endif
+ };
+ 
+ struct timekeeper timekeeper;
+ 
++#ifdef CONFIG_FFCLOCK
++/* Global feed-forward clock estimate (ffclock.h) */
++struct feedforward_clock ffclock;
++
++static void init_ffclock(struct feedforward_clock *ffclock);
++static void reset_ffclock(struct feedforward_clock *ffclock,
++			    const struct clocksource *clock,
++			    int new_clocksource);
++static void update_ffclock(struct feedforward_clock *ffclock);
++#endif /* CONFIG_FFCLOCK */
++
+ /**
+  * timekeeper_setup_internals - Set up internals to use clocksource clock.
+  *
+@@ -95,6 +115,10 @@ static void timekeeper_setup_internals(struct clocksource *clock)
+ 	 * to counteract clock drifting.
+ 	 */
+ 	timekeeper.mult = clock->mult;
++
++#ifdef CONFIG_FFCLOCK
++	reset_ffclock(&ffclock, clock, 0);
++#endif
+ }
+ 
+ /* Timekeeper helper functions. */
+@@ -337,6 +361,10 @@ int do_settimeofday(struct timespec *tv)
+ 	timekeeper.ntp_error = 0;
+ 	ntp_clear();
+ 
++#ifdef CONFIG_FFCLOCK
++	reset_ffclock(&ffclock, timekeeper.clock, 0);
++#endif
++
+ 	update_vsyscall(&xtime, timekeeper.clock);
+ 
+ 	write_sequnlock_irqrestore(&xtime_lock, flags);
+@@ -363,10 +391,16 @@ static int change_clocksource(void *data)
+ 	timekeeping_forward_now();
+ 	if (!new->enable || new->enable(new) == 0) {
+ 		old = timekeeper.clock;
++
++#ifdef CONFIG_FFCLOCK
++		reset_ffclock(&ffclock, timekeeper.clock, 1);
++#endif
++
+ 		timekeeper_setup_internals(new);
+ 		if (old->disable)
+ 			old->disable(old);
+ 	}
++
+ 	return 0;
+ }
+ 
+@@ -533,6 +567,10 @@ void __init timekeeping_init(void)
+ 
+ 	ntp_init();
+ 
++#ifdef CONFIG_FFCLOCK
++	init_ffclock(&ffclock);
++#endif
++
+ 	clock = clocksource_default_clock();
+ 	if (clock->enable)
+ 		clock->enable(clock);
+@@ -551,6 +589,7 @@ void __init timekeeping_init(void)
+ 	update_xtime_cache(0);
+ 	total_sleep_time.tv_sec = 0;
+ 	total_sleep_time.tv_nsec = 0;
++
+ 	write_sequnlock_irqrestore(&xtime_lock, flags);
+ }
+ 
+@@ -812,6 +851,11 @@ void update_wall_time(void)
+ 
+ 	/* check to see if there is a new clocksource to use */
+ 	update_vsyscall(&xtime, timekeeper.clock);
++
++#ifdef CONFIG_FFCLOCK
++	timekeeper.ffcounter_record += offset;
++	update_ffclock(&ffclock);
++#endif
+ }
+ 
+ /**
+@@ -886,3 +930,188 @@ struct timespec get_monotonic_coarse(void)
+ 				now.tv_nsec + mono.tv_nsec);
+ 	return now;
+ }
++
++/*
++ * Feed-forward Clock Functionality
++ */
++#ifdef CONFIG_FFCLOCK
++
++/**
++ * init_ffclock - Initialize the feed-forward clock estimate
++ * @ffclock:	Pointer to the ffclock instance to initialize
++ */
++static void init_ffclock(struct feedforward_clock *ffclock)
++{
++	const size_t sz = sizeof(struct ffclock_estimate);
++
++	memset(ffclock, 0, sz);
++	ffclock->cest = kzalloc(sz, 0);
++	ffclock->ocest = kzalloc(sz, 0);
++	ffclock->ucest = kzalloc(sz, 0);
++}
++
++/**
++ * reset_ffclock - Setup the ffclock to initial values
++ * @ffclock:	Pointer to the ffclock instance to reset
++ * @clock:	Pointer to the clocksource to initialize the ffclock with
++ * @new_clocksource:	If TRUE, the timekeeper's picture is reset
++ *
++ * This is called if we switch clocksources.
++ */
++static void reset_ffclock(struct feedforward_clock *ffclock,
++			    const struct clocksource *clock,
++			    int new_clocksource)
++{
++	struct timespec boot;
++	struct ffclock_estimate *cest;
++	struct ffclock_data *cdata;
++
++	cest = ffclock->ucest;
++	cdata = &(cest->cdata);
++
++	/* If we changed clocksources reset the timekeeper's picture */
++	if (new_clocksource) {
++		timekeeper.ffcounter_record = 0;
++		cdata->ffcounter = 0;
++	} else
++		cdata->ffcounter = read_ffcounter();
++
++	/* Push boot time as our reference
++	 * 18446744073 = int(2^64 / 1000000000)
++	 */
++	read_boot_clock(&boot);
++	cdata->time.sec = boot.tv_sec;
++	cdata->time.frac = boot.tv_nsec * (uint64_t)18446744073LL;
++
++	/* Clock multiplier to cycles-per-nanosecond */
++	cdata->period = clocksource_cyc2ns(1, clock->mult, clock->shift);
++
++	cdata->status = 0;
++	cdata->error_bound_avg = 0;
++
++	if (++cest->gen == 0)
++		cest->gen = 1;
++
++	ffclock->ucest = ffclock->cest;
++	ffclock->cest = cest;
++
++	cdata = &(ffclock->cest->cdata);
++
++	printk(KERN_INFO "reset_ffclock: %s - period = %llu, time = %lu.%09lu",
++			clock->name,
++			(long long unsigned) cdata->period,
++			(long unsigned) boot.tv_sec,
++			(long unsigned) boot.tv_nsec);
++}
++
++/**
++ * update_ffclock - Update the ffclock which prevents overflow.
++ * @ffclock:	Pointer to ffclock instance to update
++ *
++ * The clock's parameters are not modified here.
++ */
++static void update_ffclock(struct feedforward_clock *ffclock)
++{
++	struct ffclock_estimate *tmp;
++	struct ffclock_data *cdata;
++	ffcounter_t ffdelta;
++	struct bintime delta;
++
++	/*
++	 * If the clock has been updated by the synchronisation daemon, this new
++	 * data is the more up to date one.
++	 */
++	if (ffclock->updated) {
++		ffclock->ucest->gen = ffclock->cest->gen;
++		if (++ffclock->ucest->gen == 0)
++			ffclock->ucest->gen = 1;
++
++		tmp = ffclock->cest;
++		ffclock->cest = ffclock->ucest;
++		ffclock->ucest = tmp;
++		ffclock->updated = 0;
++		return;
++	}
++
++	/* If we just changed the timecounter, we have nothing to do in here */
++	cdata = &(ffclock->cest->cdata);
++	if (cdata->ffcounter > timekeeper.ffcounter_record)
++		return;
++
++	/* Update time mark */
++	*(ffclock->ocest) = *(ffclock->cest);
++	cdata = &(ffclock->ocest->cdata);
++
++	ffdelta = timekeeper.ffcounter_record - cdata->ffcounter;
++
++	delta.sec = 0;
++	delta.frac = cdata->period;
++	bintime_mul(&delta, ffdelta);
++	bintime_add(&(cdata->time), &delta);
++
++	cdata->ffcounter = timekeeper.ffcounter_record;
++
++	if (++ffclock->ocest->gen == 0)
++		ffclock->ocest->gen = 1;
++
++	tmp = ffclock->cest;
++	ffclock->cest = ffclock->ocest;
++	ffclock->ocest = tmp;
++}
++
++/**
++  * ffcounter_to_ktime - Convert the ffcounter value to a ktime value
++  * @ffcounter:	Counter value that should be converted to ktime
++  * @ktime:	The converted ffcounter value is set here
++  */
++void ffcounter_to_ktime(const ffcounter_t *ffcounter, ktime_t *ktime)
++{
++	struct ffclock_data *cdata;
++	ffcounter_t ffdelta;
++	struct bintime delta;
++	struct bintime time;
++	uint8_t gen;
++
++	/*
++	 * Avoid locking to prevent clock data from being updated. Check that
++	 * the generation has not changed instead.
++	 */
++	do {
++		gen = ffclock.cest->gen;
++		cdata = &(ffclock.cest->cdata);
++
++		ffdelta = *ffcounter - cdata->ffcounter;
++		delta.sec = 0;
++		delta.frac = cdata->period;
++		bintime_mul(&delta, ffdelta);
++		time.sec = cdata->time.sec;
++		time.frac = cdata->time.frac;
++		bintime_add(&time, &delta);
++
++	} while (gen == 0 || gen != ffclock.cest->gen);
++
++	ktime->tv64 = (s64) (time.sec * 1000000000);
++	ktime->tv64 += ((uint64_t)1000000000 * (uint32_t)time.frac >> 32) >> 32;
++}
++EXPORT_SYMBOL(ffcounter_to_ktime);
++
++
++/**
++ * read_ffcounter - Return the hardware counter's value
++ */
++ffcounter_t read_ffcounter(void)
++{
++	cycle_t offset;
++	struct clocksource *clock = timekeeper.clock;
++
++#ifdef CONFIG_GENERIC_TIME
++	offset = (clock->read(clock) - clock->cycle_last) & clock->mask;
++#else
++	offset = timekeeper.cycle_interval;
++#endif
++
++	return timekeeper.ffcounter_record + offset;
++}
++EXPORT_SYMBOL(read_ffcounter);
++
++#endif /* CONFIG_FFCLOCK */
