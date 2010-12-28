@@ -100,7 +100,7 @@ index 241f179..e1bc369 100644
  		    /*  0x8950 - 0x8952  * obsolete calls, don't re-use */
  #define SIOCDARP	0x8953		/* delete ARP table entry	*/
 diff --git a/include/net/sock.h b/include/net/sock.h
-index 9f96394..f22017b 100644
+index 9f96394..eb34f7c 100644
 --- a/include/net/sock.h
 +++ b/include/net/sock.h
 @@ -60,6 +60,10 @@
@@ -114,7 +114,16 @@ index 9f96394..f22017b 100644
  /*
   * This structure really needs to be cleaned up.
   * Most of it is for TCP, and not used by any of
-@@ -301,6 +305,11 @@ struct sock {
+@@ -205,6 +209,8 @@ struct sock_common {
+   *	@sk_error_report: callback to indicate errors (e.g. %MSG_ERRQUEUE)
+   *	@sk_backlog_rcv: callback to process the backlog
+   *	@sk_destruct: called at sock freeing time, i.e. when all refcnt == 0
++  *	@sk_ffclock_stamp: feed-forward clock stamp
++  *	@sk_ffclock_tsmode: timestamping mode used by the feed-forward clock
+  */
+ struct sock {
+ 	/*
+@@ -301,6 +307,11 @@ struct sock {
    	int			(*sk_backlog_rcv)(struct sock *sk,
  						  struct sk_buff *skb);  
  	void                    (*sk_destruct)(struct sock *sk);
@@ -127,7 +136,7 @@ index 9f96394..f22017b 100644
  
  /*
 diff --git a/net/core/dev.c b/net/core/dev.c
-index fe10551..7345938 100644
+index fe10551..41ef9e8 100644
 --- a/net/core/dev.c
 +++ b/net/core/dev.c
 @@ -1369,6 +1369,13 @@ static void dev_queue_xmit_nit(struct sk_buff *skb, struct net_device *dev)
@@ -135,7 +144,7 @@ index fe10551..7345938 100644
  #endif
  
 +#ifdef CONFIG_FFCLOCK
-+	/* Updated the counter */
++	/* Update the counter */
 +	rdtsc_barrier();
 +	skb->ffclock_stamp = read_ffcounter();
 +	rdtsc_barrier();
@@ -197,7 +206,7 @@ index ec85681..e9c6812 100644
  	new->transport_header	= old->transport_header;
  	new->network_header	= old->network_header;
 diff --git a/net/core/sock.c b/net/core/sock.c
-index 7626b6a..0dd3657 100644
+index 7626b6a..b49da94 100644
 --- a/net/core/sock.c
 +++ b/net/core/sock.c
 @@ -130,6 +130,10 @@
@@ -205,7 +214,7 @@ index 7626b6a..0dd3657 100644
  #endif
  
 +#ifdef CONFIG_FFCLOCK
-+int sysfs_ffclock_tsmode;
++static int sysfs_ffclock_tsmode;
 +#endif
 +
  /*
@@ -223,7 +232,7 @@ index 7626b6a..0dd3657 100644
  	/*
  	 * Before updating sk_refcnt, we must commit prior changes to memory
 diff --git a/net/packet/af_packet.c b/net/packet/af_packet.c
-index f2d116a..47eabbd 100644
+index f2d116a..3d73659 100644
 --- a/net/packet/af_packet.c
 +++ b/net/packet/af_packet.c
 @@ -84,6 +84,10 @@
@@ -237,19 +246,17 @@ index f2d116a..47eabbd 100644
  /*
     Assumptions:
     - if device has no dev->hard_header routine, it adds and removes ll header
-@@ -667,6 +671,11 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev,
+@@ -666,6 +670,9 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev,
+ 	struct sk_buff *copy_skb = NULL;
  	struct timeval tv;
  	struct timespec ts;
- 
 +#ifdef CONFIG_FFCLOCK
 +	unsigned short ffclock_off;
-+	ktime_t ffclock_ktime;
 +#endif
-+
+ 
  	if (skb->pkt_type == PACKET_LOOPBACK)
  		goto drop;
- 
-@@ -697,13 +706,31 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev,
+@@ -697,13 +704,31 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev,
  		snaplen = res;
  
  	if (sk->sk_type == SOCK_DGRAM) {
@@ -281,24 +288,19 @@ index f2d116a..47eabbd 100644
  		macoff = netoff - maclen;
  	}
  
-@@ -741,6 +768,16 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev,
+@@ -741,6 +766,11 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev,
  
  	skb_copy_bits(skb, 0, h.raw + macoff, snaplen);
  
 +#ifdef CONFIG_FFCLOCK
-+	  /* Provide a timeval stamp build based on the FFClock */
-+	switch (sk->sk_ffclock_tsmode) {
-+	case FFCLOCK_TSMODE_FFCLOCK:
-+		ffcounter_to_ktime(&skb->ffclock_stamp, &ffclock_ktime);
-+		skb->tstamp = ffclock_ktime;
-+		break;
-+	}
-+#endif /* CONFIG_FFCLOCK */
++	if (sk->sk_ffclock_tsmode == FFCLOCK_TSMODE_FFCLOCK)
++		ffcounter_to_ktime(&skb->ffclock_stamp, &skb->tstamp);
++#endif
 +
  	switch (po->tp_version) {
  	case TPACKET_V1:
  		h.h1->tp_len = skb->len;
-@@ -784,6 +821,34 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev,
+@@ -784,6 +814,34 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev,
  	else
  		sll->sll_ifindex = dev->ifindex;
  
@@ -328,12 +330,12 @@ index f2d116a..47eabbd 100644
 +	/* Copy the vcount stamp just before where the mac/sll header wil be */
 +	ffclock_off -= sizeof(ffcounter_t);
 +	memcpy(h.raw + ffclock_off, &(skb->ffclock_stamp), sizeof(ffcounter_t));
-+#endif /* FFCLOCK_CONFIG */
++#endif /* CONFIG_CONFIG */
 +
  	__packet_set_status(po, h.raw, status);
  	smp_mb();
  	{
-@@ -1119,6 +1184,11 @@ static int packet_snd(struct socket *sock,
+@@ -1119,6 +1177,10 @@ static int packet_snd(struct socket *sock,
  	if (err)
  		goto out_free;
  
@@ -341,11 +343,10 @@ index f2d116a..47eabbd 100644
 +	/* Pass the raw timestamp specific to the FFCLOCK to the socket */
 +	sk->sk_ffclock_stamp = skb->ffclock_stamp;
 +#endif
-+
  	skb->protocol = proto;
  	skb->dev = dev;
  	skb->priority = sk->sk_priority;
-@@ -1472,6 +1542,10 @@ static int packet_recvmsg(struct kiocb *iocb, struct socket *sock,
+@@ -1472,6 +1534,10 @@ static int packet_recvmsg(struct kiocb *iocb, struct socket *sock,
  	if (err)
  		goto out_free;
  
@@ -356,37 +357,32 @@ index f2d116a..47eabbd 100644
  	sock_recv_timestamp(msg, sk, skb);
  
  	if (msg->msg_name)
-@@ -1979,6 +2053,10 @@ static int packet_ioctl(struct socket *sock, unsigned int cmd,
+@@ -1978,6 +2044,9 @@ static int packet_ioctl(struct socket *sock, unsigned int cmd,
+ 			unsigned long arg)
  {
  	struct sock *sk = sock->sk;
- 
 +#ifdef CONFIG_FFCLOCK
-+	long tsmode = FFCLOCK_TSMODE_FFCLOCK;
++	long tsmode;
 +#endif
-+
+ 
  	switch (cmd) {
  	case SIOCOUTQ:
- 	{
-@@ -1999,9 +2077,42 @@ static int packet_ioctl(struct socket *sock, unsigned int cmd,
+@@ -1999,9 +2068,38 @@ static int packet_ioctl(struct socket *sock, unsigned int cmd,
  		return put_user(amount, (int __user *)arg);
  	}
  	case SIOCGSTAMP:
 +#ifdef CONFIG_FFCLOCK
-+		if (sk->sk_ffclock_tsmode == FFCLOCK_TSMODE_FFCLOCK) {
-+			/* timeval stamp build based on the FFClock */
++		if (sk->sk_ffclock_tsmode == FFCLOCK_TSMODE_FFCLOCK)
 +			ffcounter_to_ktime(&sk->sk_ffclock_stamp,
 +					    &(sk->sk_stamp));
-+		}
-+#endif /* CONFIG_FFCLOCK */
++#endif
  		return sock_get_timestamp(sk, (struct timeval __user *)arg);
  	case SIOCGSTAMPNS:
 +#ifdef CONFIG_FFCLOCK
-+		if (sk->sk_ffclock_tsmode == FFCLOCK_TSMODE_FFCLOCK) {
-+			/* timeval stamp build based on the FFClock */
++		if (sk->sk_ffclock_tsmode == FFCLOCK_TSMODE_FFCLOCK)
 +			ffcounter_to_ktime(&sk->sk_ffclock_stamp,
 +					    &(sk->sk_stamp));
-+		}
-+#endif /* CONFIG_FFCLOCK */
++#endif
  		return sock_get_timestampns(sk, (struct timespec __user *)arg);
 +#ifdef CONFIG_FFCLOCK
 +	case SIOCSFFCLOCKTSMODE:
@@ -404,9 +400,9 @@ index f2d116a..47eabbd 100644
 +		*(long *)arg = tsmode;
 +		return 0;
 +	case SIOCGFFCLOCKTSMODE:
-+		*(long *)arg = sk->sk_ffclock_tsmode ;
++		*(long *)arg = sk->sk_ffclock_tsmode;
 +		return 0;
-+#endif
++#endif /* CONFIG_FFCLOCK */
  
  #ifdef CONFIG_INET
  	case SIOCADDRT:
