@@ -489,6 +489,7 @@ set_kernel_ffclock(struct radclock *clock)
 	vcounter_t vcount;
 	long double time;
 	uint64_t period;
+	uint64_t period_shortterm;
 	uint64_t frac;
 
 	if (clock->kernel_version < 2)
@@ -519,6 +520,9 @@ set_kernel_ffclock(struct radclock *clock)
 
 	period = ((long double) RAD_DATA(clock)->phat) * (1LLU << 63);
 	fdata.period = period << 1;
+
+	period_shortterm = ((long double) RAD_DATA(clock)->phat_local) * (1LLU << 63);
+	fdata.period_shortterm = period_shortterm << 1;
 
 	fdata.last_update = vcount;
 	fdata.status = RAD_DATA(clock)->status;

@@ -48,6 +48,9 @@ struct ffclock_data
 	/* Timecounter period estimate */
     uint64_t period;
 
+	/* Timecounter short term period estimate (aka plocal) */
+    uint64_t period_shortterm;
+
     /* Last synchronization daemon update or update_ffclock() */
     vcounter_t last_update;
     
