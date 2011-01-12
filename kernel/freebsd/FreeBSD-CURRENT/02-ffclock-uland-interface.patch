@@ -14,7 +14,7 @@ clock.
 Index: sys/kern/ffclock.c
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ sys/kern/ffclock.c	2010-12-22 17:10:37.000000000 +1100
++++ sys/kern/ffclock.c	2011-01-12 14:54:03.000000000 +1100
 @@ -0,0 +1,250 @@
 +/*-
 + * Copyright (C) 2010 University of Melbourne
@@ -59,10 +59,10 @@ Index: sys/kern/ffclock.c
 +#include <sys/sysent.h>
 +#include <sys/kernel.h>
 +#include <sys/systm.h>
-+#include <sys/time.h>
 +#include <sys/sysproto.h>
 +#include <sys/bus.h>
 +#include <sys/sysctl.h>
++#include <sys/timeff.h>
 +
 +
 +extern struct ffclock_estimate ffclock;
@@ -268,8 +268,8 @@ Index: sys/kern/ffclock.c
 +
 Index: sys/modules/Makefile
 ===================================================================
---- sys.orig/modules/Makefile	2010-12-22 02:34:42.000000000 +1100
-+++ sys/modules/Makefile	2010-12-22 17:06:57.000000000 +1100
+--- sys.orig/modules/Makefile	2010-12-23 17:00:47.000000000 +1100
++++ sys/modules/Makefile	2010-12-23 17:22:15.000000000 +1100
 @@ -242,6 +242,7 @@ SUBDIR=	${_3dfx} \
  	${_pst} \
  	pty  \
@@ -281,7 +281,7 @@ Index: sys/modules/Makefile
 Index: sys/modules/ffclock/Makefile
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ sys/modules/ffclock/Makefile	2010-12-22 17:06:57.000000000 +1100
++++ sys/modules/ffclock/Makefile	2010-12-23 17:22:15.000000000 +1100
 @@ -0,0 +1,16 @@
 +# This make file creates the .ko module for retrieving the vitual counter through syscall.
 +

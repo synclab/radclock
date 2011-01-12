@@ -12,8 +12,8 @@ guests see the same time and allow live migration.
 
 Index: sys/i386/xen/clock.c
 ===================================================================
---- sys.orig/i386/xen/clock.c	2010-12-23 16:12:10.000000000 +1100
-+++ sys/i386/xen/clock.c	2010-12-23 17:38:07.000000000 +1100
+--- sys.orig/i386/xen/clock.c	2011-01-12 18:52:36.000000000 +1100
++++ sys/i386/xen/clock.c	2011-01-12 19:40:37.000000000 +1100
 @@ -5,6 +5,12 @@
   * This code is derived from software contributed to Berkeley by
   * William Jolitz and Don Ahn.
@@ -79,9 +79,9 @@ Index: sys/i386/xen/clock.c
  get_system_time(int ticks)
 Index: sys/kern/kern_tc.c
 ===================================================================
---- sys.orig/kern/kern_tc.c	2010-12-23 17:34:58.000000000 +1100
-+++ sys/kern/kern_tc.c	2010-12-23 17:42:14.000000000 +1100
-@@ -526,6 +526,12 @@ ffcounter2bintime(ffcounter_t *ffcounter
+--- sys.orig/kern/kern_tc.c	2011-01-12 19:40:34.000000000 +1100
++++ sys/kern/kern_tc.c	2011-01-12 19:40:37.000000000 +1100
+@@ -597,6 +597,12 @@ ffdelta2bintime(ffcounter_t *ffdelta, st
  }
  
  
@@ -94,7 +94,7 @@ Index: sys/kern/kern_tc.c
  /* Return current ffcounter value */
  ffcounter_t
  read_ffcounter(void)
-@@ -534,21 +540,36 @@ read_ffcounter(void)
+@@ -605,21 +611,36 @@ read_ffcounter(void)
  	struct fftimehands *ffth;
  	u_int gen, delta;
  	ffcounter_t ffcounter;
@@ -138,7 +138,7 @@ Index: sys/kern/kern_tc.c
  #endif	/* FFCLOCK */
  
  
-@@ -578,6 +599,13 @@ tc_init(struct timecounter *tc)
+@@ -649,6 +670,13 @@ tc_init(struct timecounter *tc)
  		    tc->tc_quality);
  	}
  
@@ -154,8 +154,8 @@ Index: sys/kern/kern_tc.c
  	/*
 Index: sys/sys/timetc.h
 ===================================================================
---- sys.orig/sys/timetc.h	2010-12-23 17:10:37.000000000 +1100
-+++ sys/sys/timetc.h	2010-12-23 17:38:07.000000000 +1100
+--- sys.orig/sys/timetc.h	2011-01-12 18:52:36.000000000 +1100
++++ sys/sys/timetc.h	2011-01-12 19:40:37.000000000 +1100
 @@ -6,6 +6,12 @@
   * this stuff is worth it, you can buy me a beer in return.   Poul-Henning Kamp
   * ----------------------------------------------------------------------------
@@ -195,8 +195,8 @@ Index: sys/sys/timetc.h
  extern struct timecounter *timecounter;
 Index: sys/x86/x86/tsc.c
 ===================================================================
---- sys.orig/x86/x86/tsc.c	2010-12-23 16:12:10.000000000 +1100
-+++ sys/x86/x86/tsc.c	2010-12-23 17:38:07.000000000 +1100
+--- sys.orig/x86/x86/tsc.c	2011-01-12 18:52:36.000000000 +1100
++++ sys/x86/x86/tsc.c	2011-01-12 19:40:37.000000000 +1100
 @@ -2,6 +2,12 @@
   * Copyright (C) 1998-2003 Poul-Henning Kamp
   * All rights reserved.

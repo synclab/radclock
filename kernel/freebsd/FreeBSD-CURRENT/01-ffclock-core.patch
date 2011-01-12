@@ -5,15 +5,15 @@ Core set of changes to support a feed-forward clock within the kernel.
 ---
  conf/NOTES      |    8 +
  conf/options    |    1 
- kern/kern_tc.c  |  261 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ kern/kern_tc.c  |  332 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++
  kern/subr_rtc.c |    8 +
- sys/timeff.h    |   70 +++++++++++++++
- 5 files changed, 348 insertions(+)
+ sys/timeff.h    |   72 ++++++++++++
+ 5 files changed, 421 insertions(+)
 
 Index: sys/kern/kern_tc.c
 ===================================================================
---- sys.orig/kern/kern_tc.c	2010-12-23 17:10:37.000000000 +1100
-+++ sys/kern/kern_tc.c	2010-12-23 17:22:04.000000000 +1100
+--- sys.orig/kern/kern_tc.c	2011-01-12 18:53:05.000000000 +1100
++++ sys/kern/kern_tc.c	2011-01-12 19:40:23.000000000 +1100
 @@ -5,12 +5,19 @@
   * can do whatever you want with this stuff. If we meet some day, and you think
   * this stuff is worth it, you can buy me a beer in return.   Poul-Henning Kamp
@@ -53,7 +53,7 @@ Index: sys/kern/kern_tc.c
  static struct timehands *volatile timehands = &th0;
  struct timecounter *timecounter = &dummy_timecounter;
  static struct timecounter *timecounters = &dummy_timecounter;
-@@ -300,6 +312,246 @@ getmicrotime(struct timeval *tvp)
+@@ -300,6 +312,317 @@ getmicrotime(struct timeval *tvp)
  	} while (gen == 0 || gen != th->th_generation);
  }
  
@@ -140,18 +140,53 @@ Index: sys/kern/kern_tc.c
 +
 +	timespec2bintime(ts, &(ffclock.time));
 +	ffclock.period = ((1LLU << 63) / tc->tc_frequency ) << 1;
++	ffclock.period_shortterm = ffclock.period;
 +	ffclock.status = 0;
 +	ffclock.error_bound_avg = 0;
 +
 +	ffclock_fetch_update = 1;
 +
-+	printf("FFclock: %s - period = %llu (%llu Hz), time = %lu.%09lu\n",
++	printf("FFclock: %s - period = %llu (%llu Hz), time = %ld.%09lu\n",
 +			tc->tc_name,
 +			(long long unsigned) ffclock.period,
 +			(long long unsigned) tc->tc_frequency,
-+			(long unsigned) ts->tv_sec,
-+			(long unsigned) ts->tv_nsec);
++			(long) ts->tv_sec, (long unsigned) ts->tv_nsec);
 +}
++
++
++
++static __inline void
++add_ffdelta2bintime(ffcounter_t ffdelta, struct bintime *bt, struct ffclock_estimate *cest)
++{
++	u_int delta_max;
++	struct bintime delta, shortterm, acc;
++
++	delta.sec = 0;
++	delta.frac = cest->period;
++	shortterm.sec = 0;
++	shortterm.frac = cest->period_shortterm;
++	bintime_sub(&shortterm, &delta);
++
++	delta_max = (u_int) ((1LLU << (8 * sizeof(u_int))) - 1);
++
++	while (ffdelta > delta_max) {
++		acc = delta;
++		bintime_mul(&acc, delta_max);
++		bintime_add(bt, &acc);
++
++		acc = shortterm;
++		bintime_mul(&acc, delta_max);
++		bintime_add(bt, &acc);
++
++		ffdelta -= delta_max;
++	}
++
++	bintime_mul(&delta, (u_int) ffdelta);
++	bintime_mul(&shortterm, (u_int) ffdelta);
++	bintime_add(bt, &delta);
++	bintime_add(bt, &shortterm);
++}
++
 +
 +
 +/*
@@ -163,11 +198,11 @@ Index: sys/kern/kern_tc.c
 + * size between two ffcounter readings should remain small enough.
 + */
 +static void
-+ffclock_windup(u_int ffdelta)
++ffclock_windup(u_int delta)
 +{
 +	struct ffclock_estimate *cest;
 +	struct fftimehands *ffth;
-+	struct bintime delta;
++	ffcounter_t ffdelta;
 +	uint8_t ogen;
 +
 +	ffth = fftimehands->next;
@@ -176,7 +211,7 @@ Index: sys/kern/kern_tc.c
 +	cest = &(ffth->cest);
 +
 +	ffth->ffcounter_mark = fftimehands->ffcounter_mark;
-+	ffth->ffcounter_mark += ffdelta;
++	ffth->ffcounter_mark += delta;
 +
 +	/*
 +	 * If the clock has been updated by the synchronisation daemon, make the
@@ -193,12 +228,10 @@ Index: sys/kern/kern_tc.c
 +	else {
 +		bcopy(&(fftimehands->cest), cest, sizeof(struct ffclock_estimate));
 +		ffth->time_mark = fftimehands->time_mark;
++		ffdelta = delta;
 +	}
 +
-+	delta.sec = 0;
-+	delta.frac = cest->period;
-+	bintime_mul(&delta, ffdelta);
-+	bintime_add(&(ffth->time_mark), &delta);
++	add_ffdelta2bintime(ffdelta, &(ffth->time_mark), &(ffth->cest));
 +
 +	if (++ogen == 0)
 +		ogen = 1;
@@ -235,6 +268,7 @@ Index: sys/kern/kern_tc.c
 +	ffth->ffcounter_mark = fftimehands->ffcounter_mark;
 +
 +	cest->period = ((1LLU << 63) / th->th_counter->tc_frequency ) << 1;
++	cest->period_shortterm = cest->period;
 +	cest->status = 0;
 +	cest->error_bound_avg = 0;
 +
@@ -246,27 +280,64 @@ Index: sys/kern/kern_tc.c
 +}
 +
 +
-+/* Convert ffounter to bintime using current ffclock estimate */
++/*
++ * Convert ffcounter to bintime using current ffclock estimate.
++ * This is a non-causal absolute clock
++ * TODO: make a causal version (parameter option?)
++ */
 +void
 +ffcounter2bintime(ffcounter_t *ffcounter, struct bintime *bt)
 +{
 +	struct fftimehands *ffth;
-+	u_int ffdelta;
-+	struct bintime delta;
++	ffcounter_t ffdelta;
 +	uint8_t gen;
 +
 +	/* No locking but check generation has not changed. */
 +	do {
 +		ffth = fftimehands;
 +		gen = ffth->gen;
-+
 +		ffdelta = *ffcounter - ffth->ffcounter_mark;
++		*bt = ffth->time_mark;
++		add_ffdelta2bintime(ffdelta, bt, &(ffth->cest));
++	} while (gen == 0 || gen != ffth->gen);
++}
++
++
++/*
++ * Convert ffcounter interval to bintime using current ffclock estimate.
++ * This is a difference clock
++ * TODO check for SKM_SCALE ?
++ */
++void
++ffdelta2bintime(ffcounter_t *ffdelta, struct bintime *bt)
++{
++	struct fftimehands *ffth;
++	u_int delta_max;
++	struct bintime delta;
++	ffcounter_t ffdelta2;
++	uint8_t gen;
++
++	delta_max = (u_int) ((1LLU << (8 * sizeof(u_int))) - 1);
++
++	/* No locking but check generation has not changed. */
++	do {
++		ffth = fftimehands;
++		gen = ffth->gen;
++		bt->sec = 0;
++		bt->frac = 0;
++		ffdelta2 = *ffdelta;
++
++		while (ffdelta2 > delta_max) {
++			delta.sec = 0;
++			delta.frac = ffth->cest.period;
++			bintime_mul(&delta, delta_max);
++			bintime_add(bt, &delta);
++			ffdelta2 -= delta_max;
++		}
 +		delta.sec = 0;
 +		delta.frac = ffth->cest.period;
-+		bintime_mul(&delta, ffdelta);
-+		*bt = ffth->time_mark;
++		bintime_mul(&delta, ffdelta2);
 +		bintime_add(bt, &delta);
-+
 +	} while (gen == 0 || gen != ffth->gen);
 +}
 +
@@ -300,7 +371,7 @@ Index: sys/kern/kern_tc.c
  /*
   * Initialize a new timecounter and possibly use it.
   */
-@@ -440,6 +692,9 @@ tc_windup(void)
+@@ -440,6 +763,9 @@ tc_windup(void)
  		ncount = timecounter->tc_get_timecount(timecounter);
  	else
  		ncount = 0;
@@ -310,7 +381,7 @@ Index: sys/kern/kern_tc.c
  	th->th_offset_count += delta;
  	th->th_offset_count &= th->th_counter->tc_counter_mask;
  	while (delta > th->th_counter->tc_frequency) {
-@@ -496,6 +751,9 @@ tc_windup(void)
+@@ -496,6 +822,9 @@ tc_windup(void)
  		th->th_offset_count = ncount;
  		tc_min_ticktock_freq = max(1, timecounter->tc_frequency /
  		    (((uint64_t)timecounter->tc_counter_mask + 1) / 3));
@@ -320,7 +391,7 @@ Index: sys/kern/kern_tc.c
  	}
  
  	/*-
-@@ -814,6 +1072,9 @@ inittimecounter(void *dummy)
+@@ -814,6 +1143,9 @@ inittimecounter(void *dummy)
  	p = (tc_tick * 1000000) / hz;
  	printf("Timecounters tick every %d.%03u msec\n", p / 1000, p % 1000);
  
@@ -332,8 +403,8 @@ Index: sys/kern/kern_tc.c
  	(void)timecounter->tc_get_timecount(timecounter);
 Index: sys/conf/NOTES
 ===================================================================
---- sys.orig/conf/NOTES	2010-12-23 17:10:37.000000000 +1100
-+++ sys/conf/NOTES	2010-12-23 17:11:59.000000000 +1100
+--- sys.orig/conf/NOTES	2011-01-12 18:53:05.000000000 +1100
++++ sys/conf/NOTES	2011-01-12 18:53:10.000000000 +1100
 @@ -1178,6 +1178,14 @@ options 	HZ=100
  
  options 	PPS_SYNC
@@ -351,8 +422,8 @@ Index: sys/conf/NOTES
  # SCSI DEVICES
 Index: sys/conf/options
 ===================================================================
---- sys.orig/conf/options	2010-12-23 17:10:37.000000000 +1100
-+++ sys/conf/options	2010-12-23 17:11:59.000000000 +1100
+--- sys.orig/conf/options	2011-01-12 18:53:05.000000000 +1100
++++ sys/conf/options	2011-01-12 18:53:10.000000000 +1100
 @@ -75,6 +75,7 @@ COMPRESS_USER_CORES opt_core.h
  CY_PCI_FASTINTR
  DEADLKRES	opt_watchdog.h
@@ -363,8 +434,8 @@ Index: sys/conf/options
  GEOM_AES	opt_geom.h
 Index: sys/kern/subr_rtc.c
 ===================================================================
---- sys.orig/kern/subr_rtc.c	2010-12-23 17:10:37.000000000 +1100
-+++ sys/kern/subr_rtc.c	2010-12-23 17:11:59.000000000 +1100
+--- sys.orig/kern/subr_rtc.c	2011-01-12 18:53:05.000000000 +1100
++++ sys/kern/subr_rtc.c	2011-01-12 18:53:10.000000000 +1100
 @@ -60,6 +60,11 @@ __FBSDID("$FreeBSD: src/sys/kern/subr_rt
  
  #include "clock_if.h"
@@ -390,8 +461,8 @@ Index: sys/kern/subr_rtc.c
 Index: sys/sys/timeff.h
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ sys/sys/timeff.h	2010-12-23 17:11:59.000000000 +1100
-@@ -0,0 +1,70 @@
++++ sys/sys/timeff.h	2011-01-12 19:25:14.000000000 +1100
+@@ -0,0 +1,72 @@
 +/*-
 + * Copyright (C) 2010 University of Melbourne
 + * All rights reserved.
@@ -447,6 +518,7 @@ Index: sys/sys/timeff.h
 +{
 +	struct bintime time;
 +	uint64_t period;
++	uint64_t period_shortterm;
 +	ffcounter_t last_update;
 +	uint32_t status;
 +	uint32_t error_bound_avg;
@@ -459,6 +531,7 @@ Index: sys/sys/timeff.h
 +ffcounter_t read_ffcounter(void);
 +
 +void ffcounter2bintime(ffcounter_t *ffcounter, struct bintime *bt);
++void ffdelta2bintime(ffcounter_t *ffcounter, struct bintime *bt);
 +
 +#endif
 +#endif
