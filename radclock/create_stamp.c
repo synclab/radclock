@@ -67,7 +67,7 @@
 
 
 # ifndef useconds_t
-typedef __useconds_t useconds_t;
+typedef uint32_t useconds_t;
 # endif
 
 

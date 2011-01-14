@@ -65,14 +65,13 @@
 /* 
  * Default configuration values 
  */
-#define DEFAULT_RADCLOCK_VERSION	"0"
 #define DEFAULT_VERBOSE				1
 #define DEFAULT_SYNCHRO_TYPE		SYNCTYPE_NTP	// Protocol used 
 #define DEFAULT_SERVER_IPC			BOOL_ON			// Update the clock 
 #define DEFAULT_SERVER_NTP			BOOL_ON			// Default we start a NTP server 
 #define DEFAULT_ADJUST_SYSCLOCK		BOOL_ON			// Default we adjust the system clock 
 #define DEFAULT_NTP_POLL_PERIOD 	16				// 16 NTP pkts every [sec]
-#define DEFAULT_START_PLOCAL		1				// 1 Using plocal algo
+#define DEFAULT_START_PLOCAL		BOOL_ON			// 1 Using plocal algo
 #define DEFAULT_PHAT_INIT			1.e-9
 #define DEFAULT_ASYM_HOST			0.0				// 0 micro-sconds
 #define DEFAULT_ASYM_NET			0.0				// 0 micro-seconds 
@@ -178,6 +177,8 @@
  */ 
 struct radclock_config {
 	u_int32_t mask;						/* Update param mask */
+	char 	conffile[MAXLINE]; 			/* Configuration file path */
+	char 	logfile[MAXLINE]; 			/* Log file path */
 	char 	radclock_version[MAXLINE]; 	/* Package version id */
 	int 	verbose_level; 				/* debug output level */
 	int 	poll_period; 				/* period of NTP pkt sending [sec] */

@@ -32,6 +32,8 @@
 #include "../config.h"
 #include "radclock.h"
 #include "radclock-private.h"
+#include "sync_algo.h"
+#include "config_mgr.h"
 #include "verbose.h"
 #include "jdebug.h"
 
@@ -41,12 +43,24 @@
 struct verbose_data_t verbose_data;
 
 
-void set_verbose(struct radclock *clock, int is_daemon, int verbose_level) 
+void set_verbose(struct radclock *clock, int verbose_level, int initialized) 
 {
 	JDEBUG
 	verbose_data.clock = clock;
 	verbose_data.verbose_level = verbose_level;
-	verbose_data.is_daemon = is_daemon;
+	verbose_data.is_daemon = clock->is_daemon;
+	verbose_data.is_initialized = initialized;
+
+	// We got the string, let's output in the log files
+	if (strlen(clock->conf->logfile))
+		strcpy(verbose_data.logfile, clock->conf->logfile);
+	else
+	{
+		if ( verbose_data.is_daemon )
+			strcpy(verbose_data.logfile, DAEMON_LOG_FILE);
+		else
+			strcpy(verbose_data.logfile, BIN_LOG_FILE);
+	}
 }
 
 
@@ -56,9 +70,9 @@ void unset_verbose()
 	verbose_data.clock = NULL;
 	verbose_data.verbose_level = 0;
 	verbose_data.is_daemon = 0;
-	if ( verbose_data.logfile != NULL)
-		fclose(verbose_data.logfile);
-	verbose_data.logfile = NULL;
+	if ( verbose_data.fd != NULL)
+		fclose(verbose_data.fd);
+	verbose_data.fd = NULL;
 }
 
 
@@ -73,14 +87,14 @@ static void verbose_open()
 	// We got the string, let's output in the log files
 	if ( verbose_data.is_daemon )
 	{
-		verbose_data.logfile = fopen(DAEMON_LOG_FILE, "a");
-		if (verbose_data.logfile == NULL)
+		verbose_data.fd = fopen(verbose_data.logfile, "a");
+		if (verbose_data.fd == NULL)
 			syslog(LOG_ALERT, "Unable to open the log file\n");
 	}
 	else
 	{
-		verbose_data.logfile = fopen(BIN_LOG_FILE, "w");
-		if (verbose_data.logfile == NULL)
+		verbose_data.fd = fopen(verbose_data.logfile, "w");
+		if (verbose_data.fd == NULL)
 			fprintf(stderr, "Unable to open the log file\n");
 	}
 }
@@ -105,7 +119,7 @@ void verbose(int facility, char* format, ...)
 	/* Acquire the mutex lock or block */
 	pthread_mutex_lock(&(verbose_data.vmutex));
 
-	if (verbose_data.logfile == NULL)
+	if (verbose_data.fd == NULL)
 	{
 		verbose_open();
 	}
@@ -177,7 +191,7 @@ void verbose(int facility, char* format, ...)
 	 * between syslog timestamps and log file timestamps. The minute resolution
 	 * will hide that in most cases.
 	 */
-	if ( verbose_data.clock == NULL )
+	if ( !verbose_data.is_initialized )
 	{
 		sprintf(ctime_buf, "-RADclock Init-");
 	}
@@ -202,8 +216,14 @@ void verbose(int facility, char* format, ...)
 	/* Output messages to the log file, depending on the verbose level */ 
 	switch (facility) {	
 		case VERB_DEBUG:
-			if (verbose_data.verbose_level > 1) 
-				fprintf(verbose_data.logfile, "%s: %s%s\n", ctime_buf, customize, str);
+			if (verbose_data.verbose_level > 1)
+			{
+				/* If the log file could not be opened, spit everything to stderr */
+				if (verbose_data.fd == NULL)
+					fprintf(stderr, "%s: %s%s\n", ctime_buf, customize, str);
+				else
+					fprintf(verbose_data.fd, "%s: %s%s\n", ctime_buf, customize, str);
+			}
 			break;
 
 		case VERB_QUALITY:
@@ -213,12 +233,13 @@ void verbose(int facility, char* format, ...)
 		case VERB_SYNC:
 		case VERB_DEFAULT:
 			if (verbose_data.verbose_level > 0) 
-				fprintf(verbose_data.logfile, "%s: %s%s\n", ctime_buf, customize, str);
+				fprintf(verbose_data.fd, "%s: %s%s\n", ctime_buf, customize, str);
 			break;
 
 		default:
-			/* In all other cases output in log file */
-			fprintf(verbose_data.logfile, "%s: %s%s\n", ctime_buf, customize, str);
+			/* In all other cases output in log file (if could open it) */
+			if (verbose_data.fd != NULL)
+				fprintf(verbose_data.fd, "%s: %s%s\n", ctime_buf, customize, str);
 			if ( verbose_data.is_daemon )
 				syslog(facility, "%s%s", customize, str);
 			else
@@ -229,7 +250,7 @@ void verbose(int facility, char* format, ...)
 	/* To get to this point logfile and str are non-NULL!)*/
 	JDEBUG_MEMORY(JDBG_FREE, str);
 	free(str);
-	fflush(verbose_data.logfile);
+	fflush(verbose_data.fd);
 
 	/* Release the mutex lock or block */
 	pthread_mutex_unlock(&(verbose_data.vmutex));

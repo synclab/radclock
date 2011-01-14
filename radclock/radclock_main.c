@@ -92,22 +92,24 @@ struct rusage jdbg_rusage;
 
 /*** Guide to input parameters of radclock ***/
 void usage(char *argv) {
-	fprintf(stderr, "%s \n"
-		"\t\t-x do not serve radclock time/data (IOCTL / Netlink socket to kernel, IPC to processes)\n"
-		"\t\t-d run as a daemon\n"
-		"\t\t-i <interface>\n"
-		"\t\t-n <hostname> we, the host sending queries\n"
-		"\t\t-t <hostname> the timeserver replying to queries\n"
-		"\t\t-p <poll_period> [sec] default is DEFAULT_NTP_POLL_PERIOD=16\n" 
-		"\t\t-l do not use local rate refinement\n"
-		"\t\t-r <filename> read sync input from pcap file (\"-\" for stdin)\n"
-		"\t\t-s <filename> read sync input from ascii file (header comments and extra columns skipped)\n"
-		"\t\t-w <filename> write sync output to file (modified pcap format)\n"
-		"\t\t-a <filename> write sync output to file (ascii)\n"
-		"\t\t-o <filename> write clock data output to file (ascii)\n"
-		"\t\t-v -vv verbose\n"
-		"\t\t-h this help mesage\n"
-		, argv);
+	fprintf(stderr, "usage: radclock [options] \n"
+		"\t-x do not serve radclock time/data (IOCTL / Netlink socket to kernel, IPC to processes)\n"
+		"\t-d run as a daemon\n"
+		"\t-c <filename> path to alternative configuration file\n"
+		"\t-l <filename> path to alternative log file\n"
+		"\t-i <interface>\n"
+		"\t-n <hostname> we, the host sending queries\n"
+		"\t-t <hostname> the timeserver replying to queries\n"
+		"\t-p <poll_period> [sec] default is DEFAULT_NTP_POLL_PERIOD=16\n" 
+		"\t-L do not use local rate refinement\n"
+		"\t-r <filename> read sync input from pcap file (\"-\" for stdin)\n"
+		"\t-s <filename> read sync input from ascii file (header comments and extra columns skipped)\n"
+		"\t-w <filename> write sync output to file (modified pcap format)\n"
+		"\t-a <filename> write sync output to file (ascii)\n"
+		"\t-o <filename> write clock data output to file (ascii)\n"
+		"\t-v -vv verbose\n"
+		"\t-h this help mesage\n"
+		);
 	exit(EXIT_SUCCESS);
 }
 
@@ -316,11 +318,11 @@ void signal_handler(int sig)
 		case SIGUSR1:
 			/* user signal 1 */
 			verbose(LOG_NOTICE, "SIGUSR1 received, closing log file.");
-			if ( verbose_data.logfile != NULL)
+			if ( verbose_data.fd != NULL)
 			{
 				pthread_mutex_lock( &(verbose_data.vmutex) );
-				fclose(verbose_data.logfile);
-				verbose_data.logfile = NULL;
+				fclose(verbose_data.fd);
+				verbose_data.fd = NULL;
 				pthread_mutex_unlock( &(verbose_data.vmutex) );
 			}
 			break;		
@@ -450,7 +452,7 @@ int radclock_init_specific (struct radclock *clock_handle)
 
 	
 	/* Clock has been init', set the pointer to the clock */
-	set_verbose(clock_handle, clock_handle->is_daemon, clock_handle->conf->verbose_level);
+	set_verbose(clock_handle, clock_handle->conf->verbose_level, 1);
 	set_logger(logger_verbose_bridge);
 
 	if (clock_handle->run_mode == RADCLOCK_SYNC_LIVE)
@@ -496,7 +498,7 @@ int radclock_init_specific (struct radclock *clock_handle)
 /********************************* main ************************************/
 /*-------------------------------------------------------------------------*/
 
-int main (int argc, char *argv[]) 
+int main(int argc, char *argv[]) 
 {
 	/* File and command line reading */
 	int ch;
@@ -543,7 +545,8 @@ int main (int argc, char *argv[])
  	verbose_data.clock = NULL;
  	verbose_data.is_daemon = 0;
  	verbose_data.verbose_level = 0;
- 	verbose_data.logfile = NULL;
+ 	verbose_data.fd = NULL;
+	strcpy(verbose_data.logfile, "");
 	pthread_mutex_init(&(verbose_data.vmutex), NULL);
 
 
@@ -598,14 +601,32 @@ int main (int argc, char *argv[])
 	param_mask = UPDMASK_NOUPD;
 
 	/* Reading the command line arguments */     
-	while ((ch = getopt(argc, argv, "dxvhli:n:t:r:w:s:a:o:p:")) != -1)
+	while ((ch = getopt(argc, argv, "dxvhLc:i:l:n:t:r:w:s:a:o:p:")) != -1)
 		switch (ch) {
 			case 'x':
 				SET_UPDATE(param_mask, UPDMASK_SERVER_IPC);
-				clock_handle->conf->server_ipc = 0;
+				clock_handle->conf->server_ipc = BOOL_OFF;
+				break;
+			case 'c':
+				strcpy(clock_handle->conf->conffile, optarg);
 				break;
 			case 'd':
 				clock_handle->is_daemon = 1;
+				break;
+			case 'l':
+				strcpy(clock_handle->conf->logfile, optarg);
+				break;
+			case 'L':
+				SET_UPDATE(param_mask, UPDMASK_PLOCAL);
+				clock_handle->conf->start_plocal = 0;
+				break;
+			case 'n':
+				if (strlen(optarg) > MAXLINE) {
+					fprintf(stdout, "ERROR: parameter too long\n");
+					exit (1);
+				}
+				SET_UPDATE(param_mask, UPDMASK_HOSTNAME);
+				strcpy(clock_handle->conf->hostname, optarg);
 				break;
 			case 'p':
 				SET_UPDATE(param_mask, UPDMASK_POLLPERIOD);
@@ -623,18 +644,6 @@ int main (int argc, char *argv[])
 					fprintf(stdout, "Warning: Poll period too big, set to %d\n",
 						   	clock_handle->conf->poll_period);
 				}
-				break;
-			case 'l':
-				SET_UPDATE(param_mask, UPDMASK_PLOCAL);
-				clock_handle->conf->start_plocal = 0;
-				break;
-			case 'n':
-				if (strlen(optarg) > MAXLINE) {
-					fprintf(stdout, "ERROR: parameter too long\n");
-					exit (1);
-				}
-				SET_UPDATE(param_mask, UPDMASK_HOSTNAME);
-				strcpy(clock_handle->conf->hostname, optarg);
 				break;
 			case 't':
 				if (strlen(optarg) > MAXLINE) {
@@ -714,7 +723,7 @@ int main (int argc, char *argv[])
 	 * log file though. So far clock has not been sent to init, no syscall
 	 * registered, pass a NULL pointer to verbose.
 	 */
-	set_verbose(NULL, clock_handle->is_daemon, clock_handle->conf->verbose_level);
+	set_verbose(clock_handle, clock_handle->conf->verbose_level, 0);
 	set_logger(logger_verbose_bridge);
 	
 	/* Daemonize now, so that we can open the log files and close connection to
@@ -724,7 +733,8 @@ int main (int argc, char *argv[])
 		struct stat sb;
 		if (stat(RADCLOCK_RUN_DIRECTORY, &sb) < 0) {
 			if (mkdir(RADCLOCK_RUN_DIRECTORY, 0755) < 0) { 
-				verbose(LOG_ERR, "Cannot create %s directory. Run as root or (!daemon && !server)", RADCLOCK_RUN_DIRECTORY);
+				verbose(LOG_ERR, "Cannot create %s directory. Run as root or "
+						"(!daemon && !server)", RADCLOCK_RUN_DIRECTORY);
 				return 1;
 			}
 		}
@@ -737,20 +747,20 @@ int main (int argc, char *argv[])
 		}
 	}
 
-	/* Retrieve configuration from the config file (write it down if it does not exist) 
-	 * That should be the only occasion when get_config() is called and the param_mask
-	 * is not positioned to UPDMASK_NOUPD !!!  Only the parameters not specified on 
-	 * the command line are updated 
+	/* Retrieve configuration from the config file (write it down if it does not
+	 * exist) That should be the only occasion when get_config() is called and
+	 * the param_mask is not positioned to UPDMASK_NOUPD !!!  Only the
+	 * parameters not specified on the command line are updated 
 	 */
 	if ( !config_parse(clock_handle->conf, &param_mask, clock_handle->is_daemon) )
 		return 0; 
 
 
-	/* Now that we have the configuration to use (verbose level),  let's initialise the 
-	 * verbose level to correct value
+	/* Now that we have the configuration to use (verbose level),  let's
+	 * initialise the verbose level to correct value
 	 */
-	set_verbose(NULL, clock_handle->is_daemon, clock_handle->conf->verbose_level);
-	set_logger(logger_verbose_bridge);
+	set_verbose(clock_handle, clock_handle->conf->verbose_level, 0);
+   	set_logger(logger_verbose_bridge);
 
 	/* Check for incompatible configurations and correct them */
 	if (( clock_handle->conf->synchro_type == SYNCTYPE_SPY ) ||
@@ -814,7 +824,7 @@ int main (int argc, char *argv[])
 		/* Manually signal we are the radclock algo and that we have to serve global data to the
 		 * kernel and other processes throught the IPC socket.
 		 */
-		if ( clock_handle->conf->server_ipc)
+		if (clock_handle->conf->server_ipc)
 			clock_handle->ipc_mode = RADCLOCK_IPC_SERVER;
 		else
 			clock_handle->ipc_mode = RADCLOCK_IPC_NONE;
@@ -824,7 +834,7 @@ int main (int argc, char *argv[])
 	}
 
 	/* Init clock handle and private data */
-	if (clock_handle->run_mode == RADCLOCK_SYNC_LIVE )
+	if (clock_handle->run_mode == RADCLOCK_SYNC_LIVE)
 	{ 
 		if (radclock_init(clock_handle))
 		{
