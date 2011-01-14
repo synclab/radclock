@@ -202,8 +202,14 @@ void verbose(int facility, char* format, ...)
 	/* Output messages to the log file, depending on the verbose level */ 
 	switch (facility) {	
 		case VERB_DEBUG:
-			if (verbose_data.verbose_level > 1) 
-				fprintf(verbose_data.logfile, "%s: %s%s\n", ctime_buf, customize, str);
+			if (verbose_data.verbose_level > 1)
+			{
+				/* If the log file could not be opened, spit everything to stderr */
+				if (verbose_data.logfile == NULL)
+					fprintf(stderr, "%s: %s%s\n", ctime_buf, customize, str);
+				else
+					fprintf(verbose_data.logfile, "%s: %s%s\n", ctime_buf, customize, str);
+			}
 			break;
 
 		case VERB_QUALITY:
@@ -217,8 +223,9 @@ void verbose(int facility, char* format, ...)
 			break;
 
 		default:
-			/* In all other cases output in log file */
-			fprintf(verbose_data.logfile, "%s: %s%s\n", ctime_buf, customize, str);
+			/* In all other cases output in log file (if could open it) */
+			if (verbose_data.logfile != NULL)
+				fprintf(verbose_data.logfile, "%s: %s%s\n", ctime_buf, customize, str);
 			if ( verbose_data.is_daemon )
 				syslog(facility, "%s%s", customize, str);
 			else
