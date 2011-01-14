@@ -65,7 +65,6 @@
 /* 
  * Default configuration values 
  */
-#define DEFAULT_RADCLOCK_VERSION	"0"
 #define DEFAULT_VERBOSE				1
 #define DEFAULT_SYNCHRO_TYPE		SYNCTYPE_NTP	// Protocol used 
 #define DEFAULT_SERVER_IPC			BOOL_ON			// Update the clock 
@@ -178,6 +177,8 @@
  */ 
 struct radclock_config {
 	u_int32_t mask;						/* Update param mask */
+	char 	conffile[MAXLINE]; 			/* Configuration file path */
+	char 	logfile[MAXLINE]; 			/* Log file path */
 	char 	radclock_version[MAXLINE]; 	/* Package version id */
 	int 	verbose_level; 				/* debug output level */
 	int 	poll_period; 				/* period of NTP pkt sending [sec] */

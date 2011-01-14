@@ -49,8 +49,10 @@
 struct verbose_data_t {
 	struct radclock *clock;
 	int is_daemon;
+	int is_initialized;
 	int verbose_level;
-	FILE* logfile;
+	char logfile[250];
+	FILE* fd;
 	pthread_mutex_t vmutex;
 };
 
@@ -59,7 +61,7 @@ extern struct verbose_data_t verbose_data;
 
 void verbose(int facility, char* format, ...); 
 
-void set_verbose(struct radclock *clock, int is_daemon, int verbose_level);
+void set_verbose(struct radclock *clock, int verbose_level, int initialized);
 void unset_verbose();
 int get_verbose_level();
 /* Short cut */

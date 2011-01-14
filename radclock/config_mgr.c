@@ -115,7 +115,9 @@ void config_init(struct radclock_config *conf)
 	conf->mask = UPDMASK_NOUPD;
 
 	/* Runnning defaults */
-	strcpy(conf->radclock_version, DEFAULT_RADCLOCK_VERSION);
+	strcpy(conf->conffile, "");
+	strcpy(conf->logfile, "");
+	strcpy(conf->radclock_version, PACKAGE_VERSION);
 	conf->server_ipc			= DEFAULT_SERVER_IPC;
 	conf->synchro_type 			= DEFAULT_SYNCHRO_TYPE;
 	conf->server_ntp 			= DEFAULT_SERVER_NTP;
@@ -1059,7 +1061,9 @@ return 1;
 }
 
 
-/** Reads config file line by line, retrieve (key,value) and update global data */
+/*
+ * Reads config file line by line, retrieve (key,value) and update global data
+ */
 int config_parse(struct radclock_config *conf, u_int32_t *mask, int is_daemon) 
 {
 	struct _key *pkey = keys;
@@ -1076,32 +1080,36 @@ int config_parse(struct radclock_config *conf, u_int32_t *mask, int is_daemon)
 		return 0;
 	}
 	
+	/* Config and log files */
+	if (strlen(conf->conffile) == 0)
+	{
+		if ( is_daemon )
+			strcpy(conf->conffile, DAEMON_CONFIG_FILE);
+		else
+			strcpy(conf->conffile, BIN_CONFIG_FILE);
+	}
 
-	if ( is_daemon )
-		fd = fopen(DAEMON_CONFIG_FILE, "r");
-	else
-		fd = fopen(BIN_CONFIG_FILE, "r");
+	if (strlen(conf->logfile) == 0)
+	{
+		if ( is_daemon )
+			strcpy(conf->conffile, DAEMON_CONFIG_FILE);
+		else
+			strcpy(conf->conffile, BIN_CONFIG_FILE);
+	}
+
+
 
 	// The file can't be opened. Ether it doesn't exist yet or I/O error.
+	fd = fopen(conf->conffile, "r");
 	if (!fd) {
 
 		// Modify umask so that the file can be read by all after being written
 		umask(022);
-		if ( is_daemon ) {
-			verbose(LOG_NOTICE, "Did not find configuration file: %s. Writing it.", DAEMON_CONFIG_FILE);
-			fd = fopen(DAEMON_CONFIG_FILE, "w+");
-			if (!fd) {
-				verbose(LOG_ERR, "Cannot write configuration file: %s. ", DAEMON_CONFIG_FILE);
-				return 0;
-			}
-		}
-		else {
-			verbose(LOG_NOTICE, "Did not find configuration file: %s. Writing it.", BIN_CONFIG_FILE);
-			fd = fopen(BIN_CONFIG_FILE, "w+");
-			if (!fd) {
-				verbose(LOG_ERR, "Cannot write configuration file: %s. ", BIN_CONFIG_FILE);
-				return 0;
-			}
+		verbose(LOG_NOTICE, "Did not find configuration file: %s. Writing it.", conf->conffile);
+		fd = fopen(conf->conffile, "w+");
+		if (!fd) {
+			verbose(LOG_ERR, "Cannot write configuration file: %s. ", conf->conffile);
+			return 0;
 		}
 		write_config_file(fd, keys, NULL);
 		fclose(fd);
@@ -1143,20 +1151,15 @@ int config_parse(struct radclock_config *conf, u_int32_t *mask, int is_daemon)
 
 		// Modify umask so that the file can be read by all after being written
 		umask(022);
-		if ( is_daemon ) {
-			fd = fopen(DAEMON_CONFIG_FILE, "w");
-			if ( !fd )
-				verbose(LOG_ERR, "Cannot update configuration file: %s.", DAEMON_CONFIG_FILE);
-		}
-		else {
-			fd = fopen(BIN_CONFIG_FILE, "w");
-			if ( !fd )
-				verbose(LOG_ERR, "Cannot update configuration file: %s.", BIN_CONFIG_FILE);
-		}
+		fd = fopen(conf->conffile, "w");
+		if ( !fd )
+			verbose(LOG_ERR, "Cannot update configuration file: %s.", conf->conffile);
 		write_config_file(fd, keys, conf);
 		fclose(fd);
 		// Reposition umask
 		umask(027);
+		// Adjust version
+		strcpy(conf->radclock_version, PACKAGE_VERSION);
 	
 		verbose(LOG_NOTICE, "Updated the configuration file to the current package version");
 	}
@@ -1183,6 +1186,8 @@ void config_print(int level, struct radclock_config *conf)
 {
 	verbose(level, "RADclock - configuration summary");
 	verbose(level, "radclock version     : %s", conf->radclock_version);
+	verbose(level, "Configuration file   : %s", conf->conffile);
+	verbose(level, "Log file             : %s", conf->logfile);
 	verbose(level, "Verbose level        : %s", labels_verb[conf->verbose_level]);
 	verbose(level, "Client sync          : %s", labels_sync[conf->synchro_type]);
 	verbose(level, "Server IPC           : %s", labels_bool[conf->server_ipc]);
