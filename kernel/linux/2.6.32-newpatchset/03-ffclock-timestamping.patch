@@ -136,46 +136,40 @@ index 9f96394..eb34f7c 100644
  
  /*
 diff --git a/net/core/dev.c b/net/core/dev.c
-index fe10551..41ef9e8 100644
+index fe10551..1e48a4b 100644
 --- a/net/core/dev.c
 +++ b/net/core/dev.c
-@@ -1369,6 +1369,13 @@ static void dev_queue_xmit_nit(struct sk_buff *skb, struct net_device *dev)
+@@ -1369,6 +1369,11 @@ static void dev_queue_xmit_nit(struct sk_buff *skb, struct net_device *dev)
  	net_timestamp(skb);
  #endif
  
 +#ifdef CONFIG_FFCLOCK
 +	/* Update the counter */
-+	rdtsc_barrier();
 +	skb->ffclock_stamp = read_ffcounter();
-+	rdtsc_barrier();
 +#endif /* CONFIG_FFCLOCK */
 +
  	rcu_read_lock();
  	list_for_each_entry_rcu(ptype, &ptype_all, list) {
  		/* Never send packets back to the socket
-@@ -2002,6 +2009,13 @@ int netif_rx(struct sk_buff *skb)
+@@ -2002,6 +2007,11 @@ int netif_rx(struct sk_buff *skb)
  	if (netpoll_rx(skb))
  		return NET_RX_DROP;
  
 +#ifdef CONFIG_FFCLOCK
 +	/* Update the counter */
-+	rdtsc_barrier();
 +	skb->ffclock_stamp = read_ffcounter();
-+	rdtsc_barrier();
 +#endif
 +
  	if (!skb->tstamp.tv64)
  		net_timestamp(skb);
  
-@@ -2289,6 +2303,13 @@ int netif_receive_skb(struct sk_buff *skb)
+@@ -2289,6 +2299,11 @@ int netif_receive_skb(struct sk_buff *skb)
  	int ret = NET_RX_DROP;
  	__be16 type;
  
 +#ifdef CONFIG_FFCLOCK
 +	/* Update the counter */
-+	rdtsc_barrier();
 +	skb->ffclock_stamp = read_ffcounter();
-+	rdtsc_barrier();
 +#endif /* CONFIG_FFCLOCK */
 +
  	if (!skb->tstamp.tv64)
@@ -232,7 +226,7 @@ index 7626b6a..b49da94 100644
  	/*
  	 * Before updating sk_refcnt, we must commit prior changes to memory
 diff --git a/net/packet/af_packet.c b/net/packet/af_packet.c
-index f2d116a..3d73659 100644
+index f2d116a..ee51e00 100644
 --- a/net/packet/af_packet.c
 +++ b/net/packet/af_packet.c
 @@ -84,6 +84,10 @@
@@ -330,7 +324,7 @@ index f2d116a..3d73659 100644
 +	/* Copy the vcount stamp just before where the mac/sll header wil be */
 +	ffclock_off -= sizeof(ffcounter_t);
 +	memcpy(h.raw + ffclock_off, &(skb->ffclock_stamp), sizeof(ffcounter_t));
-+#endif /* CONFIG_CONFIG */
++#endif /* CONFIG_FFCLOCK */
 +
  	__packet_set_status(po, h.raw, status);
  	smp_mb();
@@ -367,7 +361,7 @@ index f2d116a..3d73659 100644
  
  	switch (cmd) {
  	case SIOCOUTQ:
-@@ -1999,9 +2068,38 @@ static int packet_ioctl(struct socket *sock, unsigned int cmd,
+@@ -1999,9 +2068,36 @@ static int packet_ioctl(struct socket *sock, unsigned int cmd,
  		return put_user(amount, (int __user *)arg);
  	}
  	case SIOCGSTAMP:
@@ -396,8 +390,6 @@ index f2d116a..3d73659 100644
 +		default:
 +			return -EINVAL;
 +		}
-+
-+		*(long *)arg = tsmode;
 +		return 0;
 +	case SIOCGFFCLOCKTSMODE:
 +		*(long *)arg = sk->sk_ffclock_tsmode;
