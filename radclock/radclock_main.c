@@ -455,7 +455,8 @@ int radclock_init_specific (struct radclock *clock_handle)
 	set_verbose(clock_handle, clock_handle->conf->verbose_level, 1);
 	set_logger(logger_verbose_bridge);
 
-	if (clock_handle->run_mode == RADCLOCK_SYNC_LIVE)
+	if ( (clock_handle->run_mode == RADCLOCK_SYNC_LIVE)
+		&& (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER)) 
 	{
 		err = radclock_init_kernel_support(clock_handle);
 		if (err < 0 )
