@@ -124,9 +124,19 @@ int found_ffwd_kernel_version (void)
 
 int radclock_init_vcounter_syscall(struct radclock *handle)
 {
-	/* From config.h */
-	handle->syscall_get_vcounter = LINUX_SYSCALL_GET_VCOUNTER;
-	logger(RADLOG_NOTICE, "registered get_vcounter syscall at %d", handle->syscall_get_vcounter);
+	switch ( handle->kernel_version )
+	{
+	case 0:
+	case 1:
+		/* From config.h */
+		handle->syscall_get_vcounter = LINUX_SYSCALL_GET_VCOUNTER;
+		logger(RADLOG_NOTICE, "registered get_vcounter syscall at %d", handle->syscall_get_vcounter);
+		break;
+
+	case 2:
+		/* From config.h */
+		handle->syscall_get_vcounter = LINUX_SYSCALL_GET_VCOUNTER;
+		logger(RADLOG_NOTICE, "registered get_ffcounter syscall at %d", handle->syscall_get_vcounter);
 
 	return 0;
 }

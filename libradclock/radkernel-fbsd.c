@@ -155,16 +155,37 @@ int radclock_init_vcounter_syscall(struct radclock *handle)
 	int err;
 	struct module_stat stat;
 
-	stat.version = sizeof(stat);
-	err = modstat(modfind("get_ffcounter"), &stat);
-	if (err < 0 ) {
-		logger(RADLOG_ERR, "Error on modstat (get_ffcounter syscall): %s", strerror(errno));
-		logger(RADLOG_ERR, "Is the radclock kernel module loaded?");
+	switch ( handle->kernel_version )
+	{
+
+	case 0:
+	case 1:
+		stat.version = sizeof(stat);
+		err = modstat(modfind("get_vcounter"), &stat);
+		if (err < 0 ) {
+			logger(RADLOG_ERR, "Error on modstat (get_vcounter syscall): %s", strerror(errno));
+			logger(RADLOG_ERR, "Is the radclock kernel module loaded?");
+			return -1;
+		}
+		handle->syscall_get_vcounter = stat.data.intval;
+		logger(RADLOG_NOTICE, "Registered get_vcounter syscall at %d", handle->syscall_get_vcounter);
+		break;
+
+	case 2:
+		stat.version = sizeof(stat);
+		err = modstat(modfind("get_ffcounter"), &stat);
+		if (err < 0 ) {
+			logger(RADLOG_ERR, "Error on modstat (get_ffcounter syscall): %s", strerror(errno));
+			logger(RADLOG_ERR, "Is the radclock kernel module loaded?");
+			return -1;
+		}
+		handle->syscall_get_vcounter = stat.data.intval;
+		logger(RADLOG_NOTICE, "Registered get_ffcounter syscall at %d", handle->syscall_get_vcounter);
+		break;
+
+	default:
 		return -1;
 	}
-	handle->syscall_get_vcounter = stat.data.intval;
-	logger(RADLOG_NOTICE, "Registered get_ffcounter syscall at %d", handle->syscall_get_vcounter);
-
 	return 0;
 }
 
