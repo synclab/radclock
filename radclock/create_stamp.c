@@ -354,21 +354,25 @@ int get_bidir_stamp(struct radclock *handle,
 	int attempt = 20;
 	unsigned int attempt_wait = 500;
 
-	char *refid_str;
-	char *refid_char;
+	char refid[16];
+	char *refid_str = refid;
+	char *refid_char = NULL;
+
+	struct ip *ip;
+	struct udphdr *udp;
+	unsigned int remaining;
 
 	radpcap_packet_t *packet = create_radpcap_packet();
 	memset(stamp, 0, sizeof (struct stamp_t));
 
-	refid_str = (char*) malloc(16 * sizeof(char));
-	JDEBUG_MEMORY(JDBG_MALLOC, refid_str);
-	
 
 /* search until a matching, valid client-server pair is found */
 while (searching) {
-	struct ip *ip;
-	struct udphdr *udp;
-	unsigned int remaining;
+
+	/* Re-initialise packet inspectors */
+	ip = NULL;
+	udp = NULL;
+	remaining = 0;
 
 	/* We may loop in here for ever, so let's respect what the boss said */	
 	if ((handle->pthread_flag_stop & PTH_DATA_PROC_STOP) == PTH_DATA_PROC_STOP )
@@ -433,32 +437,23 @@ while (searching) {
 		verbose(LOG_WARNING, "Not an UDP packet.");
 		continue;
 	}
-	
-	/* Just make sure the ntp packet has at least 48 bytes, that is all
-	 * essential stuff and without extension and authentication fields. Anyway
-	 * that is all we send in our own NTP client so far.
-	 */ 
+
 	ntp = get_udp_payload(udp, &remaining);
-	if (!ntp || (int)(remaining - LEN_PKT_NOMAC)  != 0) {
-		verbose(LOG_WARNING, 
-			"Not an NTP packet or end truncated. Packet was %d bytes instead of %d (size of ntp)", 
-			remaining, sizeof(struct ntp_pkt) );
+	if (!ntp) {
+		verbose(LOG_WARNING, "Not an NTP packet.");
 		continue;
 	}
 
-	/* The refid field has a different interpretation depending on the stratum.
-	 * We should also take into account IPv4 vs. IPv6 ... one day maybe
-	 */
-	refid_char = (char*) &(ntp->refid);
-	if (ntp->stratum == STRATUM_REFPRIM) {
-		snprintf(refid_str, 16, "%c%c%c%c", 
-		*refid_char, *(refid_char+1), *(refid_char+2), *(refid_char+3)); 
+	/* 
+	 * Here, we only want to check there is enough data to keep processing. A
+	 * normal NTP packet is at least 48 bytes long, but a control or private
+	 * request is as small as 12 bytes.
+	 */ 
+	if ( remaining < 12 ) {
+		verbose(LOG_WARNING, "NTP packet truncated, payload is %d bytes "
+				"instead of at least 12 bytes", remaining);
+		continue;
 	}
-	else {
-		snprintf(refid_str, 16, "%i.%i.%i.%i", 
-		*refid_char, *(refid_char+1), *(refid_char+2), *(refid_char+3)); 
-	}
-	refid_char = NULL;
 
 	/* Perform matching between client pkt and server reply pair, and testing. 
 	Pairs ignored if:   
@@ -564,8 +559,8 @@ while (searching) {
 		}
 		if ( port != stamp->sPort ) {
 			verbose(LOG_WARNING, "Port mismatched on packet %d (but key matched)", stats->ref_count);
-			verbose(LOG_WARNING, "Expected port: %d - Received: IP: %d, Port: %d, Server ID: %s", 
-				stamp->sPort, inet_ntoa(ip->ip_src), port, refid_str);
+			verbose(LOG_WARNING, "Expected port: %d - Received: IP: %d, Port: %d",
+				stamp->sPort, inet_ntoa(ip->ip_src), port);
 			break;
 		}
 
@@ -577,6 +572,21 @@ while (searching) {
 		}
 
 		/* We passed all sanity checks, so now monitor route changes etc */
+
+		/* The refid field has a different interpretation depending on the stratum.
+		 * We should also take into account IPv4 vs. IPv6 ... one day maybe
+		 */
+		refid_char = (char*) &(ntp->refid);
+		if (ntp->stratum == STRATUM_REFPRIM) {
+			snprintf(refid_str, 16, "%c%c%c%c", 
+			*refid_char, *(refid_char+1), *(refid_char+2), *(refid_char+3)); 
+		}
+		else {
+			snprintf(refid_str, 16, "%i.%i.%i.%i", 
+			*refid_char, *(refid_char+1), *(refid_char+2), *(refid_char+3)); 
+		}
+		refid_char = NULL;
+
 		if ( 	( ((struct bidir_output*)handle->algo_output)->n_stamps == 0 )
 			|| 	( ip->ip_ttl != prev_ttl )
 			|| 	( ntp->refid != prev_serverid )) 
@@ -654,7 +664,7 @@ while (searching) {
 
 	default:
 		// `silent' cause is lost server pkt
-		verbose(LOG_WARNING,"Missed pkt due to invalid mode: mode = %d", PKT_MODE(ntp->li_vn_mode));
+		verbose(VERB_DEBUG,"Missed pkt due to invalid mode: mode = %d", PKT_MODE(ntp->li_vn_mode));
 		break;
 	} // switch
 
@@ -663,8 +673,6 @@ while (searching) {
 	err =0;
 
 errout:
-	JDEBUG_MEMORY(JDBG_FREE, refid_str);
-	free(refid_str);
 	destroy_radpcap_packet(packet);
 
 	return err;
