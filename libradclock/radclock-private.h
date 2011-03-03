@@ -207,6 +207,10 @@ struct radclock
 	int wakeup_data_ready;
 	pthread_mutex_t wakeup_mutex;
 	pthread_cond_t wakeup_cond;
+	pthread_mutex_t rdb_mutex;	// XXX arbiter between insert_rdb_in_list and free_and_cherry_pick
+   								// XXX Should not need a lock, but there is
+								// XXX quite some messing around if hammering
+								// XXX NTP control packets	
 
 	/* Raw data capture buffer */
 	struct raw_data_bundle *rdb_start;

@@ -353,7 +353,8 @@ int insane_bidir_stamp(struct stamp_t *stamp, struct stamp_t *laststamp)
 
 	if ( stamp->type != laststamp->type )
 	{
-		verbose(LOG_ERR, "Trying to compare two stamps of different types");
+		verbose(LOG_ERR, "Trying to compare two stamps of different types %d and %d",
+				stamp->type, laststamp->type);
 		return 1;
 	}
 
@@ -519,6 +520,8 @@ int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 	 * format. The first 10 then every 6 hours (poll_period can change, but
 	 * should be fine with a long term average, do not have to be very precise
 	 * anyway).
+	 * Note: ->n_stamps has been incremented by the algo to prepare for next
+	 * stamp.
 	 */
 	poll_period = ((struct bidir_peer*)(clock_handle->active_peer))->poll_period;
 	if (VERB_LEVEL &&   ( (OUTPUT(clock_handle, n_stamps) < 10)
@@ -529,14 +532,14 @@ int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 		timediff = (double) (currtime - (long double) BST(&stamp)->Te);
 
 		verbose(VERB_CONTROL, "i=%ld: NTPserver stamp %.6Lf, RAD - NTPserver = %.3f [ms], RTT/2 = %.3f [ms]",
-				((struct bidir_output*)clock_handle->algo_output)->n_stamps,
+				((struct bidir_output*)clock_handle->algo_output)->n_stamps - 1,
 				BST(&stamp)->Te, timediff * 1000, min_RTT / 2 * 1000);
 
 		radclock_get_clockerror_bound(clock_handle, &error_bound);
 		radclock_get_clockerror_bound_avg(clock_handle, &error_bound_avg);
 		radclock_get_clockerror_bound_std(clock_handle, &error_bound_std);
 		verbose(VERB_CONTROL, "i=%ld: Clock Error Bound (cur,avg,std) %.6f %.6f %.6f [ms]",
-				((struct bidir_output*)clock_handle->algo_output)->n_stamps,
+				((struct bidir_output*)clock_handle->algo_output)->n_stamps - 1,
 				error_bound * 1000, error_bound_avg * 1000, error_bound_std * 1000);
 	}
 

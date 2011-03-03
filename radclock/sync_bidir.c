@@ -2033,8 +2033,9 @@ int process_bidir_stamp(struct radclock *clock_handle, struct bidir_peer *peer, 
  */
 	copystamp(stamp, &peer->stamp);
 
-// TODO ... wait, this should be at the very end, no? We have some weird print
-// out with the clock error stuff
+	/* Prepare for next stamp. Not great for printing things out (need to
+	 * subtract 1
+	 */
 	peer->stamp_i++;
 
 
