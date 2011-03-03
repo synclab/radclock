@@ -105,6 +105,7 @@ struct radclock * radclock_create(void)
 	pthread_mutex_init(&(clock->globaldata_mutex), NULL);
 	pthread_mutex_init(&(clock->wakeup_mutex), NULL);
 	pthread_cond_init(&(clock->wakeup_cond), NULL);
+	pthread_mutex_init(&(clock->rdb_mutex), NULL);
 
 	/* Raw data buffer */
 	clock->rdb_start 	= NULL;
@@ -284,6 +285,7 @@ void radclock_destroy(struct radclock *handle)
 	pthread_mutex_destroy(&(handle->globaldata_mutex));
 	pthread_mutex_destroy(&(handle->wakeup_mutex));
 	pthread_cond_destroy(&(handle->wakeup_cond));
+	pthread_mutex_destroy(&(handle->rdb_mutex));
 
 	/* Free the clock and set to NULL, useful for partner software */
 	free(handle);

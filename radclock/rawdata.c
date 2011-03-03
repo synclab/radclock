@@ -25,6 +25,7 @@
 #include <signal.h>
 #include <time.h>
 #include <errno.h>
+#include <assert.h>
 
 #include "../config.h"
 #include "sync_algo.h"
@@ -54,15 +55,24 @@ inline void insert_rdb_in_list(struct radclock *clock_handle, struct raw_data_bu
 {
 	JDEBUG
 
-	rdb->next = clock_handle->rdb_start;
-	rdb->prev = NULL;
+	// XXX Should get rid of the lock, the chain list is supposed to be lock
+	// free ... well, theoretically. It seems that free_and_cherry_pick is
+	// actuall messing with this new rdb if hammering with NTP control packets
+	pthread_mutex_lock(&clock_handle->rdb_mutex);
 
-	if (rdb->next != NULL)
-		rdb->next->prev = rdb;
+	JDEBUG_STR("INSERT: rdb at %p, ->next at %p, end at %p, start at %p",
+	   	rdb, rdb->next,
+		clock_handle->rdb_end, clock_handle->rdb_start);
+
+	if ( clock_handle->rdb_start != NULL)
+	clock_handle->rdb_start->next = rdb;
 
 	clock_handle->rdb_start = rdb;
+
 	if ( clock_handle->rdb_end == NULL )
 		clock_handle->rdb_end = rdb;
+
+	pthread_mutex_unlock(&clock_handle->rdb_mutex);
 }
 
 
@@ -82,12 +92,11 @@ void fill_rawdata_ntp(u_char *c_handle, const struct pcap_pkthdr *pcap_hdr, cons
 	/* Initialise raw data bundle */
 	rdb = (struct raw_data_bundle *) malloc (sizeof(struct raw_data_bundle));
 	JDEBUG_MEMORY(JDBG_MALLOC, rdb);
+	assert(rdb);
 
 	RD_NTP(rdb)->buf = (void *) malloc( pcap_hdr->caplen * sizeof(char));
 	JDEBUG_MEMORY(JDBG_MALLOC, RD_NTP(rdb)->buf);
-
-	rdb->read = 0;	/* Of course not read yet */
-	rdb->type = RD_NTP_PACKET;
+	assert(RD_NTP(rdb)->buf);
 
 	/* Copy data of interest into the raw data bundle */
 	RD_NTP(rdb)->vcount = 0;	
@@ -99,6 +108,10 @@ void fill_rawdata_ntp(u_char *c_handle, const struct pcap_pkthdr *pcap_hdr, cons
 
 	memcpy( &(RD_NTP(rdb)->pcap_hdr), pcap_hdr, sizeof(struct pcap_pkthdr));
 	memcpy( RD_NTP(rdb)->buf, packet_data, pcap_hdr->caplen * sizeof(char) );
+
+	rdb->next = NULL;
+	rdb->read = 0;		/* Of course not read yet */
+	rdb->type = RD_NTP_PACKET;
 
 	/* Insert the new bundle in the linked list */
 	insert_rdb_in_list(clock_handle, rdb);
@@ -124,6 +137,7 @@ void fill_rawdata_spy(int sig)
 	gettimeofday( &(RD_SPY(rdb)->Te), NULL);
 	radclock_get_vcounter(clock_handle, &(RD_SPY(rdb)->Tf));
 
+	rdb->next = NULL;
 	rdb->read = 0;	/* Of course not read yet */
 	rdb->type = RD_SPY_STAMP;
 
@@ -249,8 +263,8 @@ struct raw_data_bundle* free_and_cherrypick(struct radclock *clock_handle)
 {
 	JDEBUG
 
-	struct raw_data_bundle * rdb;
-	struct raw_data_bundle * rdb_tofree;
+	struct raw_data_bundle * rdb = NULL;
+	struct raw_data_bundle * rdb_tofree = NULL;
 
 	/* Position at the end of the buffer */
 	rdb = clock_handle->rdb_end;
@@ -270,30 +284,34 @@ struct raw_data_bundle* free_and_cherrypick(struct radclock *clock_handle)
 		{
 			/* Record who is the buddy to kill */
 			rdb_tofree = rdb;
+			rdb = rdb->next;
 			
-			/* New end of the raw data buffer */
-			rdb = rdb->prev;
-			rdb->next = NULL;
+			/* Position new end of the raw data buffer and nuke */
+			// XXX again, should get rid of the locking
+			pthread_mutex_lock(&clock_handle->rdb_mutex);
 			clock_handle->rdb_end = rdb;
-
-			/* Kill it */
 			rdb_tofree->next = NULL;
-			rdb_tofree->prev = NULL;
 
 			if (rdb_tofree->type == RD_NTP_PACKET )
 			{
 				JDEBUG_MEMORY(JDBG_FREE, RD_NTP(rdb_tofree)->buf);
 				free(RD_NTP(rdb_tofree)->buf);
+				RD_NTP(rdb_tofree)->buf = NULL;
 			}
+			JDEBUG_STR( "FREE: rdb at %p, ->next at %p, end at %p, start at %p",
+				rdb_tofree, rdb_tofree->next,
+				clock_handle->rdb_end, clock_handle->rdb_start);
 			JDEBUG_MEMORY(JDBG_FREE, rdb_tofree);
 			free(rdb_tofree);
+			rdb_tofree = NULL;
+			pthread_mutex_unlock(&clock_handle->rdb_mutex);
 		}
 	}
 	/* Remember we never delete the first element of the raw data buffer. So we
 	 * can have a lock free add at the HEAD of the list. However, we may have
 	 * read the first element, so we don't want get_bidir_stamp() to spin like
 	 * a crazy on this return. If we read it before, return error code.
-	 * Here, rd should NEVER be NULL. If we sef fault here, blame the guy who
+	 * Here, rdb should NEVER be NULL. If we sef fault here, blame the guy who
 	 * wrote that ...
 	 */
 	if (rdb->read == 1)
