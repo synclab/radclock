@@ -350,7 +350,9 @@ int get_bidir_stamp(struct radclock *handle,
 	int port=0;
 	int err;
 
-	/* Initial waiting time calibrated for LAN RTT */
+	/* Initial waiting time calibrated for LAN RTT, and max of 525.5 ms after 20
+	 * attempts. If we wait for that long, the server may never reply
+	 */
 	int attempt = 20;
 	unsigned int attempt_wait = 500;
 
@@ -402,7 +404,11 @@ while (searching) {
 		}
 		/* Do not want to hog the CPU if a server reply never arrives */
 		if ( attempt == 0 )
-			break;
+		{
+			verbose(LOG_NOTICE, "No server reply after 500ms, giving up");
+			err = -1;
+			goto errout;
+		}
 		verbose(VERB_DEBUG, "Buffer empty but keep looking (sleep %u)", attempt_wait);
 		usleep((useconds_t)attempt_wait);
 		/* The RTT can be quite large let's say a top of 500ms so add bigger and
