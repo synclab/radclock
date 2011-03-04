@@ -310,9 +310,9 @@ int get_vcount(radpcap_packet_t *packet, vcounter_t *vcount) {
 
 
 
-/***************** OS independent network level routines ********************/
 
-/* Look for client-server NTP packet pairs and extract timestamps and some 
+/*
+ * Look for client-server NTP packet pairs and extract timestamps and some 
  * server and route state information, convert and store in stamp structure
  * for sync algorithms.  This bidirectional version expects client-server 
  * interaction, it looks for NTP's MODE_CLIENT or MODE_SERVER codes (ntp.h) and
@@ -328,6 +328,10 @@ int get_vcount(radpcap_packet_t *packet, vcounter_t *vcount) {
  * - Detects leapseconds and allows main to keep track of leapsec total. Leap 
  *   seconds removed from server stamps to avoid giving a spurious jump to 
  *   process_bidir_stamp, reinstated in main after.
+ *
+ * Return values:
+ *  0: found matching packets, returns timestamp
+ * -1: nothing to process anymore or no match found
  */
 int get_bidir_stamp(struct radclock *handle,
 			void * userdata,
@@ -347,8 +351,8 @@ int get_bidir_stamp(struct radclock *handle,
 	static long  prev_ttl = -1; 	// IP level:  for detecting route changes
 	int searching = 1;
 	int found_client = 0;
-	int port=0;
-	int err;
+	int port = 0;
+	int err = 0;
 
 	/* Initial waiting time calibrated for LAN RTT, and max of 525.5 ms after 20
 	 * attempts. If we wait for that long, the server may never reply
@@ -376,44 +380,58 @@ while (searching) {
 	udp = NULL;
 	remaining = 0;
 
-	/* We may loop in here for ever, so let's respect what the boss said */	
+	/* We may loop in here for a long time, break if received a TERM signal */
 	if ((handle->pthread_flag_stop & PTH_DATA_PROC_STOP) == PTH_DATA_PROC_STOP )
 	{
-		err = -5;	
-		goto errout;
+		err = -2;
+		break;
 	}
 
-	/* Read the next captured packet */
-	err = get_packet(handle, userdata, &packet);
-
-	/* No more pkts in the buffer or error on read.  If we are replaying a
-	 * trace, that's the end of the data file.  If we are live and we are piggy
-	 * backing on ntpd, it may be because we have a huge RTT and the kernel
-	 * hasn't released the packets to userland yet (e.g. timeout on BPF on
-	 * FreeBSD is smaller than RTT) while we have been awaken by the dummy
-	 * trigger. So we may have the request packet already in userland but not
-	 * the reply from the server. In such a case, we don't want to wait to
-	 * return and loose the client packet.  So sleep for a while and keep
-	 * looking for the server reply
+	/* Read the next captured packet.
+	 * Note:  0 on success (found a packet)
+	 *     : -1 the rdb list is empty
 	 */
-	if (err < 0) {
-		if ( (handle->run_mode == RADCLOCK_SYNC_DEAD) 
-			|| (found_client == 0) )
+	err = get_packet(handle, userdata, &packet);
+	if (err < 0)
+	{
+		/* We are replaying a trace, reached the end of data file. */
+		if (handle->run_mode == RADCLOCK_SYNC_DEAD) 
 		{
-			goto errout;
+			err = -1;
+			break;
 		}
-		/* Do not want to hog the CPU if a server reply never arrives */
+		/* Running live, no more pkts in the buffer and no client packet found.
+		 * Signal uppper loop to break out and come back later.
+		 * If a client has been found but no server packet or the server packet
+		 * has been discarded (since still searching), the stamp structure is 
+		 * bogus. Give up on that client, but signal the caller it can keep looking
+		 */
+		if (found_client == 0)
+		{
+			err = -1;
+			break;
+		}
+
+		/* Here we found a client packet, but no server packet and the buffer is
+		 * empty. 2 cases:
+		 * - we are piggy backing and been awaken at a bad time
+		 * - the trigger thread timed out and woke us up, but the server hasn't
+		 *   replied yet (ie, timeout < RTT).
+		 * In both cases we don't want to return and loose the client packet.
+		 * Keep the wakeup_mutex, sleep a bit and give the server some time.
+		 * Eventually, we give up on it.
+		 */
 		if ( attempt == 0 )
 		{
-			verbose(LOG_NOTICE, "No server reply after 500ms, giving up");
+			verbose(LOG_NOTICE, "No valid server reply after 500ms, giving up");
 			err = -1;
-			goto errout;
+			break;
 		}
 		verbose(VERB_DEBUG, "Buffer empty but keep looking (sleep %u)", attempt_wait);
 		usleep((useconds_t)attempt_wait);
 		/* The RTT can be quite large let's say a top of 500ms so add bigger and
 		 * bigger chunks 20 times for napping
-		*/ 
+		 */
 		attempt_wait += 2500;
 		attempt--;
 		continue;
@@ -423,18 +441,18 @@ while (searching) {
 	stats->ref_count++;
 
 
-	/* Retrieve vcount from link layer header */
+	/* Retrieve vcount from link layer header, if this fails, things are bad */
 	if (get_vcount(packet, &vcount)) {
 		verbose(LOG_ERR, "Error getting raw vcounter from link layer.\n");
-		err = -5;
-		goto errout;
+		err = -1;
+		break;
 	}
 	
 	/* Descend into IP[UDP[NTP]] pkt to get NTP data */
 	remaining = get_capture_length(packet);
 	ip = get_ip(packet, &remaining);
 	if (!ip) {
-		verbose(LOG_WARNING, "Not an ip packet.");
+		verbose(LOG_WARNING, "Not an IP packet.");
 		continue;
 	}
 	
@@ -520,6 +538,8 @@ while (searching) {
 
 	case MODE_SERVER:
 
+		err = 0;
+
 		verbose(VERB_DEBUG, "Found a SERVER NTP packet");
 
 		/* We start with all possible conditions to reject packet */
@@ -548,7 +568,8 @@ while (searching) {
 		key_reply = ((u_int64_t)ntohl(ntp->org.l_int)) << 32 | (u_int64_t)ntohl(ntp->org.l_fra);
 		if (key_request != key_reply) 
 		{
-			verbose(VERB_DEFAULT, "key_request (%llu) and key_reply (%llu) do not match on %d th NTP packet, server packet ignored", 
+			verbose(VERB_DEFAULT, "key_request (%llu) and key_reply (%llu) do "
+					"not match on %d th NTP packet, server packet ignored", 
 					key_request, key_reply, stats->ref_count);
 			break;
 		}
@@ -676,12 +697,8 @@ while (searching) {
 
 }  // While (searching)
 
-	err =0;
-
-errout:
 	destroy_radpcap_packet(packet);
 
 	return err;
 }
-
 
