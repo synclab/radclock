@@ -171,7 +171,7 @@ void* thread_data_processing(void *c_handle)
 		/* Process rawdata until there is something to process */
 		do {
 			err = process_rawdata(clock_handle, &peer);
-		} while (!err); 
+		} while (err == 0); 
 
 		pthread_mutex_unlock(&clock_handle->wakeup_mutex);
 	}

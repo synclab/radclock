@@ -433,14 +433,15 @@ int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 	double error_bound_avg 	= 0;
 	double error_bound_std 	= 0;
 	int poll_period = 0;	
+	int err;
 
 	/* Generic call for creating the stamps depending on the type of the 
 	 * input source.
 	 */
-	if ( get_next_stamp(clock_handle, (struct stampsource *)clock_handle->stamp_source, &stamp) < 0 )
-	{
+	err = get_next_stamp(clock_handle, (struct stampsource *)clock_handle->stamp_source, &stamp);
+	if (err < 0)
+		// TODO why inverting the error code logic in here !!! XXX FIXME XXX
 		return 1;
-	}
 
 	/* If the new stamp looks insane just don't pass it for processing, keep
 	 * going and look for the next one. Otherwise, record it.

@@ -133,7 +133,8 @@ static int asciistamp_get_next(struct radclock *handle, struct stampsource *sour
 			BST(stamp)->Tb -= NTPtoUNIX_OFFSET;
 			BST(stamp)->Te -= NTPtoUNIX_OFFSET;
 		}
-		stamp->type = STAMP_UNKNOWN;
+		// TODO: need to detect stamp type, ie, get a better input format
+		stamp->type = STAMP_NTP;
 		stamp->qual_warning = 0;
 		stamp->sPort = 0;
 		source->ntp_stats.ref_count+=2; 

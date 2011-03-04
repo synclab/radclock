@@ -54,10 +54,13 @@ struct tracefile_data
 /* This is the callback passed to get_bidir_stamp().
  * It takes a radpcap_packet_t and fills this structure with the actual packet
  * read from the tracefile
+ * Return values:
+ *  0 on success
+ * -1 error to break upper loop
  */
 static int get_packet_tracefile(struct radclock *handle, void *userdata, radpcap_packet_t **packet_p)
 {
-	int read;
+	int ret;
 	struct tracefile_data *data = (struct tracefile_data *) userdata;
 	radpcap_packet_t *packet = *packet_p;
 
@@ -67,15 +70,32 @@ static int get_packet_tracefile(struct radclock *handle, void *userdata, radpcap
 	 */	
 	packet->header  = packet->buffer;
 	packet->payload = packet->buffer + sizeof(struct pcap_pkthdr);
-	read = pcap_next_ex(data->trace_input, 
+	ret = pcap_next_ex(data->trace_input, 
 		(struct pcap_pkthdr**) (&(packet->header)),
-	   	(const u_char**) (&(packet->payload))); 
-	if (read < 1)
+	   	(const u_char*) (&(packet->payload)));
+	switch (ret)
 	{
-		verbose(LOG_ERR, 
-			"Error reading packet, pcap_next_ex returned %d", read);
-		return -1;
+		case -2:
+			verbose(LOG_INFO, "End of PCAP trace input");
+			return -1;
+
+		case -1:
+			verbose(LOG_ERR, "Error reading packet, pcap_next_ex returned -1");
+			return -1;
+
+		case 0:
+			verbose(LOG_ERR, "Should read from trace file but we are live!");
+			return -1;
+
+		case 1:
+			/* No errors */
+			break;
+		default:
+			verbose(LOG_ERR, "pcap_next_ex returned unmanaged error code");
+			return -1;
 	}
+
+
 	packet->size = ((struct pcap_pkthdr*)packet->header)->caplen 
 					+ sizeof(struct pcap_pkthdr); 
 	packet->type = data->data_link; 
@@ -147,7 +167,7 @@ static int tracefilestamp_get_next( struct radclock *handle,
 			&source->ntp_stats, 
 			TRACEFILE_DATA(source)->src_ipaddr);
 
-	if (err) {           // EOF 
+	if (err < 0) {           // EOF 
 		verbose(LOG_NOTICE, "Got EOF on read of bpf device.");
 		return -1;
 	} 

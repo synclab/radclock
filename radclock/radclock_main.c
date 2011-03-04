@@ -59,6 +59,7 @@
 #include "pthread_mgr.h"
 #include "rawdata.h"
 #include "stampinput.h"
+#include "stampinput_int.h"
 #include "stampoutput.h"
 #include "proto_ntp.h"
 #include "jdebug.h"
@@ -1014,11 +1015,14 @@ int main(int argc, char *argv[])
 		/* End of thread while loop */
 	} /* End of run live case */
 
-	long int n_stamp;    
+	// TODO: look into making the stats a separate structure. Could be much
+	// TODO: easier to manage 
+	long int n_stamp;
+	unsigned int ref_count;
 	n_stamp = ((struct bidir_output *)clock_handle->algo_output)->n_stamps;
-	verbose(LOG_NOTICE, "%u NTP packets captured", ((struct timeref_stats*)(clock_handle->stamp_source))->ref_count);
-	verbose(LOG_NOTICE,"%ld missed NTP packets",
-			((struct timeref_stats*)(clock_handle->stamp_source))->ref_count-2*n_stamp);
+	ref_count = ((struct stampsource*)(clock_handle->stamp_source))->ntp_stats.ref_count;
+	verbose(LOG_NOTICE, "%u NTP packets captured", ref_count);
+	verbose(LOG_NOTICE,"%ld missed NTP packets", ref_count - 2 * n_stamp);
 	verbose(LOG_NOTICE, "%ld valid timestamp tuples extracted", n_stamp);
 
 	/* Close output files */
