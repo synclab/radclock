@@ -137,6 +137,7 @@ int radclock_init_vcounter_syscall(struct radclock *handle)
 		/* From config.h */
 		handle->syscall_get_vcounter = LINUX_SYSCALL_GET_VCOUNTER;
 		logger(RADLOG_NOTICE, "registered get_ffcounter syscall at %d", handle->syscall_get_vcounter);
+	}
 
 	return 0;
 }
