@@ -1158,14 +1158,14 @@ int config_parse(struct radclock_config *conf, u_int32_t *mask, int is_daemon)
 		{
 			write_config_file(fd, keys, conf);
 			fclose(fd);
+			// Adjust version
+			strcpy(conf->radclock_version, PACKAGE_VERSION);
+			verbose(LOG_NOTICE, "Updated the configuration file "
+					    "to the current package version");
 		}
 
 		// Reposition umask
 		umask(027);
-		// Adjust version
-		strcpy(conf->radclock_version, PACKAGE_VERSION);
-		verbose(LOG_NOTICE, "Updated the configuration file "
-				    "to the current package version");
 	}
 
 	/* Check command line arguments and config file for exclusion. 
