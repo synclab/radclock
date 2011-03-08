@@ -80,7 +80,7 @@ enum {
 
 #define RADCLOCK_CMD_MAX (__RADCLOCK_CMD_MAX - 1)
 
-#define RADCLOCK_NAME "radclock"
+#define RADCLOCK_NAME "FFClock"
 
 
 /* Redefinition from netlink-kernel.h but has moved into
