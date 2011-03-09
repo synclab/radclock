@@ -1105,14 +1105,17 @@ int config_parse(struct radclock_config *conf, u_int32_t *mask, int is_daemon)
 
 		// Modify umask so that the file can be read by all after being written
 		umask(022);
-		verbose(LOG_NOTICE, "Did not find configuration file: %s. Writing it.", conf->conffile);
+		verbose(LOG_NOTICE, "Did not find configuration file: %s.", conf->conffile);
 		fd = fopen(conf->conffile, "w+");
 		if (!fd) {
 			verbose(LOG_ERR, "Cannot write configuration file: %s. ", conf->conffile);
+                        umask(027);
 			return 0;
 		}
+
 		write_config_file(fd, keys, NULL);
 		fclose(fd);
+                verbose(LOG_NOTICE, "Writing configuration file.");
 		
 		// Reposition umask
 		umask(027);
@@ -1153,19 +1156,19 @@ int config_parse(struct radclock_config *conf, u_int32_t *mask, int is_daemon)
 		umask(022);
 		fd = fopen(conf->conffile, "w");
 		if ( !fd )
-			verbose(LOG_ERR, "Cannot update configuration file: %s.", conf->conffile);
-		else
 		{
-			write_config_file(fd, keys, conf);
-			fclose(fd);
-			// Adjust version
-			strcpy(conf->radclock_version, PACKAGE_VERSION);
-			verbose(LOG_NOTICE, "Updated the configuration file "
-					    "to the current package version");
+			verbose(LOG_ERR, "Cannot update configuration file: %s.", conf->conffile);
+                        umask(027);
+                        return 0;
 		}
-
-		// Reposition umask
+		write_config_file(fd, keys, conf);
+		fclose(fd);
 		umask(027);
+
+		// Adjust version
+		strcpy(conf->radclock_version, PACKAGE_VERSION);
+		verbose(LOG_NOTICE, "Updated the configuration file "
+				    "to the current package version");
 	}
 
 	/* Check command line arguments and config file for exclusion. 
