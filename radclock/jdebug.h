@@ -105,7 +105,7 @@ extern long int jdbg_memuse;
 /* Allow debug-free compilation */
 #else
 #define JDEBUG
-#define JDEBUG_STR
+#define JDEBUG_STR(...)
 #define JDEBUG_MEMORY(_op, _x) 
 #define JDEBUG_RUSAGE
 #endif
