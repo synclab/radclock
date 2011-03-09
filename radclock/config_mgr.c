@@ -1156,20 +1156,19 @@ int config_parse(struct radclock_config *conf, u_int32_t *mask, int is_daemon)
 		umask(022);
 		fd = fopen(conf->conffile, "w");
 		if ( !fd )
-                {
+		{
 			verbose(LOG_ERR, "Cannot update configuration file: %s.", conf->conffile);
                         umask(027);
                         return 0;
-                }
+		}
+		write_config_file(fd, keys, conf);
+		fclose(fd);
+		umask(027);
 
-                write_config_file(fd, keys, conf);
-                fclose(fd);
-                umask(027);
-
-                // Adjust version
-                strcpy(conf->radclock_version, PACKAGE_VERSION);
-                verbose(LOG_NOTICE, "Updated the configuration file "
-                                    "to the current package version");
+		// Adjust version
+		strcpy(conf->radclock_version, PACKAGE_VERSION);
+		verbose(LOG_NOTICE, "Updated the configuration file "
+				    "to the current package version");
 	}
 
 	/* Check command line arguments and config file for exclusion. 
