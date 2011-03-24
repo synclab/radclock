@@ -119,10 +119,11 @@ int insert_sll_header(radpcap_packet_t *packet)
 			return 1;
 	}
 
-	/* Allocate what will be the new packet buffer, remember, 
-	 *  packet->size contains the pcap header and we remove the link layer 
-	 *  header */
-	tmpbuffer = (char*) malloc(sizeof(linux_sll_header_t) +packet->size -lheader_size);
+	/* Allocate what will be the new packet buffer once we replace the link
+	 * layer header by a SLL header
+	 * Note: make sure it has the same size than the radpcap_packet_t buffer
+	 */
+	tmpbuffer = (void *) malloc(RADPCAP_PACKET_BUFSIZE);
 	JDEBUG_MEMORY(JDBG_MALLOC, tmpbuffer);
 
 	/* Copy the pcap header into the tmp buffer */

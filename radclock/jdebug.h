@@ -80,10 +80,12 @@ pthread_id()
 extern struct rusage jdbg_rusage;
 
 
-#if defined (__FreeBSD__)
-#include <malloc_np.h>
 #define JDBG_MALLOC 	1
 #define JDBG_FREE 		2
+extern long int jdbg_memuse;
+
+#if defined (__FreeBSD__)
+#include <malloc_np.h>
 
 #define JDEBUG_MEMORY(_op, _x) \
 	if (_op == JDBG_MALLOC)\
@@ -95,17 +97,23 @@ extern struct rusage jdbg_rusage;
 			pthread_id(), __FILE__, __LINE__, __FUNCTION__,\
 			malloc_usable_size(_x), jdbg_memuse-=malloc_usable_size(_x));
 
-extern long int jdbg_memuse;
-
 #else
-#define JDEBUG_MEMORY(_op, _x) 
+#define JDEBUG_MEMORY(_op, _x) \
+	if (_op == JDBG_MALLOC)\
+		fprintf(stdout, "%s | %-24s - %-4d - %-25s | MALLOC %6u KB | memory allocated = %8ld Bytes\n",\
+			pthread_id(), __FILE__, __LINE__, __FUNCTION__,\
+			sizeof(_x), jdbg_memuse+=sizeof(_x));\
+	else \
+		fprintf(stdout, "%s | %-24s - %-4d - %-25s | FREE   %6u KB | memory allocated = %8ld Bytes\n",\
+			pthread_id(), __FILE__, __LINE__, __FUNCTION__,\
+			sizeof(_x), jdbg_memuse-=sizeof(_x));
 #endif
 
 
 /* Allow debug-free compilation */
 #else
 #define JDEBUG
-#define JDEBUG_STR
+#define JDEBUG_STR(_format, ...)
 #define JDEBUG_MEMORY(_op, _x) 
 #define JDEBUG_RUSAGE
 #endif
