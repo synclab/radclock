@@ -32,7 +32,7 @@ endif
 
 DIST_SUBDIRS = libradclock radclock examples man
 
-EXTRA_DIST = python-module
+EXTRA_DIST = python-module debian redhat
 
 if HAVE_TESTBED_DIR
 dist-hook:
@@ -49,9 +49,15 @@ dist-hook:
 	@echo "Copying kernel patches into the tarball"
 	mkdir $(distdir)/kernel-patches
 	mkdir $(distdir)/kernel-patches/freebsd
+	for d in `ls $(srcdir)/kernel/freebsd`; do \
+		mkdir $(distdir)/kernel-patches/freebsd/$$d; \
+		cp -p $(srcdir)/kernel/freebsd/$$d/*.patch $(distdir)/kernel-patches/freebsd/$$d/ ; \
+	done
 	mkdir $(distdir)/kernel-patches/linux
-	cp -p `find ./kernel/freebsd/ -name *\.patch -print` $(distdir)/kernel-patches/freebsd/
-	cp -Rp $(srcdir)/kernel/linux/* $(distdir)/kernel-patches/linux/
+	for d in `ls $(srcdir)/kernel/linux`; do \
+		mkdir $(distdir)/kernel-patches/linux/$$d; \
+		cp -p $(srcdir)/kernel/linux/$$d/*.patch $(distdir)/kernel-patches/linux/$$d/ ; \
+	done
 	@echo "Cleaning release from svn infos"
 	find $(distdir) -t d -name ".svn" | xargs rm -rf
 	@echo ""
