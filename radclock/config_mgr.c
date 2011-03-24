@@ -1158,8 +1158,8 @@ int config_parse(struct radclock_config *conf, u_int32_t *mask, int is_daemon)
 		if ( !fd )
 		{
 			verbose(LOG_ERR, "Cannot update configuration file: %s.", conf->conffile);
-                        umask(027);
-                        return 0;
+			umask(027);
+			return 0;
 		}
 		write_config_file(fd, keys, conf);
 		fclose(fd);
