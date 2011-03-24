@@ -40,11 +40,10 @@ EXTRA_DIST = python-module debian redhat
 if HAVE_TESTBED_DIR
 dist-hook:
 	@echo "Cleaning the sync algo from its comments (radclock/sync_bidir.c)"
-	head -n 20 $(distdir)/radclock/sync_bidir.c > $(distdir)/radclock/sync_bidir.c.header
 	sed -f $(srcdir)/tools/remove_comments.sed $(distdir)/radclock/sync_bidir.c > $(distdir)/radclock/sync_bidir.c.clean
-	cat $(distdir)/radclock/sync_bidir.c.header > $(distdir)/radclock/sync_bidir.c
+	cat $(srcdir)/tools/copyright-header.txt > $(distdir)/radclock/sync_bidir.c
 	cat $(distdir)/radclock/sync_bidir.c.clean >> $(distdir)/radclock/sync_bidir.c
-	rm $(distdir)/radclock/sync_bidir.c.clean $(distdir)/radclock/sync_bidir.c.header
+	rm $(distdir)/radclock/sync_bidir.c.clean
 	@echo "Copying the python module and wall clock into the tarball"
 	cp $(srcdir)/python-gui/tscclock_wallclock.py $(distdir)/python-module/
 	cp -R $(srcdir)/python-gui/img $(distdir)/python-module/
