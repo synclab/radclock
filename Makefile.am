@@ -1,20 +1,23 @@
 
-# Copyright (C) 2006-2010 Julien Ridoux <julien@synclab.org>
+# Copyright (C) 2006-2011 Julien Ridoux <julien@synclab.org>
 #
 # This file is part of the radclock program.
 # 
-# This program is free software: you can redistribute it and/or modify it under
-# the terms of the GNU General Public License as published by the Free Software
-# Foundation, either version 3 of the License, or (at your option) any later
-# version.
-#
-# This program is distributed in the hope that it will be useful, but WITHOUT
-# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-# FOR A PARTICULAR PURPOSE. See the GNU General Public License for more
-# details.
-#
-# You should have received a copy of the GNU General Public License along with
-# this program. If not, see <http://www.gnu.org/licenses/>.
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+# 
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+# 02110-1301, USA.
+
 
 SUBDIRS = libradclock radclock examples man
 
@@ -32,7 +35,7 @@ endif
 
 DIST_SUBDIRS = libradclock radclock examples man
 
-EXTRA_DIST = python-module
+EXTRA_DIST = python-module debian redhat
 
 if HAVE_TESTBED_DIR
 dist-hook:
@@ -49,11 +52,22 @@ dist-hook:
 	@echo "Copying kernel patches into the tarball"
 	mkdir $(distdir)/kernel-patches
 	mkdir $(distdir)/kernel-patches/freebsd
+	for d in `ls $(srcdir)/kernel/freebsd`; do \
+		mkdir $(distdir)/kernel-patches/freebsd/$$d; \
+		cp -p $(srcdir)/kernel/freebsd/$$d/*.patch $(distdir)/kernel-patches/freebsd/$$d/ ; \
+	done
 	mkdir $(distdir)/kernel-patches/linux
-	cp -p `find ./kernel/freebsd/ -name *\.patch -print` $(distdir)/kernel-patches/freebsd/
-	cp -Rp $(srcdir)/kernel/linux/* $(distdir)/kernel-patches/linux/
+	for d in `ls $(srcdir)/kernel/linux`; do \
+		mkdir $(distdir)/kernel-patches/linux/$$d; \
+		cp -p $(srcdir)/kernel/linux/$$d/*.patch $(distdir)/kernel-patches/linux/$$d/ ; \
+	done
 	@echo "Cleaning release from svn infos"
-	find $(distdir) -t d -name ".svn" | xargs rm -rf
+	find $(distdir) -type d -name ".svn" | xargs rm -rf
+	@echo "Pushing version number in packaging scripts" 
+	sed -i -e 's/_RADCLOCK_VERSION_/$(PACKAGE_VERSION)/' $(distdir)/debian/changelog
+	sed -i -e 's/_RADCLOCK_VERSION_/$(PACKAGE_VERSION)/' $(distdir)/redhat/radclock.spec
+	@echo "Move debian copyright file in $(distdir) for Debian packaging"
+	mv $(distdir)/debian/copyright $(distdir)/
 	@echo ""
 	@echo "------------------------------------------------------"
 	@echo "*         You made a release distribution"
