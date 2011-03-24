@@ -59,7 +59,10 @@ dist-hook:
 		cp -p $(srcdir)/kernel/linux/$$d/*.patch $(distdir)/kernel-patches/linux/$$d/ ; \
 	done
 	@echo "Cleaning release from svn infos"
-	find $(distdir) -t d -name ".svn" | xargs rm -rf
+	find $(distdir) -type d -name ".svn" | xargs rm -rf
+	@echo "Pushing version number in packaging scripts" 
+	sed -i -e 's/_RADCLOCK_VERSION_/$(PACKAGE_VERSION)/' $(distdir)/debian/changelog
+	sed -i -e 's/_RADCLOCK_VERSION_/$(PACKAGE_VERSION)/' $(distdir)/redhat/radclock.spec
 	@echo ""
 	@echo "------------------------------------------------------"
 	@echo "*         You made a release distribution"
