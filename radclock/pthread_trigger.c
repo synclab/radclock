@@ -30,6 +30,7 @@
 #include <arpa/inet.h>
 #include <time.h>
 #include <signal.h>
+#include <errno.h>
 
 #include "../config.h"
 #include "radclock.h"
@@ -306,8 +307,8 @@ int ntp_client(struct radclock * clock_handle)
 				socklen );
 
 		if ( ret < 0 ) {
-			perror("sendto");
-			continue;
+			verbose(LOG_ERR, "NTP request failed, sendto: %s", strerror(errno));
+			return 1;
 		}	
 		
 		verbose(VERB_DEBUG, "Sent NTP request to %s at %lu.%lu",
