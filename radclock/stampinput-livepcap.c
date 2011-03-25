@@ -429,7 +429,8 @@ int get_address_by_name(char* addr, char* hostname)
 /** Create a BPF filter expression 
  * Filter appends additional rules passed in pattern qualifier 
  * (port number, remote host name, etc) 
- */     
+ */
+// XXX TODO: should accept IP addresses only, and make it IPv6 friendly
 int build_BPFfilter( char *fltstr, int maxsize, char *hostname, char *ntp_host) 
 {
 	int strsize;
@@ -702,6 +703,7 @@ static int livepcapstamp_update_filter(struct radclock *handle, struct stampsour
 	char fltstr[MAXLINE];               // bpf filter string
 	struct bpf_program filter;       
 
+// TODO XXX: should pass IP addresses only to libpcap and not hostnames!
 	strsize = build_BPFfilter(fltstr, MAXLINE, handle->conf->hostname, handle->conf->time_server); 
 	if ( (strsize < 0) || (strsize > MAXLINE-2) ) {     
 		verbose(LOG_ERR, "BPF filter string error (too long?)");
