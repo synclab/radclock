@@ -14,14 +14,14 @@ clock.
 Index: sys/kern/ffclock.c
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ sys/kern/ffclock.c	2011-01-12 14:54:03.000000000 +1100
-@@ -0,0 +1,250 @@
++++ sys/kern/ffclock.c	2011-03-30 16:06:11.000000000 +1100
+@@ -0,0 +1,240 @@
 +/*-
 + * Copyright (C) 2010 University of Melbourne
 + * All rights reserved.
 + *
-+ * This software was developed by the University of Melbourne under sponsorship from
-+ * the FreeBSD Foundation.
++ * This software was developed by the University of Melbourne under sponsorship
++ * from the FreeBSD Foundation.
 + *
 + * Redistribution and use in source and binary forms, with or without
 + * modification, are permitted provided that the following conditions
@@ -45,25 +45,22 @@ Index: sys/kern/ffclock.c
 + * SUCH DAMAGE.
 + */
 +
-+
 +/*
 + * System calls to access the cumulative virtual timecounter
 + */
 +
-+#include <sys/types.h>
 +#include <sys/param.h>
++#include <sys/bus.h>
++#include <sys/kernel.h>
 +#include <sys/lock.h>
 +#include <sys/mutex.h>
-+#include <sys/proc.h>
 +#include <sys/module.h>
-+#include <sys/sysent.h>
-+#include <sys/kernel.h>
-+#include <sys/systm.h>
-+#include <sys/sysproto.h>
-+#include <sys/bus.h>
++#include <sys/proc.h>
 +#include <sys/sysctl.h>
++#include <sys/sysent.h>
++#include <sys/sysproto.h>
++#include <sys/systm.h>
 +#include <sys/timeff.h>
-+
 +
 +extern struct ffclock_estimate ffclock;
 +extern uint8_t ffclock_fetch_update;
@@ -74,40 +71,38 @@ Index: sys/kern/ffclock.c
 + * Sysctl
 + */
 +static int ffclock_version = 2;
-+
 +SYSCTL_NODE(_kern, OID_AUTO, ffclock, CTLFLAG_RW, 0, "Feed-Forward Clock Support");
 +SYSCTL_INT(_kern_ffclock, OID_AUTO, version, CTLFLAG_RD, &ffclock_version, 0, "Version of Feed-Forward Clock Support");
-+
 +
 +/*
 + * First system call is get_ffcounter to retrieve the current value
 + * of the cumulative vritual counter from the timecounter interface
 + */
-+
 +struct get_ffcounter_args {
-+	ffcounter_t *ffcounter;
++	ffcounter *ffcount;
 +};
 +
 +static int
 +get_ffcounter(struct proc *td, void *syscall_args)
 +{
-+	ffcounter_t ffcounter = 0;
-+	int error = 0;
 +	struct get_ffcounter_args *uap;
++	ffcounter ffcount;
++	int error;
 +
++	ffcount = 0;
++	error = 0;
 +	uap = (struct get_ffcounter_args *) syscall_args;
-+	if ( uap->ffcounter == NULL )
++	if ( uap->ffcount == NULL )
 +		return -1;
 +
-+	ffcounter = read_ffcounter();
-+	error = copyout(&ffcounter, uap->ffcounter, sizeof(ffcounter_t));
++	ffcount = read_ffcounter();
++	error = copyout(&ffcount, uap->ffcount, sizeof(ffcounter));
 +
-+	if ( ffcounter == 0 )
++	if (ffcount == 0)
 +		error = -1;
 +
-+	return(error);
++	return (error);
 +}
-+
 +
 +static struct sysent get_ffcounter_sysent = {
 +	1,
@@ -118,25 +113,26 @@ Index: sys/kern/ffclock.c
 +	0
 +};
 +
-+
 +static int get_ffcounter_offset = NO_SYSCALL;
 +
 +static int
 +get_ffcounter_load (struct module *module, int cmd, void *arg)
 +{
-+	int error = 0;
++	int error;
++
++	error = 0;
 +	switch (cmd) {
-+		case MOD_LOAD :
-+			printf("get_ffcounter syscall loaded at %d \n", get_ffcounter_offset);
++	case MOD_LOAD :
++		printf("get_ffcounter syscall loaded at %d \n", get_ffcounter_offset);
 +		break;
-+		case MOD_UNLOAD :
-+			printf("get_ffcounter syscall unloaded from %d\n", get_ffcounter_offset);
++	case MOD_UNLOAD :
++		printf("get_ffcounter syscall unloaded from %d\n", get_ffcounter_offset);
 +		break;
-+		default :
-+			error = EINVAL;
++	default :
++		error = EINVAL;
 +		break;
 +	}
-+	return error;
++	return (error);
 +}
 +
 +/*
@@ -166,13 +162,9 @@ Index: sys/kern/ffclock.c
 +
 +DECLARE_MODULE(get_ffcounter, get_ffcounter_mod, SI_SUB_SYSCALLS, SI_ORDER_MIDDLE);
 +
-+
-+
-+
 +/*
 + * System call to push clock parameters to the kernel
 + */
-+
 +struct set_ffclock_args {
 +	struct ffclock_estimate *cest;
 +};
@@ -189,21 +181,21 @@ Index: sys/kern/ffclock.c
 + */
 +static int set_ffclock(struct proc *td, void *syscall_args)
 +{
-+	int error = 0;
 +	struct set_ffclock_args *uap;
++	int error;
 +
++	error = 0;
 +	uap = (struct set_ffclock_args *) syscall_args;
 +	if ( uap->cest == NULL )
-+		return -1;
++		return (-1);
 +
 +	mtx_lock(&ffclock_mtx);
 +	error = copyin(uap->cest, &(ffclock), sizeof(struct ffclock_estimate));
 +	ffclock_fetch_update = 1;
 +	mtx_unlock(&ffclock_mtx);
 +
-+	return(error);
++	return (error);
 +}
-+
 +
 +static struct sysent set_ffclock_sysent = {
 +	1,
@@ -214,27 +206,28 @@ Index: sys/kern/ffclock.c
 +	0
 +};
 +
-+
 +static int set_ffclock_offset = NO_SYSCALL;
 +
 +static int
 +set_ffclock_load (struct module *module, int cmd, void *arg)
 +{
-+	int error = 0;
++	int error;
++
++	error = 0;
 +	switch (cmd) {
-+		case MOD_LOAD :
-+			mtx_init(&ffclock_mtx, "ffclock lock", NULL, MTX_DEF);
-+			printf("set_ffclock syscall loaded at %d \n", set_ffclock_offset);
++	case MOD_LOAD :
++		mtx_init(&ffclock_mtx, "ffclock lock", NULL, MTX_DEF);
++		printf("set_ffclock syscall loaded at %d \n", set_ffclock_offset);
 +		break;
-+		case MOD_UNLOAD :
-+			mtx_destroy(&ffclock_mtx);
-+			printf("set_ffclock syscall unloaded from %d\n", set_ffclock_offset);
++	case MOD_UNLOAD :
++		mtx_destroy(&ffclock_mtx);
++		printf("set_ffclock syscall unloaded from %d\n", set_ffclock_offset);
 +		break;
-+		default :
-+			error = EINVAL;
++	default :
++		error = EINVAL;
 +		break;
 +	}
-+	return error;
++	return (error);
 +}
 +
 +/*
@@ -263,39 +256,44 @@ Index: sys/kern/ffclock.c
 +};
 +
 +DECLARE_MODULE(set_ffclock, set_ffclock_mod, SI_SUB_SYSCALLS, SI_ORDER_MIDDLE);
-+
-+
-+
 Index: sys/modules/Makefile
 ===================================================================
---- sys.orig/modules/Makefile	2010-12-23 17:00:47.000000000 +1100
-+++ sys/modules/Makefile	2010-12-23 17:22:15.000000000 +1100
-@@ -242,6 +242,7 @@ SUBDIR=	${_3dfx} \
- 	${_pst} \
- 	pty  \
- 	puc \
+--- sys.orig/modules/Makefile	2011-03-30 14:20:24.000000000 +1100
++++ sys/modules/Makefile	2011-03-30 15:40:33.000000000 +1100
+@@ -90,20 +90,21 @@ SUBDIR=	${_3dfx} \
+ 	${_et} \
+ 	${_ex} \
+ 	${_exca} \
+ 	${_ext2fs} \
+ 	fatm \
+ 	fdc \
+ 	fdescfs \
+ 	${_fe} \
+ 	firewire \
+ 	firmware \
 +	ffclock \
- 	ral \
- 	ralfw \
- 	${_random} \
+ 	fxp \
+ 	gem \
+ 	geom \
+ 	${_glxsb} \
+ 	hatm \
+ 	hifn \
+ 	hme \
+ 	${_hptiop} \
+ 	${_hptmv} \
+ 	${_hptrr} \
 Index: sys/modules/ffclock/Makefile
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ sys/modules/ffclock/Makefile	2010-12-23 17:22:15.000000000 +1100
-@@ -0,0 +1,16 @@
++++ sys/modules/ffclock/Makefile	2011-03-30 15:43:51.000000000 +1100
+@@ -0,0 +1,10 @@
 +# This make file creates the .ko module for retrieving the vitual counter through syscall.
 +
 +.PATH: ${.CURDIR}/../../kern
 +
-+KMOD    =  ffclock
-+SRCS    =  ffclock.c
++KMOD=	ffclock
++SRCS=	ffclock.c
 +
 +SRCS+=	opt_ffclock.h
 +
-+.if !defined(KERNBUILDDIR)
-+opt_ffclock.h:
-+	echo "#define FFCLOCK 1" > opt_ffclock.h
-+.endif
-+
 +.include <bsd.kmod.mk>
-+
