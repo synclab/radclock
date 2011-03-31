@@ -10,8 +10,8 @@ Allow to choose between feedback and feed-forward clock for timestamping.
 
 Index: sys/net/bpf.h
 ===================================================================
---- sys.orig/net/bpf.h	2011-03-30 16:06:40.000000000 +1100
-+++ sys/net/bpf.h	2011-03-30 18:16:02.000000000 +1100
+--- sys.orig/net/bpf.h	2011-03-31 10:20:54.000000000 +1100
++++ sys/net/bpf.h	2011-03-31 19:04:52.000000000 +1100
 @@ -1,19 +1,25 @@
  /*-
   * Copyright (C) 1990, 1991, 1993
@@ -38,7 +38,7 @@ Index: sys/net/bpf.h
   *    documentation and/or other materials provided with the distribution.
   * 4. Neither the name of the University nor the names of its contributors
   *    may be used to endorse or promote products derived from this software
-@@ -162,59 +168,95 @@ enum bpf_direction {
+@@ -162,59 +168,78 @@ enum bpf_direction {
  /* Time stamping functions */
  #define	BPF_T_MICROTIME		0x0000
  #define	BPF_T_NANOTIME		0x0001
@@ -84,46 +84,29 @@ Index: sys/net/bpf.h
  	bpf_u_int64	bt_frac;	/* fraction */
  };
 +
-+#ifdef FFCLOCK
-+struct bpf_xhdr {
-+	struct bpf_ts	bh_tstamp;	/* time stamp */
-+	bpf_u_int32	bh_caplen;	/* length of captured portion */
-+	bpf_u_int32	bh_datalen;	/* original length of packet */
-+	u_short		bh_hdrlen;	/* length of bpf header (this struct
-+					   plus alignment padding) */
-+	u_short		padding;		/* padding to align the fields */
-+	ffcounter	ffcount_stamp;	/* feed-forward counter timestamp */
-+};
-+#else
  struct bpf_xhdr {
  	struct bpf_ts	bh_tstamp;	/* time stamp */
  	bpf_u_int32	bh_caplen;	/* length of captured portion */
  	bpf_u_int32	bh_datalen;	/* original length of packet */
  	u_short		bh_hdrlen;	/* length of bpf header (this struct
  					   plus alignment padding) */
- };
++#ifdef FFCLOCK
++	ffcounter	ffcount_stamp;	/* feed-forward counter timestamp */
 +#endif
+ };
 +
  /* Obsolete */
-+#ifdef FFCLOCK
  struct bpf_hdr {
  	struct timeval	bh_tstamp;	/* time stamp */
  	bpf_u_int32	bh_caplen;	/* length of captured portion */
  	bpf_u_int32	bh_datalen;	/* original length of packet */
  	u_short		bh_hdrlen;	/* length of bpf header (this struct
  					   plus alignment padding) */
-+	u_short		padding;		/* padding to align the fields */
++#ifdef FFCLOCK
 +	ffcounter	ffcount_stamp;	/* feed-forward counter timestamp */
- };
-+#else
-+struct bpf_hdr {
-+	struct timeval	bh_tstamp;	/* time stamp */
-+	bpf_u_int32	bh_caplen;	/* length of captured portion */
-+	bpf_u_int32	bh_datalen;	/* original length of packet */
-+	u_short		bh_hdrlen;	/* length of bpf header (this struct
-+					   plus alignment padding) */
-+};
 +#endif
+ };
++
  #ifdef _KERNEL
  #define	MTAG_BPF		0x627066
  #define	MTAG_BPF_TIMESTAMP	0
@@ -136,8 +119,8 @@ Index: sys/net/bpf.h
   * accessing these fields, appropriate atomic operation and memory barriers
 Index: sys/net/bpf.c
 ===================================================================
---- sys.orig/net/bpf.c	2011-03-30 16:06:40.000000000 +1100
-+++ sys/net/bpf.c	2011-03-30 18:26:24.000000000 +1100
+--- sys.orig/net/bpf.c	2011-03-31 10:20:54.000000000 +1100
++++ sys/net/bpf.c	2011-03-31 19:05:21.000000000 +1100
 @@ -1,19 +1,25 @@
  /*-
   * Copyright (C) 1990, 1991, 1993
@@ -200,7 +183,7 @@ Index: sys/net/bpf.c
  
  #include <sys/event.h>
  #include <sys/file.h>
-@@ -83,41 +93,50 @@ __FBSDID("$FreeBSD$");
+@@ -83,41 +93,49 @@ __FBSDID("$FreeBSD$");
  #include <net80211/ieee80211_freebsd.h>
  
  #include <security/mac/mac_framework.h>
@@ -238,8 +221,7 @@ Index: sys/net/bpf.c
  	uint16_t	bh_hdrlen;	/* length of bpf header (this struct
  					   plus alignment padding) */
 +#ifdef FFCLOCK
-+	u_short		padding;	/* padding to align the fields */
-+	ffcounter	ffcount_stamp;	/* raw virtual timecounter timestamp for this packet */
++	ffcounter	ffcount_stamp; /* raw virtual timecounter timestamp for this packet */
 +#endif
  };
  #endif
@@ -251,7 +233,7 @@ Index: sys/net/bpf.c
  
  struct bpf_dltlist32 {
  	u_int	bfl_len;
-@@ -144,41 +163,52 @@ static int		bpf_bpfd_cnt;
+@@ -144,41 +162,52 @@ static int		bpf_bpfd_cnt;
  
  static void	bpf_attachd(struct bpf_d *, struct bpf_if *);
  static void	bpf_detachd(struct bpf_d *);
@@ -304,7 +286,7 @@ Index: sys/net/bpf.c
  
  static struct cdevsw bpf_cdevsw = {
  	.d_version =	D_VERSION,
-@@ -691,20 +721,31 @@ bpfopen(struct cdev *dev, int flags, int
+@@ -691,20 +720,31 @@ bpfopen(struct cdev *dev, int flags, int
  	d->bd_direction = BPF_D_INOUT;
  	d->bd_pid = td->td_proc->p_pid;
  #ifdef MAC
@@ -336,7 +318,7 @@ Index: sys/net/bpf.c
  bpfread(struct cdev *dev, struct uio *uio, int ioflag)
  {
  	struct bpf_d *d;
-@@ -1810,20 +1851,23 @@ bpf_gettime(struct bintime *bt, int tsty
+@@ -1810,20 +1850,23 @@ bpf_gettime(struct bintime *bt, int tsty
  void
  bpf_tap(struct bpf_if *bp, u_char *pkt, u_int pktlen)
  {
@@ -360,7 +342,7 @@ Index: sys/net/bpf.c
  		 * NB: We dont call BPF_CHECK_DIRECTION() here since there is no
  		 * way for the caller to indiciate to us whether this packet
  		 * is inbound or outbound.  In the bpf_mtap() routines, we use
-@@ -1832,26 +1876,36 @@ bpf_tap(struct bpf_if *bp, u_char *pkt, 
+@@ -1832,26 +1875,36 @@ bpf_tap(struct bpf_if *bp, u_char *pkt, 
  #ifdef BPF_JITTER
  		bf = bpf_jitter_enable != 0 ? d->bd_bfilter : NULL;
  		if (bf != NULL)
@@ -397,7 +379,7 @@ Index: sys/net/bpf.c
  	    (((d)->bd_direction == BPF_D_IN && (r) != (i)) ||	\
  	    ((d)->bd_direction == BPF_D_OUT && (r) == (i)))
  
-@@ -1861,20 +1915,23 @@ bpf_tap(struct bpf_if *bp, u_char *pkt, 
+@@ -1861,20 +1914,23 @@ bpf_tap(struct bpf_if *bp, u_char *pkt, 
  void
  bpf_mtap(struct bpf_if *bp, struct mbuf *m)
  {
@@ -421,7 +403,7 @@ Index: sys/net/bpf.c
  	pktlen = m_length(m, NULL);
  
  	gottime = BPF_TSTAMP_NONE;
-@@ -1888,44 +1945,58 @@ bpf_mtap(struct bpf_if *bp, struct mbuf 
+@@ -1888,44 +1944,58 @@ bpf_mtap(struct bpf_if *bp, struct mbuf 
  		bf = bpf_jitter_enable != 0 ? d->bd_bfilter : NULL;
  		/* XXX We cannot handle multiple mbufs. */
  		if (bf != NULL && m->m_next == NULL)
@@ -480,7 +462,7 @@ Index: sys/net/bpf.c
  	pktlen = m_length(m, NULL);
  	/*
  	 * Craft on-stack mbuf suitable for passing to bpf_filter.
-@@ -1941,26 +2012,36 @@ bpf_mtap2(struct bpf_if *bp, void *data,
+@@ -1941,26 +2011,36 @@ bpf_mtap2(struct bpf_if *bp, void *data,
  	BPFIF_LOCK(bp);
  	LIST_FOREACH(d, &bp->bif_dlist, bd_next) {
  		if (BPF_CHECK_DIRECTION(d, m->m_pkthdr.rcvif, bp->bif_ifp))
@@ -517,7 +499,7 @@ Index: sys/net/bpf.c
  
  #undef	BPF_TSTAMP_NONE
  #undef	BPF_TSTAMP_FAST
-@@ -2025,24 +2106,30 @@ bpf_bintime2ts(struct bintime *bt, struc
+@@ -2025,24 +2105,30 @@ bpf_bintime2ts(struct bintime *bt, struc
  	}
  }
  
@@ -548,7 +530,7 @@ Index: sys/net/bpf.c
  #endif
  	int caplen, curlen, hdrlen, totlen;
  	int do_wakeup = 0;
-@@ -2111,60 +2198,86 @@ catchpacket(struct bpf_d *d, u_char *pkt
+@@ -2111,60 +2197,86 @@ catchpacket(struct bpf_d *d, u_char *pkt
  		 * reader should be woken up.
  		 */
  		do_wakeup = 1;
@@ -567,7 +549,7 @@ Index: sys/net/bpf.c
 +			 */
 +			if ( (tstype & BPF_T_FFCLOCK) == BPF_T_FFCLOCK )
 +				ffcounter2bintime(ffcount, bt);
-+#endif	/* FFCLOCK */
++#endif /* FFCLOCK */
  			bpf_bintime2ts(bt, &ts, tstype);
 +		}
  #ifdef COMPAT_FREEBSD32
