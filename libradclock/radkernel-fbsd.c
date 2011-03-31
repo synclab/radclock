@@ -22,9 +22,7 @@
 
 #include "../config.h"
 #ifdef WITH_RADKERNEL_FBSD
-#include <stdio.h>
-#include <stdlib.h>
-//#include <unistd.h>
+
 #include <sys/types.h>
 #include <sys/time.h>
 #include <sys/ioctl.h>
@@ -32,12 +30,18 @@
 //#include <sys/syscall.h>
 #include <sys/sysctl.h>
 #include <sys/socket.h>
+
+#include <net/ethernet.h>	// ETHER_HDR_LEN
+#include <pcap.h>
+
+#include <stdio.h>
+#include <stdlib.h>
+//#include <unistd.h>
 #include <syslog.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <string.h>
-
-#include <pcap.h>
+#include <stddef.h>	// offesetof macro
 
 #include "radclock.h"
 #include "radclock-private.h"
@@ -93,7 +97,7 @@
  * vcount field.
  */
 
-struct vcount_bpf_hdr 
+struct bpf_hdr_hack 
 {
 	struct timeval bh_tstamp;	/* time stamp */
 	bpf_u_int32 bh_caplen;		/* length of captured portion */
@@ -212,7 +216,11 @@ int radclock_init_vcounter(struct radclock *handle)
 		if (ret == -1)
 		{
 			logger(RADLOG_ERR, "Cannot find kern.timecounter.passthrough in sysctl");
-			return -1;
+			// XXX TODO XXX
+			// Used to return error here, but easier for kernel dev.
+			// May need to reenable it later on
+			passthrough_counter = 0;
+			// return -1;
 		}
 	}
 
@@ -349,37 +357,80 @@ int descriptor_get_tsmode(struct radclock *handle, pcap_t *p_handle, int *kmode)
 
 
 
+/*
+ * The BPF subsystem adds padding after the bpf header to WORDALIGN the NETWORK
+ * layer header, and not the MAC layer. In other words:
+ * WORDALIGN( * bpf_hdr->bh_hrdlen + MAC_header ) - MAC_header
+ *
+ * Let's look at the components of WORDALIGN.
+ * Because we add the vcounter_t member at the end of the hacked bpf_header, the
+ * compiler adds padding before the vcount to align it on to 64 boundary.
+ * Things are architecture dependent.
+ *
+ * - On 32 bit system, the timeval is twice 32 bit integers, and the original
+ * bpf_header is 18 bytes. The compiler adds 6 bytes of padding and the vcounter
+ * takes 8 bytes. The hacked header is 32 bytes long.  
+ *
+ * - On 64 bit systems, the timeval is twice 64 bits integers, and the hacked
+ * header is 40 bytes long.
+ *
+ * The word alignement is based on sizeof(long), which is 4 bytes on i386 system
+ * and 8 bytes on amd64 systems.  So the bpf_header is always WORDALIGNED by
+ * default as 8*sizeof(long) for i386 and 5*sizeof(long) on amd64.
+ *
+ * Now, we have always captured packets over Ethernet (without 802.1Q), that is
+ * a MAC header of 14 bytes. On both i386 and amd64 that gives a WORDALIGN at 16
+ * bytes, and an extra padding of 2 bytes.
+ *
+ * Example of ethernet capture on amd64:
+ * [[bpf_header 40bytes][padding 2bytes]]  [Ether 14bytes]  [IPv4 20 bytes]
+ * 
+ * XXX
+ * As soon as we move to capture on other MAC layer or use 802.1Q, things will
+ * break, and we need a new implementation that provides the MAC header length
+ * base on the DLT of the pcap handler.
+ * XXX
+ */
 
-inline int extract_vcount_stamp(
-			pcap_t *p_handle, 
-			const struct pcap_pkthdr *header, 
-			const unsigned char *packet,
-			vcounter_t *vcount)
+/* 
+ * Also make sure we compute the padding inside the hacked bpf header the same
+ * way as in the kernel to avoid different behaviour accross compilers.
+ */
+#define BPF_ALIGNMENT sizeof(long)
+#define BPF_WORDALIGN(x) (((x)+(BPF_ALIGNMENT-1))&~(BPF_ALIGNMENT-1))
+
+#define SIZEOF_BPF_HDR(type)	\
+	(offsetof(type, vcount) + sizeof(((type *)0)->vcount))
+
+#define BPF_HDR_LEN		\
+	(BPF_WORDALIGN(SIZEOF_BPF_HDR(struct bpf_hdr_hack) + ETHER_HDR_LEN)	- ETHER_HDR_LEN)
+
+inline int
+extract_vcount_stamp(pcap_t *p_handle, const struct pcap_pkthdr *header, 
+		const unsigned char *packet, vcounter_t *vcount)
 {
-	/* Data structures that contain extracted vcount and timstamp */
-	vcounter_t vcount_ex = 0;
-	if (pcap_fileno(p_handle) < 0) //If we're a live capture
+	struct bpf_hdr_hack *hack; 
+
+	/* Check we are running live */
+	if (pcap_fileno(p_handle) < 0)
 		return -1;
 
-	//padding is assumed to be 2
-	//E.G.
-	//[vcount_bpf_hdr (28 bytes)][padding 2bytes][packet....]
-	//I wouldn't be suprised if padding changes, if it does, split
-	//into a function and try for different values of padding
-	struct vcount_bpf_hdr *hack;
-	const int PADDING = 2;
-	hack = (struct vcount_bpf_hdr *)(packet - PADDING);
-	//place the header pointer back before the packet
-	hack--;
-	if (hack->bh_hdrlen != sizeof(struct vcount_bpf_hdr) + PADDING
-	 || memcmp(hack, header, sizeof(struct pcap_pkthdr) != 0))
+   	/* 
+	 * Find the beginning of the hacked header starting from the MAC header.
+	 * Useful for checking we are doing the right thing.
+	 */
+	hack = (struct bpf_hdr_hack *) (packet - BPF_HDR_LEN);
+   
+	/* Check we did the right thing by comparing hack and pcap header pointer */
+	if ((hack->bh_hdrlen != BPF_HDR_LEN)
+		|| (memcmp(hack, header, sizeof(struct pcap_pkthdr)) != 0))
 	{
-		logger(RADLOG_ERR, "Either modified kernel not installed, or bpf interface has changed");
-		return -1;
+		logger(RADLOG_ERR, "Either modified kernel not installed, "
+				"or bpf interface has changed");
+	   	return -1;
 	}
-	vcount_ex = hack->vcount;
 
-	*vcount= vcount_ex;
+	*vcount= hack->vcount;
 	return 0;
 }
 
