@@ -550,6 +550,13 @@ static int livepcapstamp_init(struct radclock *handle, struct stampsource *sourc
 	 */
 	radclock_tsmode_t capture_mode;
 	pcap_t *p_handle_traceout;
+
+	/* Open the handle early to assure we have permissions to access it.
+	 * We do not close this, even though for libpcap 1.1.1 it is never used
+	 * after the pcap_dump_open() call.  For safety purposes we leave the
+	 * handle open incase of libpcap interface change on the pcap_dumper_t
+	 * struct which might, in the future, utilize the handle.
+	 */
 	p_handle_traceout = pcap_open_dead(DLT_LINUX_SLL, BPF_PACKET_SIZE);
 	if (!p_handle_traceout) {
 		verbose(LOG_ERR, "Error creating pcap handle");
@@ -562,6 +569,7 @@ static int livepcapstamp_init(struct radclock *handle, struct stampsource *sourc
 	JDEBUG_MEMORY(JDBG_MALLOC, source->priv_data);
 	if (!LIVEPCAP_DATA(source)) {
 		verbose(LOG_ERR, "Error allocating memory");
+		pcap_close(p_handle_traceout);
 		return -1;
 	}
 	strcpy(LIVEPCAP_DATA(source)->src_ipaddr,"");
@@ -573,6 +581,7 @@ static int livepcapstamp_init(struct radclock *handle, struct stampsource *sourc
 		verbose(LOG_ERR, "Error creating pcap handle");
 		JDEBUG_MEMORY(JDBG_FREE, LIVEPCAP_DATA(source));
 		free(LIVEPCAP_DATA(source));
+		pcap_close(p_handle_traceout);
 		return -1;
 	}
 	// TODO that could be written in a more simpler way once we clean the sources 
@@ -638,7 +647,10 @@ static int livepcapstamp_init(struct radclock *handle, struct stampsource *sourc
 		}
 	}
 	else
+	{
 		LIVEPCAP_DATA(source)->trace_output = NULL;
+		pcap_close(p_handle_traceout);
+	}
 
 	return 0;
 }
@@ -745,6 +757,10 @@ static int livepcapstamp_update_dumpout(struct radclock *handle, struct stampsou
 	if (strlen(handle->conf->sync_out_pcap) > 0)
 	{
 		pcap_t *p_handle_traceout;
+		/* We never close this handle for future safety if libpcap
+		 * changes its interface, and in the future might utilize this
+		 * handle.
+		 */
 		p_handle_traceout = pcap_open_dead(DLT_LINUX_SLL, BPF_PACKET_SIZE);
 		if (!p_handle_traceout)
 		{
@@ -761,6 +777,7 @@ static int livepcapstamp_update_dumpout(struct radclock *handle, struct stampsou
 				   pcap_geterr(p_handle_traceout));
 			JDEBUG_MEMORY(JDBG_FREE, LIVEPCAP_DATA(source));
 			free(LIVEPCAP_DATA(source));
+			pcap_close(p_handle_traceout);
 			return -1;
 		}
 	}
