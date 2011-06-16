@@ -1,0 +1,39 @@
+Add feed-forward clock syscalls to libc.
+
+I didn't add the syscalls to the private namespace of the Symbol map, since this
+interface is not FreeBSD specific. Although it is not clear yet how other
+systems may implement the same services yet. May be put in the private
+namespace in the future. 
+
+---
+ sys/Symbol.map |    3 +++
+ 1 file changed, 3 insertions(+)
+
+Index: libc/sys/Symbol.map
+===================================================================
+--- libc.orig/sys/Symbol.map	2011-03-29 22:05:05.000000000 +1100
++++ libc/sys/Symbol.map	2011-06-15 14:10:34.000000000 +1000
+@@ -356,20 +356,23 @@ FBSD_1.1 {
+ 	renameat;
+ 	setfib;
+ 	shmctl;
+ 	symlinkat;
+ 	unlinkat;
+ };
+ 
+ FBSD_1.2 {
+ 	cap_enter;
+ 	cap_getmode;
++	ffclock_getcounter;
++	ffclock_getestimate;
++	ffclock_setestimate;
+ 	getloginclass;
+ 	setloginclass;
+ };
+ 
+ FBSDprivate_1.0 {
+ 	___acl_aclcheck_fd;
+ 	__sys___acl_aclcheck_fd;
+ 	___acl_aclcheck_file;
+ 	__sys___acl_aclcheck_file;
+ 	___acl_aclcheck_link;

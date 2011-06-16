@@ -6,16 +6,19 @@ Allows feed-forward synchronisation daemon to update the kernel feed-forward
 clock.
 
 ---
- kern/ffclock.c           |  250 +++++++++++++++++++++++++++++++++++++++++++++++
- modules/Makefile         |    1 
- modules/ffclock/Makefile |   16 +++
- 3 files changed, 267 insertions(+)
+ compat/freebsd32/syscalls.master |    6 -
+ conf/files                       |    1 
+ kern/kern_ffclock.c              |  134 +++++++++++++++++++++++++++++++++++++++
+ kern/syscalls.master             |    6 -
+ sys/time.h                       |    1 
+ sys/timeffc.h                    |    8 ++
+ 6 files changed, 150 insertions(+), 6 deletions(-)
 
-Index: sys/kern/ffclock.c
+Index: sys/kern/kern_ffclock.c
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ sys/kern/ffclock.c	2011-03-31 10:20:09.000000000 +1100
-@@ -0,0 +1,240 @@
++++ sys/kern/kern_ffclock.c	2011-06-16 12:52:10.000000000 +1000
+@@ -0,0 +1,134 @@
 +/*-
 + * Copyright (C) 2010 University of Melbourne
 + * All rights reserved.
@@ -56,16 +59,16 @@ Index: sys/kern/ffclock.c
 +#include <sys/mutex.h>
 +#include <sys/module.h>
 +#include <sys/proc.h>
++#include <sys/sysproto.h>  // TODO: check this is the right way of doing things
 +#include <sys/sysctl.h>
 +#include <sys/sysent.h>
 +#include <sys/sysproto.h>
 +#include <sys/systm.h>
-+#include <sys/timeff.h>
++#include <sys/timeffc.h>
 +
-+extern struct ffclock_estimate ffclock;
++extern struct ffclock_estimate ffclock_estimate;
 +extern uint8_t ffclock_fetch_update;
-+
-+static struct mtx ffclock_mtx;	/* lock against concurrent updates of the ffclock estimates */
++extern struct mtx ffclock_mtx;	/* lock against concurrent updates of the ffclock estimates */
 +
 +/*
 + * Sysctl
@@ -74,226 +77,219 @@ Index: sys/kern/ffclock.c
 +SYSCTL_NODE(_kern, OID_AUTO, ffclock, CTLFLAG_RW, 0, "Feed-Forward Clock Support");
 +SYSCTL_INT(_kern_ffclock, OID_AUTO, version, CTLFLAG_RD, &ffclock_version, 0, "Version of Feed-Forward Clock Support");
 +
++
 +/*
-+ * First system call is get_ffcounter to retrieve the current value
-+ * of the cumulative vritual counter from the timecounter interface
++ * System call returning feed-forward clock counter to user space
 + */
-+struct get_ffcounter_args {
++
++#ifndef _SYS_SYSPROTO_H_
++struct ffclock_getcounter_args {
 +	ffcounter *ffcount;
 +};
-+
-+static int
-+get_ffcounter(struct proc *td, void *syscall_args)
++#endif
++/* ARGSUSED */
++int
++ffclock_getcounter(struct thread *td, struct ffclock_getcounter_args *uap)
 +{
-+	struct get_ffcounter_args *uap;
 +	ffcounter ffcount;
 +	int error;
 +
 +	ffcount = 0;
-+	error = 0;
-+	uap = (struct get_ffcounter_args *) syscall_args;
-+	if ( uap->ffcount == NULL )
-+		return (-1);
-+
 +	ffcount = read_ffcounter();
-+	error = copyout(&ffcount, uap->ffcount, sizeof(ffcounter));
-+
 +	if (ffcount == 0)
-+		error = -1;
-+
-+	return (error);
-+}
-+
-+static struct sysent get_ffcounter_sysent = {
-+	1,
-+	(sy_call_t *) get_ffcounter,
-+	AUE_NULL,
-+	NULL,
-+	0,
-+	0
-+};
-+
-+static int get_ffcounter_offset = NO_SYSCALL;
-+
-+static int
-+get_ffcounter_load (struct module *module, int cmd, void *arg)
-+{
-+	int error;
-+
-+	error = 0;
-+	switch (cmd) {
-+	case MOD_LOAD :
-+		printf("get_ffcounter syscall loaded at %d \n", get_ffcounter_offset);
-+		break;
-+	case MOD_UNLOAD :
-+		printf("get_ffcounter syscall unloaded from %d\n", get_ffcounter_offset);
-+		break;
-+	default :
-+		error = EINVAL;
-+		break;
-+	}
++		return (1);
++	error = copyout(&ffcount, uap->ffcount, sizeof(ffcounter));
 +	return (error);
 +}
 +
 +/*
-+ * XXX we used to call SYSCALL_MODULE to help us with declaring the modules.
-+ * Starting with FreeBSD 8.1, the module name was prepended with "sys/" in the
-+ * moduledata_t structure. To avoid yet another naming issues, we do
-+ * SYSCALL_MODULE's work instead and overwrite this convention.
-+ * See /usr/src/sys/sys/sysent.h for the details.
-+ *
-+ * Hopefully, this will disappear once we go mainstream
-+ */
-+//SYSCALL_MODULE(get_ffcounter, &get_ffcounter_offset, &get_ffcounter_sysent, get_ffcounter_load, NULL);
-+
-+static struct syscall_module_data get_ffcounter_syscall_mod = {
-+	get_ffcounter_load,
-+	NULL,
-+	&get_ffcounter_offset,
-+	&get_ffcounter_sysent,
-+	{ 0, NULL, AUE_NULL}
-+};
-+
-+static moduledata_t get_ffcounter_mod = {
-+	"get_ffcounter",
-+	syscall_module_handler,
-+	&get_ffcounter_syscall_mod
-+};
-+
-+DECLARE_MODULE(get_ffcounter, get_ffcounter_mod, SI_SUB_SYSCALLS, SI_ORDER_MIDDLE);
-+
-+/*
-+ * System call to push clock parameters to the kernel
-+ */
-+struct set_ffclock_args {
-+	struct ffclock_estimate *cest;
-+};
-+
-+
-+/*
-+ * Adjust the ffclock by writing down the clock estimates passed from userland.
-+ * Hold ffclock_mtx to prevent several instances to update concurrently,
-+ * essentially to protect from user's bad practice.
++ * System call to push feed-foward clock estimates from synchronisation daemon
++ * to the kernel. Hold ffclock_mtx to prevent several instances to update
++ * concurrently, essentially to protect from user's bad practice.
 + * update_ffclock() may bump the generation number without us knowing.
 + *
 + * XXX update comment to reflect what the code does.
 + * mention that updates are acted upon during tc_windup, leading to a delay <= 1/HZ
 + */
-+static int set_ffclock(struct proc *td, void *syscall_args)
++#ifndef _SYS_SYSPROTO_H_
++struct ffclock_setestimate_args {
++	struct ffclock_estimate *cest;
++};
++#endif
++/* ARGSUSED */
++int
++ffclock_setestimate(struct thread *td, struct ffclock_setestimate_args *uap)
 +{
-+	struct set_ffclock_args *uap;
 +	int error;
-+
-+	error = 0;
-+	uap = (struct set_ffclock_args *) syscall_args;
-+	if ( uap->cest == NULL )
-+		return (-1);
 +
 +	mtx_lock(&ffclock_mtx);
-+	error = copyin(uap->cest, &(ffclock), sizeof(struct ffclock_estimate));
-+	ffclock_fetch_update = 1;
++	error = copyin(uap->cest, &(ffclock_estimate), sizeof(struct ffclock_estimate));
++	if (error == 0)
++		ffclock_fetch_update = 1;
 +	mtx_unlock(&ffclock_mtx);
-+
-+	return (error);
-+}
-+
-+static struct sysent set_ffclock_sysent = {
-+	1,
-+	(sy_call_t *) set_ffclock,
-+	AUE_NULL,
-+	NULL,
-+	0,
-+	0
-+};
-+
-+static int set_ffclock_offset = NO_SYSCALL;
-+
-+static int
-+set_ffclock_load (struct module *module, int cmd, void *arg)
-+{
-+	int error;
-+
-+	error = 0;
-+	switch (cmd) {
-+	case MOD_LOAD :
-+		mtx_init(&ffclock_mtx, "ffclock lock", NULL, MTX_DEF);
-+		printf("set_ffclock syscall loaded at %d \n", set_ffclock_offset);
-+		break;
-+	case MOD_UNLOAD :
-+		mtx_destroy(&ffclock_mtx);
-+		printf("set_ffclock syscall unloaded from %d\n", set_ffclock_offset);
-+		break;
-+	default :
-+		error = EINVAL;
-+		break;
-+	}
 +	return (error);
 +}
 +
 +/*
-+ * XXX we used to call SYSCALL_MODULE to help us with declaring the modules.
-+ * Starting with FreeBSD 8.1, the module name was prepended with "sys/" in the
-+ * moduledata_t structure. To avoid yet another naming issues, we do
-+ * SYSCALL_MODULE's work instead and overwrite this convention.
-+ * See /usr/src/sys/sys/sysent.h for the details.
-+ *
-+ * Hopefully, this will disappear once we go mainstream
++ * System call for userland applications to retrieve the clock estimates stored
++ * within the kernel. Useful to kickstart the synchronisation daemon, which can
++ * benefit from the kernel's knowledge of hardware timecounter. Also useful if
++ * the synchronisation daemon is not running.
++ * Hold ffclock_mtx to ensure consistency of estimate members possibly updated
++ * by the synchronisation daemon.
 + */
-+//SYSCALL_MODULE(set_ffclock, &set_ffclock_offset, &set_ffclock_sysent, set_ffclock_load, NULL);
-+
-+static struct syscall_module_data set_ffclock_syscall_mod = {
-+	set_ffclock_load,
-+	NULL,
-+	&set_ffclock_offset,
-+	&set_ffclock_sysent,
-+	{ 0, NULL, AUE_NULL}
++#ifndef _SYS_SYSPROTO_H_
++struct ffclock_getestimate_args {
++	struct ffclock_estimate *cest;
 +};
++#endif
++/* ARGSUSED */
++int ffclock_getestimate(struct thread *td, struct ffclock_getestimate_args *uap)
++{
++	int error;
 +
-+static moduledata_t set_ffclock_mod = {
-+	"set_ffclock",
-+	syscall_module_handler,
-+	&set_ffclock_syscall_mod
-+};
-+
-+DECLARE_MODULE(set_ffclock, set_ffclock_mod, SI_SUB_SYSCALLS, SI_ORDER_MIDDLE);
-Index: sys/modules/Makefile
++	mtx_lock(&ffclock_mtx);
++	error = copyout(&(ffclock_estimate), uap->cest, sizeof(struct ffclock_estimate));
++	mtx_unlock(&ffclock_mtx);
++	return (error);
++}
+Index: sys/conf/files
 ===================================================================
---- sys.orig/modules/Makefile	2011-03-31 10:09:49.000000000 +1100
-+++ sys/modules/Makefile	2011-03-31 10:17:45.000000000 +1100
-@@ -90,20 +90,21 @@ SUBDIR=	${_3dfx} \
- 	${_et} \
- 	${_ex} \
- 	${_exca} \
- 	${_ext2fs} \
- 	fatm \
- 	fdc \
- 	fdescfs \
- 	${_fe} \
- 	firewire \
- 	firmware \
-+	ffclock \
- 	fxp \
- 	gem \
- 	geom \
- 	${_glxsb} \
- 	hatm \
- 	hifn \
- 	hme \
- 	${_hptiop} \
- 	${_hptmv} \
- 	${_hptrr} \
-Index: sys/modules/ffclock/Makefile
+--- sys.orig/conf/files	2011-06-16 12:26:14.000000000 +1000
++++ sys/conf/files	2011-06-16 12:49:31.000000000 +1000
+@@ -2189,20 +2189,21 @@ kern/kern_cpu.c			standard
+ kern/kern_cpuset.c		standard
+ kern/kern_context.c		standard
+ kern/kern_descrip.c		standard
+ kern/kern_dtrace.c		optional kdtrace_hooks
+ kern/kern_environment.c		standard
+ kern/kern_et.c			standard
+ kern/kern_event.c		standard
+ kern/kern_exec.c		standard
+ kern/kern_exit.c		standard
+ kern/kern_fail.c		standard
++kern/kern_ffclock.c		optional ffclock
+ kern/kern_fork.c		standard
+ kern/kern_gzio.c		optional gzio
+ kern/kern_hhook.c		standard
+ kern/kern_idle.c		standard
+ kern/kern_intr.c		standard
+ kern/kern_jail.c		standard
+ kern/kern_khelp.c		standard
+ kern/kern_kthread.c		standard
+ kern/kern_ktr.c			optional ktr
+ kern/kern_ktrace.c		standard
+Index: sys/kern/syscalls.master
 ===================================================================
---- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ sys/modules/ffclock/Makefile	2011-03-31 10:17:45.000000000 +1100
-@@ -0,0 +1,10 @@
-+# This make file creates the .ko module for retrieving the vitual counter through syscall.
+--- sys.orig/kern/syscalls.master	2011-06-16 12:26:14.000000000 +1000
++++ sys/kern/syscalls.master	2011-06-16 12:49:31.000000000 +1000
+@@ -449,23 +449,23 @@
+ 				    struct sigevent *evp, int *timerid); }
+ 236	AUE_NULL	STD	{ int ktimer_delete(int timerid); }
+ 237	AUE_NULL	STD	{ int ktimer_settime(int timerid, int flags, \
+ 				    const struct itimerspec *value, \
+ 				    struct itimerspec *ovalue); }
+ 238	AUE_NULL	STD	{ int ktimer_gettime(int timerid, struct \
+ 				    itimerspec *value); }
+ 239	AUE_NULL	STD	{ int ktimer_getoverrun(int timerid); }
+ 240	AUE_NULL	STD	{ int nanosleep(const struct timespec *rqtp, \
+ 				    struct timespec *rmtp); }
+-241	AUE_NULL	UNIMPL	nosys
+-242	AUE_NULL	UNIMPL	nosys
+-243	AUE_NULL	UNIMPL	nosys
++241	AUE_NULL	STD	{ int ffclock_getcounter(ffcounter *ffcount); }
++242	AUE_NULL	STD	{ int ffclock_setestimate(struct ffclock_estimate *cest); }
++243	AUE_NULL	STD	{ int ffclock_getestimate(struct ffclock_estimate *cest); }
+ 244	AUE_NULL	UNIMPL	nosys
+ 245	AUE_NULL	UNIMPL	nosys
+ 246	AUE_NULL	UNIMPL	nosys
+ 247	AUE_NULL	UNIMPL	nosys
+ 248	AUE_NULL	STD	{ int ntp_gettime(struct ntptimeval *ntvp); }
+ 249	AUE_NULL	UNIMPL	nosys
+ ; syscall numbers initially used in OpenBSD
+ 250	AUE_MINHERIT	STD	{ int minherit(void *addr, size_t len, \
+ 				    int inherit); }
+ 251	AUE_RFORK	STD	{ int rfork(int flags); }
+Index: sys/sys/time.h
+===================================================================
+--- sys.orig/sys/time.h	2011-06-16 12:26:14.000000000 +1000
++++ sys/sys/time.h	2011-06-16 12:49:31.000000000 +1000
+@@ -26,20 +26,21 @@
+  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+  * SUCH DAMAGE.
+  *
+  *	@(#)time.h	8.5 (Berkeley) 5/4/95
+  * $FreeBSD$
+  */
+ 
+ #ifndef _SYS_TIME_H_
+ #define _SYS_TIME_H_
+ 
++#include <sys/_ffcounter.h>
+ #include <sys/_timeval.h>
+ #include <sys/types.h>
+ #include <sys/timespec.h>
+ 
+ struct timezone {
+ 	int	tz_minuteswest;	/* minutes west of Greenwich */
+ 	int	tz_dsttime;	/* type of dst correction */
+ };
+ #define	DST_NONE	0	/* not on dst */
+ #define	DST_USA		1	/* USA style dst */
+Index: sys/sys/timeffc.h
+===================================================================
+--- sys.orig/sys/timeffc.h	2011-06-16 12:26:14.000000000 +1000
++++ sys/sys/timeffc.h	2011-06-16 12:49:31.000000000 +1000
+@@ -52,13 +52,21 @@ struct ffclock_estimate {
+ };
+ 
+ /* Resets the feed-forward clock */
+ void ffclock_reset_clock(struct timespec *ts);
+ 
+ /* Get and convert ffcounter to bintime based on current ffclock estimate. */
+ ffcounter read_ffcounter(void);
+ 
+ void ffcounter2bintime(ffcounter *ffcount, struct bintime *bt);
+ void ffdelta2bintime(ffcounter *ffcount, struct bintime *bt);
 +
-+.PATH: ${.CURDIR}/../../kern
-+
-+KMOD=	ffclock
-+SRCS=	ffclock.c
-+
-+SRCS+=	opt_ffclock.h
-+
-+.include <bsd.kmod.mk>
++#else
++/* Feed-forwark clock system calls */
++__BEGIN_DECLS
++int ffclock_getcounter(ffcounter *ffcount);
++int ffclock_getestimate(struct ffclock_estimate *cest);
++int ffclock_setestimate(struct ffclock_estimate *cest);
++__END_DECLS
+ #endif /* _KERNEL */
+ #endif /* __BSD_VISIBLE */
+ #endif /* _SYS_TIMEFF_H */
+Index: sys/compat/freebsd32/syscalls.master
+===================================================================
+--- sys.orig/compat/freebsd32/syscalls.master	2011-03-29 22:06:48.000000000 +1100
++++ sys/compat/freebsd32/syscalls.master	2011-06-16 15:30:49.000000000 +1000
+@@ -433,23 +433,23 @@
+ 234	AUE_NULL	STD	{ int freebsd32_clock_getres(clockid_t clock_id, \
+ 				    struct timespec32 *tp); }
+ 235	AUE_NULL	UNIMPL	timer_create
+ 236	AUE_NULL	UNIMPL	timer_delete
+ 237	AUE_NULL	UNIMPL	timer_settime
+ 238	AUE_NULL	UNIMPL	timer_gettime
+ 239	AUE_NULL	UNIMPL	timer_getoverrun
+ 240	AUE_NULL	STD	{ int freebsd32_nanosleep( \
+ 				    const struct timespec32 *rqtp, \
+ 				    struct timespec32 *rmtp); }
+-241	AUE_NULL	UNIMPL	nosys
+-242	AUE_NULL	UNIMPL	nosys
+-243	AUE_NULL	UNIMPL	nosys
++241	AUE_NULL	NOPROTO	{ int ffclock_getcounter(ffcounter *ffcount); }
++242	AUE_NULL	NOPROTO	{ int ffclock_setestimate(struct ffclock_estimate *cest); }
++243	AUE_NULL	NOPROTO	{ int ffclock_getestimate(struct ffclock_estimate *cest); }
+ 244	AUE_NULL	UNIMPL	nosys
+ 245	AUE_NULL	UNIMPL	nosys
+ 246	AUE_NULL	UNIMPL	nosys
+ 247	AUE_NULL	UNIMPL	nosys
+ 248	AUE_NULL	UNIMPL	ntp_gettime
+ 249	AUE_NULL	UNIMPL	nosys
+ ; syscall numbers initially used in OpenBSD
+ 250	AUE_MINHERIT	NOPROTO	{ int minherit(void *addr, size_t len, \
+ 				    int inherit); }
+ 251	AUE_RFORK	NOPROTO	{ int rfork(int flags); }

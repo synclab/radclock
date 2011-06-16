@@ -6,15 +6,19 @@ guests see the same time and allow live migration.
 ---
  i386/xen/clock.c |   35 +++++++++++++++++++++++++++++++++++
  kern/kern_tc.c   |   42 +++++++++++++++++++++++++++++++++++-------
- sys/timetc.h     |   16 ++++++++++++++++
+ sys/timetc.h     |   14 ++++++++++++++
  x86/x86/tsc.c    |   27 +++++++++++++++++++++++++++
- 4 files changed, 113 insertions(+), 7 deletions(-)
+ 4 files changed, 111 insertions(+), 7 deletions(-)
 
 Index: sys/i386/xen/clock.c
 ===================================================================
---- sys.orig/i386/xen/clock.c	2011-01-12 18:52:36.000000000 +1100
-+++ sys/i386/xen/clock.c	2011-01-12 19:40:37.000000000 +1100
-@@ -5,6 +5,12 @@
+--- sys.orig/i386/xen/clock.c	2011-06-16 09:50:40.000000000 +1000
++++ sys/i386/xen/clock.c	2011-06-16 10:07:43.000000000 +1000
+@@ -1,17 +1,23 @@
+ /*-
+  * Copyright (C) 1990 The Regents of the University of California.
+  * All rights reserved.
+  *
   * This code is derived from software contributed to Berkeley by
   * William Jolitz and Don Ahn.
   *
@@ -27,7 +31,21 @@ Index: sys/i386/xen/clock.c
   * Redistribution and use in source and binary forms, with or without
   * modification, are permitted provided that the following conditions
   * are met:
-@@ -292,6 +298,19 @@ static inline int time_values_up_to_date
+  * 1. Redistributions of source code must retain the above copyright
+  *    notice, this list of conditions and the following disclaimer.
+  * 2. Redistributions in binary form must reproduce the above copyright
+  *    notice, this list of conditions and the following disclaimer in the
+  *    documentation and/or other materials provided with the distribution.
+  * 3. All advertising materials mentioning features or use of this software
+  *    must display the following acknowledgement:
+@@ -285,28 +291,42 @@ static inline int time_values_up_to_date
+ 
+ 	src = &HYPERVISOR_shared_info->vcpu_info[cpu].time; 
+ 	dst = &per_cpu(shadow_time, cpu); 
+ 
+ 	rmb();
+ 	return (dst->version == src->version);
+ }
  
  static	unsigned xen_get_timecount(struct timecounter *tc);
  
@@ -47,7 +65,8 @@ Index: sys/i386/xen/clock.c
  static struct timecounter xen_timecounter = {
  	xen_get_timecount,	/* get_timecount */
  	0,			/* no poll_pps */
-@@ -300,6 +319,7 @@ static struct timecounter xen_timecounte
+ 	~0u,			/* counter_mask */
+ 	0,			/* frequency */
  	"ixen",			/* name */
  	0			/* quality */
  };
@@ -55,7 +74,21 @@ Index: sys/i386/xen/clock.c
  
  static int
  clkintr(void *arg)
-@@ -835,6 +855,21 @@ xen_get_timecount(struct timecounter *tc
+ {
+ 	int64_t delta_cpu, delta;
+ 	struct trapframe *frame = (struct trapframe *)arg;
+ 	int cpu = smp_processor_id();
+ 	struct shadow_time_info *shadow = &per_cpu(shadow_time, cpu);
+ 
+ 	do {
+@@ -828,20 +848,35 @@ xen_get_timecount(struct timecounter *tc
+ 	shadow = &per_cpu(shadow_time, smp_processor_id());
+ 
+ 	__get_time_values_from_xen();
+ 	
+         clk = shadow->system_timestamp + get_nsec_offset(shadow);
+ 
+ 	return (uint32_t)(clk >> 9);
  
  }
  
@@ -77,11 +110,25 @@ Index: sys/i386/xen/clock.c
  /* Return system time offset by ticks */
  uint64_t
  get_system_time(int ticks)
+ {
+     return processed_system_time + (ticks * NS_PER_TICK);
+ }
+ 
+ /*
+  * Track behavior of cur_timer->get_offset() functionality in timer_tsc.c
+  */
 Index: sys/kern/kern_tc.c
 ===================================================================
---- sys.orig/kern/kern_tc.c	2011-01-12 19:40:34.000000000 +1100
-+++ sys/kern/kern_tc.c	2011-01-12 19:40:37.000000000 +1100
-@@ -597,6 +597,12 @@ ffdelta2bintime(ffcounter_t *ffdelta, st
+--- sys.orig/kern/kern_tc.c	2011-06-16 10:05:38.000000000 +1000
++++ sys/kern/kern_tc.c	2011-06-16 10:07:43.000000000 +1000
+@@ -572,43 +572,64 @@ ffdelta2bintime(ffcounter *ffdelta, stru
+ 			ffdelta2 -= delta_max;
+ 		}
+ 		delta.sec = 0;
+ 		delta.frac = ffth->cest.period;
+ 		bintime_mul(&delta, ffdelta2);
+ 		bintime_add(bt, &delta);
+ 	} while (gen == 0 || gen != ffth->gen);
  }
  
  
@@ -92,12 +139,13 @@ Index: sys/kern/kern_tc.c
 +
 +
  /* Return current ffcounter value */
- ffcounter_t
+ ffcounter
  read_ffcounter(void)
-@@ -605,21 +611,36 @@ read_ffcounter(void)
+ {
+ 	struct timehands *th;
  	struct fftimehands *ffth;
  	u_int gen, delta;
- 	ffcounter_t ffcounter;
+ 	ffcounter ffcount;
 +	struct timecounter *tc;
  
 +	if ( sysctl_kern_timecounter_passthrough ) {
@@ -113,19 +161,19 @@ Index: sys/kern/kern_tc.c
 -		gen = th->th_generation;
 -		ffth = fftimehands;
 -		delta = tc_delta(th);
--		ffcounter = ffth->ffcounter_mark;
--	} while ( gen == 0 || gen != th->th_generation);
+-		ffcount = ffth->ffcount_mark;
+-	} while (gen == 0 || gen != th->th_generation);
 +	else {
 +		do {
 +			th = timehands;
 +			gen = th->th_generation;
 +			ffth = fftimehands;
 +			delta = tc_delta(th);
-+			ffcounter = ffth->ffcounter_mark;
-+		} while ( gen == 0 || gen != th->th_generation);
++			ffcount = ffth->ffcount_mark;
++		} while (gen == 0 || gen != th->th_generation);
 +	}
  
- 	return(ffcounter + delta);
+ 	return (ffcount + delta);
  }
 +
 +static __inline uint64_t
@@ -135,10 +183,24 @@ Index: sys/kern/kern_tc.c
 +	count = tc->tc_get_timecount(tc);
 +	return (uint64_t) count;
 +}
- #endif	/* FFCLOCK */
+ #endif /* FFCLOCK */
  
  
-@@ -649,6 +670,13 @@ tc_init(struct timecounter *tc)
+ /*
+  * Initialize a new timecounter and possibly use it.
+  */
+ void
+ tc_init(struct timecounter *tc)
+ {
+ 	u_int u;
+@@ -624,20 +645,27 @@ tc_init(struct timecounter *tc)
+ 			printf("Timecounter \"%s\" frequency %ju Hz",
+ 			    tc->tc_name, (uintmax_t)tc->tc_frequency);
+ 			printf(" -- Insufficient hz, needs at least %u\n", u);
+ 		}
+ 	} else if (tc->tc_quality >= 0 || bootverbose) {
+ 		printf("Timecounter \"%s\" frequency %ju Hz quality %d\n",
+ 		    tc->tc_name, (uintmax_t)tc->tc_frequency,
  		    tc->tc_quality);
  	}
  
@@ -152,11 +214,23 @@ Index: sys/kern/kern_tc.c
  	tc->tc_next = timecounters;
  	timecounters = tc;
  	/*
+ 	 * Set up sysctl tree for this counter.
+ 	 */
+ 	tc_root = SYSCTL_ADD_NODE(NULL,
+ 	    SYSCTL_STATIC_CHILDREN(_kern_timecounter_tc), OID_AUTO, tc->tc_name,
+ 	    CTLFLAG_RW, 0, "timecounter description");
+ 	SYSCTL_ADD_UINT(NULL, SYSCTL_CHILDREN(tc_root), OID_AUTO,
+ 	    "mask", CTLFLAG_RD, &(tc->tc_counter_mask), 0,
 Index: sys/sys/timetc.h
 ===================================================================
---- sys.orig/sys/timetc.h	2011-01-12 18:52:36.000000000 +1100
-+++ sys/sys/timetc.h	2011-01-12 19:40:37.000000000 +1100
-@@ -6,6 +6,12 @@
+--- sys.orig/sys/timetc.h	2011-06-16 09:50:40.000000000 +1000
++++ sys/sys/timetc.h	2011-06-16 10:16:27.000000000 +1000
+@@ -1,18 +1,24 @@
+ /*-
+  * ----------------------------------------------------------------------------
+  * "THE BEER-WARE LICENSE" (Revision 42):
+  * <phk@FreeBSD.ORG> wrote this file.  As long as you retain this notice you
+  * can do whatever you want with this stuff. If we meet some day, and you think
   * this stuff is worth it, you can buy me a beer in return.   Poul-Henning Kamp
   * ----------------------------------------------------------------------------
   *
@@ -166,19 +240,24 @@ Index: sys/sys/timetc.h
 + * Portions of this software were developed by the University of Melbourne
 + * under sponsorship from the FreeBSD Foundation.
 + *
-  * $FreeBSD: src/sys/sys/timetc.h,v 1.62 2010/09/14 08:48:06 mav Exp $
+  * $FreeBSD$
   */
  
-@@ -16,6 +22,8 @@
+ #ifndef _SYS_TIMETC_H_
+ #define	_SYS_TIMETC_H_
+ 
+ #ifndef _KERNEL
  #error "no user-serviceable parts inside"
  #endif
  
-+#include "opt_ffclock.h"
-+
- /*-
-  * `struct timecounter' is the interface between the hardware which implements
-  * a timecounter and the MI code which uses this to keep track of time.
-@@ -62,6 +70,14 @@ struct timecounter {
+@@ -55,20 +61,28 @@ struct timecounter {
+ 		/*
+ 		 * Used to determine if this timecounter is better than
+ 		 * another timecounter higher means better.  Negative
+ 		 * means "only use at explicit request".
+ 		 */
+ 
+ 	void			*tc_priv;
  		/* Pointer to the timecounter's private parts. */
  	struct timecounter	*tc_next;
  		/* Pointer to the next timecounter. */
@@ -193,11 +272,19 @@ Index: sys/sys/timetc.h
  };
  
  extern struct timecounter *timecounter;
+ extern int tc_min_ticktock_freq; /*
+ 				  * Minimal tc_ticktock() call frequency,
+ 				  * required to handle counter wraps.
+ 				  */
+ 
+ u_int64_t tc_getfrequency(void);
+ void	tc_init(struct timecounter *tc);
 Index: sys/x86/x86/tsc.c
 ===================================================================
---- sys.orig/x86/x86/tsc.c	2011-01-12 18:52:36.000000000 +1100
-+++ sys/x86/x86/tsc.c	2011-01-12 19:40:37.000000000 +1100
-@@ -2,6 +2,12 @@
+--- sys.orig/x86/x86/tsc.c	2011-06-16 09:50:40.000000000 +1000
++++ sys/x86/x86/tsc.c	2011-06-16 10:07:43.000000000 +1000
+@@ -1,14 +1,20 @@
+ /*-
   * Copyright (C) 1998-2003 Poul-Henning Kamp
   * All rights reserved.
   *
@@ -210,7 +297,21 @@ Index: sys/x86/x86/tsc.c
   * Redistribution and use in source and binary forms, with or without
   * modification, are permitted provided that the following conditions
   * are met:
-@@ -71,6 +77,18 @@ static void tsc_freq_changing(void *arg,
+  * 1. Redistributions of source code must retain the above copyright
+  *    notice, this list of conditions and the following disclaimer.
+  * 2. Redistributions in binary form must reproduce the above copyright
+  *    notice, this list of conditions and the following disclaimer in the
+  *    documentation and/or other materials provided with the distribution.
+  *
+  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+@@ -67,28 +73,41 @@ SYSCTL_INT(_machdep, OID_AUTO, disable_t
+     "Disable x86 Time Stamp Counter");
+ TUNABLE_INT("machdep.disable_tsc", &tsc_disabled);
+ 
+ static void tsc_freq_changed(void *arg, const struct cf_level *level,
+     int status);
+ static void tsc_freq_changing(void *arg, const struct cf_level *level,
+     int *status);
  static	unsigned tsc_get_timecount(struct timecounter *tc);
  static void tsc_levels_changed(void *arg, int unit);
  
@@ -229,7 +330,8 @@ Index: sys/x86/x86/tsc.c
  static struct timecounter tsc_timecounter = {
  	tsc_get_timecount,	/* get_timecount */
  	0,			/* no poll_pps */
-@@ -79,6 +97,7 @@ static struct timecounter tsc_timecounte
+ 	~0u,			/* counter_mask */
+ 	0,			/* frequency */
  	"TSC",			/* name */
  	800,			/* quality (adjusted in code) */
  };
@@ -237,7 +339,21 @@ Index: sys/x86/x86/tsc.c
  
  void
  init_TSC(void)
-@@ -279,3 +298,11 @@ tsc_get_timecount(struct timecounter *tc
+ {
+ 	u_int64_t tscval[2];
+ 
+ 	if ((cpu_feature & CPUID_TSC) == 0 || tsc_disabled)
+ 		return;
+ 
+ 	if (bootverbose)
+@@ -273,10 +292,18 @@ sysctl_machdep_tsc_freq(SYSCTL_HANDLER_A
+ }
+ 
+ SYSCTL_PROC(_machdep, OID_AUTO, tsc_freq, CTLTYPE_U64 | CTLFLAG_RW,
+     0, 0, sysctl_machdep_tsc_freq, "QU", "");
+ 
+ static unsigned
+ tsc_get_timecount(struct timecounter *tc)
  {
  	return (rdtsc());
  }

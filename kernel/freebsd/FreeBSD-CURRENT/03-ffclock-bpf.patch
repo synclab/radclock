@@ -4,14 +4,14 @@ Add ffcounter timestamps to the BPF header for export via libpcap.
 Allow to choose between feedback and feed-forward clock for timestamping.
 
 ---
- net/bpf.c |  107 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
- net/bpf.h |   42 ++++++++++++++++++++++++
- 2 files changed, 149 insertions(+)
+ net/bpf.c |  112 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ net/bpf.h |   25 +++++++++++++
+ 2 files changed, 137 insertions(+)
 
 Index: sys/net/bpf.h
 ===================================================================
---- sys.orig/net/bpf.h	2011-03-31 10:20:54.000000000 +1100
-+++ sys/net/bpf.h	2011-03-31 19:04:52.000000000 +1100
+--- sys.orig/net/bpf.h	2011-03-31 21:54:36.000000000 +1100
++++ sys/net/bpf.h	2011-06-15 16:28:20.000000000 +1000
 @@ -1,19 +1,25 @@
  /*-
   * Copyright (C) 1990, 1991, 1993
@@ -119,8 +119,8 @@ Index: sys/net/bpf.h
   * accessing these fields, appropriate atomic operation and memory barriers
 Index: sys/net/bpf.c
 ===================================================================
---- sys.orig/net/bpf.c	2011-03-31 10:20:54.000000000 +1100
-+++ sys/net/bpf.c	2011-03-31 19:05:21.000000000 +1100
+--- sys.orig/net/bpf.c	2011-03-31 21:54:36.000000000 +1100
++++ sys/net/bpf.c	2011-06-15 17:18:49.000000000 +1000
 @@ -1,19 +1,25 @@
  /*-
   * Copyright (C) 1990, 1991, 1993
@@ -171,7 +171,7 @@ Index: sys/net/bpf.c
  #include <sys/mbuf.h>
  #include <sys/time.h>
 +#ifdef FFCLOCK
-+#include <sys/timeff.h>
++#include <sys/timeffc.h>
 +#endif
  #include <sys/priv.h>
  #include <sys/proc.h>
