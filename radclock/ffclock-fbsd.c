@@ -28,6 +28,7 @@
 #include <sys/module.h>
 #include <sys/sysctl.h>
 #include <sys/syscall.h>
+#include <sys/timeffc.h>	// All this should go in the library, set/get ffclock estimates
 #include <syslog.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -51,9 +52,10 @@ int radclock_init_kernel_support(struct radclock *handle)
 	char fname[30];
 
 	/* Kernel version 2 variables */
+/*
 	int err;
 	struct module_stat stat;
-
+*/
 	switch (handle->kernel_version)
 	{
 
@@ -81,6 +83,7 @@ int radclock_init_kernel_support(struct radclock *handle)
 
 	case 2:
 		/* Use radclock module syscall to update clock data */
+/*
 		stat.version = sizeof(stat);
 		err = modstat(modfind("set_ffclock"), &stat);
 		if (err < 0 ) {
@@ -90,6 +93,8 @@ int radclock_init_kernel_support(struct radclock *handle)
 		}
 		handle->syscall_set_ffclock = stat.data.intval;
 		verbose(LOG_NOTICE, "Registered set_ffclock syscall at %d", handle->syscall_set_ffclock);
+*/
+		// ffclock_setestimate syscall offered by kernel through libc
 		break;
 
 
@@ -268,7 +273,20 @@ set_kernel_ffclock(struct radclock *clock)
 
 
 	/* Push */
-	err = syscall(clock->syscall_set_ffclock, &fdata);
+	switch (clock->kernel_version)
+	{
+	case 0:
+	case 1:
+		err = syscall(clock->syscall_set_ffclock, &fdata);
+		break;
+	case 2:
+		err = ffclock_setestimate(&fdata);
+		break;
+	default:
+		verbose(LOG_ERR, "Unknown kernel version");
+		return -1;
+	}
+
 	if ( err < 0 ) {
 		verbose(LOG_ERR, "error on syscall set_ffclock: %s", strerror(errno));
 		return -1;

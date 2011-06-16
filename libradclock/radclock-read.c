@@ -38,64 +38,7 @@
 
 
 
-#if defined (__FreeBSD__)
 
-# ifdef HAVE_RDTSC
-#  ifdef HAVE_MACHINE_CPUFUNC_H
-#   include <machine/cpufunc.h>
-#  else
-#   error "FreeBSD with rdtsc() defined but no machine/cpufunc.h header"
-#  endif
-# else
-static inline uint64_t
-rdtsc(void)
-{
-    u_int32_t low, high;
-    __asm __volatile("rdtsc" : "=a" (low), "=d" (high));
-    return (low | ((u_int64_t)high << 32));
-}
-# endif
-
-inline
-vcounter_t radclock_readtsc(void) {
-	return rdtsc;
-}
-
-#endif
-
-
-
-#if defined (__linux__)
-
-#if HAVE_RDTSCLL_ASM
-# include <asm/msr.h>
-#elif HAVE_RDTSCLL_ASM_X86
-# include <asm-x86/msr.h>
-#elif HAVE_RDTSCLL_ASM_X86_64
-# include <asm-x86_64/msr.h>
-#else 
-/* rdtscll not defined ... turn to black magic */
-# ifdef __x86_64__
-#  define rdtscll(val) do { \
-		unsigned int __a,__d; \
-		asm volatile("rdtsc" : "=a" (__a), "=d" (__d)); \
-		(val) = ((unsigned long)__a) | (((unsigned long)__d)<<32); \
-	} while(0)
-# endif
-# ifdef __i386__
-	#define rdtscll(val) __asm__ __volatile__("rdtsc" : "=A" (val))
-# endif
-#endif
-
-inline 
-vcounter_t radclock_readtsc(void)
-{
-	vcounter_t val;
-    rdtscll(val);
-	return val;
-}
-
-#endif
 
 
 #if defined(__APPLE__)
@@ -139,29 +82,6 @@ vcounter_t radclock_readtsc(void)
 int radclock_get_vcounter(struct radclock *handle, vcounter_t *vcount)
 {
 	return handle->get_vcounter(handle, vcount);
-}
-
-
-inline int radclock_get_vcounter_rdtsc(struct radclock *handle, vcounter_t *vcount)
-{
-	*vcount = radclock_readtsc();
-	return 0;
-}
-
-
-int radclock_get_vcounter_syscall(struct radclock *handle, vcounter_t *vcount)
-{
-	int ret;
-	if (vcount == NULL)
-		return -1;
-
-	ret = syscall(handle->syscall_get_vcounter, vcount);
-	
-	if ( ret < 0 ) {
-		logger(RADLOG_ERR, "error on syscall get_vcounter: %s", strerror(errno));
-		return -1;
-	}
-	return 0;
 }
 
 

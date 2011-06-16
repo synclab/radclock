@@ -122,6 +122,41 @@ int found_ffwd_kernel_version (void)
 	return version;
 }
 
+#if HAVE_RDTSCLL_ASM
+# include <asm/msr.h>
+#elif HAVE_RDTSCLL_ASM_X86
+# include <asm-x86/msr.h>
+#elif HAVE_RDTSCLL_ASM_X86_64
+# include <asm-x86_64/msr.h>
+#else 
+/* rdtscll not defined ... turn to black magic */
+# ifdef __x86_64__
+#  define rdtscll(val) do { \
+		unsigned int __a,__d; \
+		asm volatile("rdtsc" : "=a" (__a), "=d" (__d)); \
+		(val) = ((unsigned long)__a) | (((unsigned long)__d)<<32); \
+	} while(0)
+# endif
+# ifdef __i386__
+	#define rdtscll(val) __asm__ __volatile__("rdtsc" : "=A" (val))
+# endif
+#endif
+
+inline 
+vcounter_t radclock_readtsc(void)
+{
+	vcounter_t val;
+    rdtscll(val);
+	return val;
+}
+
+// TODO We could afford some cleaning in here
+inline int radclock_get_vcounter_rdtsc(struct radclock *handle, vcounter_t *vcount)
+{
+	*vcount = radclock_readtsc();
+	return 0;
+}
+
 
 
 int radclock_init_vcounter_syscall(struct radclock *handle)
@@ -146,6 +181,21 @@ int radclock_init_vcounter_syscall(struct radclock *handle)
 		return -1;
 	}
 
+	return 0;
+}
+
+int radclock_get_vcounter_syscall(struct radclock *handle, vcounter_t *vcount)
+{
+	int ret;
+	if (vcount == NULL)
+		return -1;
+
+	ret = syscall(handle->syscall_get_vcounter, vcount);
+	
+	if ( ret < 0 ) {
+		logger(RADLOG_ERR, "error on syscall get_vcounter: %s", strerror(errno));
+		return -1;
+	}
 	return 0;
 }
 

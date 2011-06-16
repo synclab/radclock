@@ -24,11 +24,12 @@
 #ifdef WITH_RADKERNEL_FBSD
 
 #include <sys/types.h>
-#include <sys/time.h>
 #include <sys/ioctl.h>
 #include <sys/module.h>
-//#include <sys/syscall.h>
+#include <sys/syscall.h>
 #include <sys/sysctl.h>
+#include <sys/time.h>
+#include <sys/timeffc.h>
 #include <sys/socket.h>
 
 #include <net/ethernet.h>	// ETHER_HDR_LEN
@@ -36,7 +37,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-//#include <unistd.h>
+#include <unistd.h>		// useful?
 #include <syslog.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -156,6 +157,35 @@ int found_ffwd_kernel_version (void)
 }
 
 
+# ifdef HAVE_RDTSC
+#  ifdef HAVE_MACHINE_CPUFUNC_H
+#   include <machine/cpufunc.h>
+#  else
+#   error "FreeBSD with rdtsc() defined but no machine/cpufunc.h header"
+#  endif
+# else
+static inline uint64_t
+rdtsc(void)
+{
+    u_int32_t low, high;
+    __asm __volatile("rdtsc" : "=a" (low), "=d" (high));
+    return (low | ((u_int64_t)high << 32));
+}
+# endif
+
+inline
+vcounter_t radclock_readtsc(void) {
+	return rdtsc;
+}
+
+// TODO we could afford some cleaning in here
+inline int radclock_get_vcounter_rdtsc(struct radclock *handle, vcounter_t *vcount)
+{
+	*vcount = radclock_readtsc();
+	return 0;
+}
+
+
 int radclock_init_vcounter_syscall(struct radclock *handle)
 {
 	int err;
@@ -178,6 +208,7 @@ int radclock_init_vcounter_syscall(struct radclock *handle)
 		break;
 
 	case 2:
+/*
 		stat.version = sizeof(stat);
 		err = modstat(modfind("get_ffcounter"), &stat);
 		if (err < 0 ) {
@@ -187,6 +218,8 @@ int radclock_init_vcounter_syscall(struct radclock *handle)
 		}
 		handle->syscall_get_vcounter = stat.data.intval;
 		logger(RADLOG_NOTICE, "Registered get_ffcounter syscall at %d", handle->syscall_get_vcounter);
+*/
+		// kernel provides ffclock_getcounter through libc
 		break;
 
 	default:
@@ -194,6 +227,38 @@ int radclock_init_vcounter_syscall(struct radclock *handle)
 	}
 	return 0;
 }
+
+
+int radclock_get_vcounter_syscall(struct radclock *handle, vcounter_t *vcount)
+{
+	int ret;
+	if (vcount == NULL)
+		return -1;
+
+	switch ( handle->kernel_version )
+	{
+
+	case 0:
+	case 1:
+		ret = syscall(handle->syscall_get_vcounter, vcount);
+		break;
+	case 2:
+		ret = ffclock_getcounter(vcount);
+		break;
+	default:
+		ret = -1;
+		break;	
+	}
+	
+	
+	if ( ret < 0 ) {
+		logger(RADLOG_ERR, "error on syscall get_vcounter: %s", strerror(errno));
+		return -1;
+	}
+	return 0;
+}
+
+
 
 
 /* 
