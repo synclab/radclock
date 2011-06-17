@@ -17,7 +17,7 @@ clock.
 Index: sys/kern/kern_ffclock.c
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ sys/kern/kern_ffclock.c	2011-06-16 12:52:10.000000000 +1000
++++ sys/kern/kern_ffclock.c	2011-06-17 16:24:10.000000000 +1000
 @@ -0,0 +1,134 @@
 +/*-
 + * Copyright (C) 2010 University of Melbourne
@@ -155,9 +155,9 @@ Index: sys/kern/kern_ffclock.c
 +}
 Index: sys/conf/files
 ===================================================================
---- sys.orig/conf/files	2011-06-16 12:26:14.000000000 +1000
-+++ sys/conf/files	2011-06-16 12:49:31.000000000 +1000
-@@ -2189,20 +2189,21 @@ kern/kern_cpu.c			standard
+--- sys.orig/conf/files	2011-06-17 10:59:39.000000000 +1000
++++ sys/conf/files	2011-06-17 16:24:10.000000000 +1000
+@@ -2293,20 +2293,21 @@ kern/kern_cpu.c			standard
  kern/kern_cpuset.c		standard
  kern/kern_context.c		standard
  kern/kern_descrip.c		standard
@@ -181,8 +181,8 @@ Index: sys/conf/files
  kern/kern_ktrace.c		standard
 Index: sys/kern/syscalls.master
 ===================================================================
---- sys.orig/kern/syscalls.master	2011-06-16 12:26:14.000000000 +1000
-+++ sys/kern/syscalls.master	2011-06-16 12:49:31.000000000 +1000
+--- sys.orig/kern/syscalls.master	2011-06-17 10:59:43.000000000 +1000
++++ sys/kern/syscalls.master	2011-06-17 16:24:10.000000000 +1000
 @@ -449,23 +449,23 @@
  				    struct sigevent *evp, int *timerid); }
  236	AUE_NULL	STD	{ int ktimer_delete(int timerid); }
@@ -212,8 +212,8 @@ Index: sys/kern/syscalls.master
  251	AUE_RFORK	STD	{ int rfork(int flags); }
 Index: sys/sys/time.h
 ===================================================================
---- sys.orig/sys/time.h	2011-06-16 12:26:14.000000000 +1000
-+++ sys/sys/time.h	2011-06-16 12:49:31.000000000 +1000
+--- sys.orig/sys/time.h	2011-06-16 22:47:11.000000000 +1000
++++ sys/sys/time.h	2011-06-17 16:24:10.000000000 +1000
 @@ -26,20 +26,21 @@
   * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
   * SUCH DAMAGE.
@@ -238,8 +238,8 @@ Index: sys/sys/time.h
  #define	DST_USA		1	/* USA style dst */
 Index: sys/sys/timeffc.h
 ===================================================================
---- sys.orig/sys/timeffc.h	2011-06-16 12:26:14.000000000 +1000
-+++ sys/sys/timeffc.h	2011-06-16 12:49:31.000000000 +1000
+--- sys.orig/sys/timeffc.h	2011-06-17 16:23:57.000000000 +1000
++++ sys/sys/timeffc.h	2011-06-17 16:24:10.000000000 +1000
 @@ -52,13 +52,21 @@ struct ffclock_estimate {
  };
  
@@ -264,9 +264,9 @@ Index: sys/sys/timeffc.h
  #endif /* _SYS_TIMEFF_H */
 Index: sys/compat/freebsd32/syscalls.master
 ===================================================================
---- sys.orig/compat/freebsd32/syscalls.master	2011-03-29 22:06:48.000000000 +1100
-+++ sys/compat/freebsd32/syscalls.master	2011-06-16 15:30:49.000000000 +1000
-@@ -433,23 +433,23 @@
+--- sys.orig/compat/freebsd32/syscalls.master	2011-06-17 10:59:57.000000000 +1000
++++ sys/compat/freebsd32/syscalls.master	2011-06-17 16:24:10.000000000 +1000
+@@ -440,23 +440,23 @@
  234	AUE_NULL	STD	{ int freebsd32_clock_getres(clockid_t clock_id, \
  				    struct timespec32 *tp); }
  235	AUE_NULL	UNIMPL	timer_create

@@ -11,8 +11,8 @@ namespace in the future.
 
 Index: libc/sys/Symbol.map
 ===================================================================
---- libc.orig/sys/Symbol.map	2011-03-29 22:05:05.000000000 +1100
-+++ libc/sys/Symbol.map	2011-06-15 14:10:34.000000000 +1000
+--- libc.orig/sys/Symbol.map	2011-06-17 11:08:17.000000000 +1000
++++ libc/sys/Symbol.map	2011-06-17 16:37:31.000000000 +1000
 @@ -356,20 +356,23 @@ FBSD_1.1 {
  	renameat;
  	setfib;
@@ -28,12 +28,12 @@ Index: libc/sys/Symbol.map
 +	ffclock_getestimate;
 +	ffclock_setestimate;
  	getloginclass;
+ 	posix_fallocate;
+ 	rctl_get_racct;
+ 	rctl_get_rules;
+ 	rctl_get_limits;
+ 	rctl_add_rule;
+ 	rctl_remove_rule;
  	setloginclass;
  };
  
- FBSDprivate_1.0 {
- 	___acl_aclcheck_fd;
- 	__sys___acl_aclcheck_fd;
- 	___acl_aclcheck_file;
- 	__sys___acl_aclcheck_file;
- 	___acl_aclcheck_link;

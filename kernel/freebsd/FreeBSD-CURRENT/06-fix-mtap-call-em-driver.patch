@@ -12,8 +12,8 @@ Disable all interrupt throttling. Tune low latency against throughput.
 
 Index: sys/dev/e1000/if_em.c
 ===================================================================
---- sys.orig/dev/e1000/if_em.c	2011-03-29 22:06:08.000000000 +1100
-+++ sys/dev/e1000/if_em.c	2011-06-15 16:42:53.000000000 +1000
+--- sys.orig/dev/e1000/if_em.c	2011-06-17 10:59:49.000000000 +1000
++++ sys/dev/e1000/if_em.c	2011-06-17 16:35:08.000000000 +1000
 @@ -244,21 +244,24 @@ static void	em_transmit_checksum_setup(s
  static void	em_tso_setup(struct tx_ring *, struct mbuf *, int, struct ip *,
  		    struct tcphdr *, u32 *, u32 *);
@@ -141,7 +141,7 @@ Index: sys/dev/e1000/if_em.c
  	struct ether_header	*eh;
  	struct ip		*ip = NULL;
  	struct tcphdr		*tp = NULL;
-@@ -2044,20 +2060,23 @@ em_xmit(struct tx_ring *txr, struct mbuf
+@@ -2034,20 +2050,23 @@ retry:
  	    htole32(E1000_TXD_CMD_EOP | E1000_TXD_CMD_RS);
  	/*
  	 * Keep track in the first buffer which
@@ -165,7 +165,7 @@ Index: sys/dev/e1000/if_em.c
  
  	return (0);
  }
-@@ -4100,21 +4119,24 @@ em_initialize_receive_unit(struct adapte
+@@ -4094,21 +4113,24 @@ em_initialize_receive_unit(struct adapte
  	 */
  	rctl = E1000_READ_REG(hw, E1000_RCTL);
  	E1000_WRITE_REG(hw, E1000_RCTL, rctl & ~E1000_RCTL_EN);

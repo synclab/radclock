@@ -13,8 +13,8 @@ Core set of changes to support a feed-forward clock within the kernel.
 
 Index: sys/kern/kern_tc.c
 ===================================================================
---- sys.orig/kern/kern_tc.c	2011-06-16 09:50:40.000000000 +1000
-+++ sys/kern/kern_tc.c	2011-06-16 12:49:09.000000000 +1000
+--- sys.orig/kern/kern_tc.c	2011-06-16 22:47:11.000000000 +1000
++++ sys/kern/kern_tc.c	2011-06-17 16:23:57.000000000 +1000
 @@ -1,29 +1,43 @@
  /*-
   * ----------------------------------------------------------------------------
@@ -457,9 +457,9 @@ Index: sys/kern/kern_tc.c
  
 Index: sys/conf/NOTES
 ===================================================================
---- sys.orig/conf/NOTES	2011-06-16 09:50:40.000000000 +1000
-+++ sys/conf/NOTES	2011-06-16 10:05:09.000000000 +1000
-@@ -1175,20 +1175,28 @@ options 	CAPABILITIES
+--- sys.orig/conf/NOTES	2011-06-17 10:59:39.000000000 +1000
++++ sys/conf/NOTES	2011-06-17 16:23:57.000000000 +1000
+@@ -1178,20 +1178,28 @@ options 	CAPABILITIES
  # actually reducing the accuracy of operation.
  
  options 	HZ=100
@@ -490,8 +490,8 @@ Index: sys/conf/NOTES
  # device configuration sections below.
 Index: sys/conf/options
 ===================================================================
---- sys.orig/conf/options	2011-06-16 09:50:40.000000000 +1000
-+++ sys/conf/options	2011-06-16 10:05:09.000000000 +1000
+--- sys.orig/conf/options	2011-06-17 10:59:39.000000000 +1000
++++ sys/conf/options	2011-06-17 16:23:57.000000000 +1000
 @@ -69,20 +69,21 @@ COMPAT_43	opt_compat.h
  COMPAT_43TTY	opt_compat.h
  COMPAT_FREEBSD4	opt_compat.h
@@ -516,8 +516,8 @@ Index: sys/conf/options
  GEOM_GATE	opt_geom.h
 Index: sys/kern/subr_rtc.c
 ===================================================================
---- sys.orig/kern/subr_rtc.c	2011-06-16 09:50:40.000000000 +1000
-+++ sys/kern/subr_rtc.c	2011-06-16 10:05:09.000000000 +1000
+--- sys.orig/kern/subr_rtc.c	2011-06-16 22:47:11.000000000 +1000
++++ sys/kern/subr_rtc.c	2011-06-17 16:23:57.000000000 +1000
 @@ -53,20 +53,25 @@ __FBSDID("$FreeBSD$");
  #include <sys/param.h>
  #include <sys/systm.h>
@@ -571,7 +571,7 @@ Index: sys/kern/subr_rtc.c
 Index: sys/sys/timeffc.h
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ sys/sys/timeffc.h	2011-06-16 12:26:14.000000000 +1000
++++ sys/sys/timeffc.h	2011-06-17 16:23:57.000000000 +1000
 @@ -0,0 +1,64 @@
 +/*-
 + * Copyright (C) 2010 University of Melbourne
@@ -640,7 +640,7 @@ Index: sys/sys/timeffc.h
 Index: sys/sys/_ffcounter.h
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ sys/sys/_ffcounter.h	2011-06-16 10:05:09.000000000 +1000
++++ sys/sys/_ffcounter.h	2011-06-17 16:23:57.000000000 +1000
 @@ -0,0 +1,43 @@
 +/*-
 + * Copyright (C) 2010 University of Melbourne
