@@ -52,6 +52,7 @@
 #include "../config.h"
 #include "radclock.h"
 #include "radclock-private.h"
+#include "ffclock.h"
 #include "logger.h"
 #include "verbose.h"
 #include "sync_algo.h"
@@ -445,7 +446,7 @@ int radclock_init_specific (struct radclock *clock_handle)
 
 	if (clock_handle->run_mode == RADCLOCK_SYNC_LIVE)
 	{
-		err = radclock_init_kernel_support(clock_handle);
+		err = init_kernel_support(clock_handle);
 		if (err < 0 )
 			return 1;
 	}

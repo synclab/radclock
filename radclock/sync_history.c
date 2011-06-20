@@ -107,7 +107,8 @@ index_t history_end(history *hist)
 }
 
 
-inline
+
+inline 
 void * history_find(history *hist, index_t index)
 {
 	return hist->buffer + ( index % hist->buffer_sz ) * hist->item_sz;

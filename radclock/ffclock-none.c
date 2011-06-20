@@ -37,6 +37,11 @@ int has_vm_vcounter(void)
 	return -ENOENT;
 }
 
+int init_kernel_support(struct radclock *handle)
+{
+	return -ENOENT;
+}
+
 
 /*
  * XXX Deprecated

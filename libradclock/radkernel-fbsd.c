@@ -175,7 +175,7 @@ rdtsc(void)
 
 inline
 vcounter_t radclock_readtsc(void) {
-	return rdtsc;
+	return (vcounter_t) rdtsc();
 }
 
 // TODO we could afford some cleaning in here
@@ -328,6 +328,40 @@ int radclock_init_vcounter(struct radclock *handle)
 }
 
 
+int get_kernel_ffclock(struct radclock *handle)
+{
+	/*
+	 * This is the kernel definition of clock estimates. May be different from
+	 * the radclock_data structure
+	 */
+	struct ffclock_estimate cest;
+	int err;
+
+	/*
+	 * This feature exists since kernel version 2. If kernel too old, don't do
+	 * anything and return success
+	 */
+	if (handle->kernel_version < 2)
+		return 0;
+
+	/* FreeBSD system call */
+	err = ffclock_getestimate(&cest);
+	if (err < 0) {
+		logger(RADLOG_ERR, "Clock estimate init from kernel failed");
+		return err;
+	}
+	logger(RADLOG_ERR, "Retrieved clock estimate init from kernel");
+
+	/* TODO: check bintime arithmetique */
+	RAD_DATA(handle)->ca		= (long double) cest.time.sec;
+	RAD_DATA(handle)->ca		+= ((long double) cest.time.frac) / (1LL<<63);
+	RAD_DATA(handle)->phat		= cest.period;
+	RAD_DATA(handle)->phat_local= cest.period_shortterm;
+	RAD_DATA(handle)->status	= cest.status;
+	RAD_DATA(handle)->last_changed = cest.last_update;
+	RAD_ERROR(handle)->error_bound_avg = cest.error_bound_avg;
+	return 0;
+}
 
 
 

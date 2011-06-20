@@ -271,11 +271,11 @@ int found_ffwd_kernel_version(void);
 
 
 /**
- * Init the kernel support. 
+ * Retrieves clock estimates from the kernel 
  * @param  handle The private handle for accessing global data
  * @return 0 on success, non-zero on failure
  */
-int radclock_init_kernel_support(struct radclock *handle);
+int get_kernel_ffclock(struct radclock *handle);
 
 
 /**
@@ -306,11 +306,11 @@ int descriptor_set_tsmode(struct radclock *handle, pcap_t *p_handle, int kmode);
 /**
  * System specific call for getting the capture mode on the pcap capture device.
  */
-inline int extract_vcount_stamp(
-			pcap_t *p_handle, 
-			const struct pcap_pkthdr *header, 
-			const unsigned char *packet,
-			vcounter_t *vcount);
+int extract_vcount_stamp(
+		pcap_t *p_handle, 
+		const struct pcap_pkthdr *header, 
+		const unsigned char *packet,
+		vcounter_t *vcount);
 
 
 

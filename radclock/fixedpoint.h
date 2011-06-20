@@ -152,7 +152,7 @@ struct radclock_fixedpoint
  * XXX Deprecated
  * Set fixedpoint data in the kernel for computing timestamps there 
  */
-inline int set_kernel_fixedpoint(struct radclock *handle, struct radclock_fixedpoint *fpdata);
+int set_kernel_fixedpoint(struct radclock *handle, struct radclock_fixedpoint *fpdata);
 
 int update_kernel_fixed(struct radclock *handle);
 

@@ -44,7 +44,7 @@
 
 
 
-int radclock_init_kernel_support(struct radclock *handle)
+int init_kernel_support(struct radclock *handle)
 {
 	/* Kernel version 0 and 1 variables */
 	int fd = -1;

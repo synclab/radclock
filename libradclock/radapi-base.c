@@ -236,6 +236,17 @@ int radclock_init(struct radclock *clock_handle)
 
 	/* Make sure we have detected the version of the kernel we are running on */
 	clock_handle->kernel_version = found_ffwd_kernel_version();
+	
+	/*
+	 * Attempt to retrieve some slightly better clock estimates from the kernel.
+	 * If successful, this overwrites the naive default set by radclock_create.
+	 * This is common to the radclock sync algo and any 3rd party application.
+	 * This feature has been introduced in kernel version 2.
+	 */
+	err = get_kernel_ffclock(clock_handle);
+	if ( err < 0 ) {
+			return -1;
+	}
 
 	err = radclock_init_vcounter_syscall(clock_handle);
 	if ( err < 0 )

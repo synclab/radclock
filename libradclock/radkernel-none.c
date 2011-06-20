@@ -71,11 +71,6 @@ int radclock_init_vcounter(struct radclock *handle)
 	return 0;
 }
 
-int radclock_init_kernel_support(struct radclock *handle)
-{
-	return -ENOENT;
-}
-
 
 int descriptor_set_tsmode(struct radclock *handle, pcap_t *p_handle, int kmode)
 {

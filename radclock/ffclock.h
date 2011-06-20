@@ -64,6 +64,12 @@ struct ffclock_data
 };
 
 
+/**
+ * Init the kernel support. 
+ * @param  handle The private handle for accessing global data
+ * @return 0 on success, non-zero on failure
+ */
+int init_kernel_support(struct radclock *clock_handle);
 
 int set_kernel_ffclock(struct radclock *clock_handle);
 

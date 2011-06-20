@@ -117,6 +117,6 @@ int get_bidir_stamp(struct radclock *handle,
 
 
 int get_vcount(radpcap_packet_t *packet, vcounter_t *vcount);
-inline unsigned int get_capture_length(radpcap_packet_t *packet);
+unsigned int get_capture_length(radpcap_packet_t *packet);
 
 #endif

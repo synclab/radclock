@@ -2113,10 +2113,11 @@ output_results:
 	}
 
 	/* We don't want the leapsecond to create a jump in post processing of data,
-	 * so we reverse the operation performed in get_bidir_stamp. With this implementation
-	 * this will not have an impact on the matlab output file
+	 * so we reverse the operation performed in get_bidir_stamp. With this
+	 * implementation this will not have an impact on the matlab output file
 	 */
-	RAD_DATA(clock_handle)->ca -= ((struct bidir_output*)clock_handle->algo_output)->leapsectotal;
+	RAD_DATA(clock_handle)->ca -= ((struct
+	bidir_output*)clock_handle->algo_output)->leapsectotal;
 	
 //	errTa -= peer->thetahat;
 //	errTf -= peer->thetahat;
