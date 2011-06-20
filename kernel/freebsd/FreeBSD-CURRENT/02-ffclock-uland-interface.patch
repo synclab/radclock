@@ -17,7 +17,7 @@ clock.
 Index: sys/kern/kern_ffclock.c
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ sys/kern/kern_ffclock.c	2011-06-17 16:24:10.000000000 +1000
++++ sys/kern/kern_ffclock.c	2011-06-20 18:02:12.000000000 +1000
 @@ -0,0 +1,134 @@
 +/*-
 + * Copyright (C) 2010 University of Melbourne
@@ -155,8 +155,8 @@ Index: sys/kern/kern_ffclock.c
 +}
 Index: sys/conf/files
 ===================================================================
---- sys.orig/conf/files	2011-06-17 10:59:39.000000000 +1000
-+++ sys/conf/files	2011-06-17 16:24:10.000000000 +1000
+--- sys.orig/conf/files	2011-06-20 17:59:16.000000000 +1000
++++ sys/conf/files	2011-06-20 18:02:12.000000000 +1000
 @@ -2293,20 +2293,21 @@ kern/kern_cpu.c			standard
  kern/kern_cpuset.c		standard
  kern/kern_context.c		standard
@@ -181,8 +181,8 @@ Index: sys/conf/files
  kern/kern_ktrace.c		standard
 Index: sys/kern/syscalls.master
 ===================================================================
---- sys.orig/kern/syscalls.master	2011-06-17 10:59:43.000000000 +1000
-+++ sys/kern/syscalls.master	2011-06-17 16:24:10.000000000 +1000
+--- sys.orig/kern/syscalls.master	2011-06-20 17:59:16.000000000 +1000
++++ sys/kern/syscalls.master	2011-06-20 18:02:12.000000000 +1000
 @@ -449,23 +449,23 @@
  				    struct sigevent *evp, int *timerid); }
  236	AUE_NULL	STD	{ int ktimer_delete(int timerid); }
@@ -212,8 +212,8 @@ Index: sys/kern/syscalls.master
  251	AUE_RFORK	STD	{ int rfork(int flags); }
 Index: sys/sys/time.h
 ===================================================================
---- sys.orig/sys/time.h	2011-06-16 22:47:11.000000000 +1000
-+++ sys/sys/time.h	2011-06-17 16:24:10.000000000 +1000
+--- sys.orig/sys/time.h	2011-06-20 17:59:16.000000000 +1000
++++ sys/sys/time.h	2011-06-20 18:02:12.000000000 +1000
 @@ -26,20 +26,21 @@
   * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
   * SUCH DAMAGE.
@@ -238,34 +238,41 @@ Index: sys/sys/time.h
  #define	DST_USA		1	/* USA style dst */
 Index: sys/sys/timeffc.h
 ===================================================================
---- sys.orig/sys/timeffc.h	2011-06-17 16:23:57.000000000 +1000
-+++ sys/sys/timeffc.h	2011-06-17 16:24:10.000000000 +1000
-@@ -52,13 +52,21 @@ struct ffclock_estimate {
+--- sys.orig/sys/timeffc.h	2011-06-20 18:01:54.000000000 +1000
++++ sys/sys/timeffc.h	2011-06-20 18:03:33.000000000 +1000
+@@ -42,20 +42,28 @@
+ struct ffclock_estimate {
+ 	struct bintime	time;
+ 	uint64_t		period;
+ 	uint64_t		period_shortterm;
+ 	ffcounter		last_update;
+ 	uint32_t		status;
+ 	uint32_t		error_bound_avg;
  };
  
- /* Resets the feed-forward clock */
- void ffclock_reset_clock(struct timespec *ts);
- 
- /* Get and convert ffcounter to bintime based on current ffclock estimate. */
- ffcounter read_ffcounter(void);
- 
- void ffcounter2bintime(ffcounter *ffcount, struct bintime *bt);
- void ffdelta2bintime(ffcounter *ffcount, struct bintime *bt);
+ #if __BSD_VISIBLE
 +
-+#else
 +/* Feed-forwark clock system calls */
 +__BEGIN_DECLS
 +int ffclock_getcounter(ffcounter *ffcount);
 +int ffclock_getestimate(struct ffclock_estimate *cest);
 +int ffclock_setestimate(struct ffclock_estimate *cest);
 +__END_DECLS
- #endif /* _KERNEL */
- #endif /* __BSD_VISIBLE */
- #endif /* _SYS_TIMEFF_H */
++
+ #ifdef _KERNEL
+ 
+ /* Resets the feed-forward clock */
+ void ffclock_reset_clock(struct timespec *ts);
+ 
+ /* Read the current value of the feed-forward counter */
+ ffcounter read_ffcounter(void);
+ 
+ /* Convert ffcounter to bintime based on current ffclock estimates */
+ void ffcounter2bintime(ffcounter *ffcount, struct bintime *bt);
 Index: sys/compat/freebsd32/syscalls.master
 ===================================================================
---- sys.orig/compat/freebsd32/syscalls.master	2011-06-17 10:59:57.000000000 +1000
-+++ sys/compat/freebsd32/syscalls.master	2011-06-17 16:24:10.000000000 +1000
+--- sys.orig/compat/freebsd32/syscalls.master	2011-06-20 17:59:16.000000000 +1000
++++ sys/compat/freebsd32/syscalls.master	2011-06-20 18:02:12.000000000 +1000
 @@ -440,23 +440,23 @@
  234	AUE_NULL	STD	{ int freebsd32_clock_getres(clockid_t clock_id, \
  				    struct timespec32 *tp); }

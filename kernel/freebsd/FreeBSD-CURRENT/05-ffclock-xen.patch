@@ -12,8 +12,8 @@ guests see the same time and allow live migration.
 
 Index: sys/i386/xen/clock.c
 ===================================================================
---- sys.orig/i386/xen/clock.c	2011-06-17 10:59:58.000000000 +1000
-+++ sys/i386/xen/clock.c	2011-06-17 16:31:35.000000000 +1000
+--- sys.orig/i386/xen/clock.c	2011-06-17 20:37:44.000000000 +1000
++++ sys/i386/xen/clock.c	2011-06-20 13:56:44.000000000 +1000
 @@ -1,17 +1,23 @@
  /*-
   * Copyright (C) 1990 The Regents of the University of California.
@@ -119,8 +119,8 @@ Index: sys/i386/xen/clock.c
  {
 Index: sys/kern/kern_tc.c
 ===================================================================
---- sys.orig/kern/kern_tc.c	2011-06-17 16:25:15.000000000 +1000
-+++ sys/kern/kern_tc.c	2011-06-17 16:27:23.000000000 +1000
+--- sys.orig/kern/kern_tc.c	2011-06-20 13:56:22.000000000 +1000
++++ sys/kern/kern_tc.c	2011-06-20 13:56:44.000000000 +1000
 @@ -584,43 +584,64 @@ ffdelta2bintime(ffcounter *ffdelta, stru
  			ffdelta2 -= delta_max;
  		}
@@ -223,8 +223,8 @@ Index: sys/kern/kern_tc.c
  	    "mask", CTLFLAG_RD, &(tc->tc_counter_mask), 0,
 Index: sys/sys/timetc.h
 ===================================================================
---- sys.orig/sys/timetc.h	2011-06-16 22:47:11.000000000 +1000
-+++ sys/sys/timetc.h	2011-06-17 16:27:23.000000000 +1000
+--- sys.orig/sys/timetc.h	2011-06-17 20:37:44.000000000 +1000
++++ sys/sys/timetc.h	2011-06-20 13:56:44.000000000 +1000
 @@ -1,18 +1,24 @@
  /*-
   * ----------------------------------------------------------------------------
@@ -281,8 +281,8 @@ Index: sys/sys/timetc.h
  void	tc_init(struct timecounter *tc);
 Index: sys/x86/x86/tsc.c
 ===================================================================
---- sys.orig/x86/x86/tsc.c	2011-06-17 10:59:58.000000000 +1000
-+++ sys/x86/x86/tsc.c	2011-06-17 16:34:47.000000000 +1000
+--- sys.orig/x86/x86/tsc.c	2011-06-18 12:51:20.000000000 +1000
++++ sys/x86/x86/tsc.c	2011-06-20 13:59:31.000000000 +1000
 @@ -1,14 +1,20 @@
  /*-
   * Copyright (C) 1998-2003 Poul-Henning Kamp
@@ -346,16 +346,16 @@ Index: sys/x86/x86/tsc.c
  vmware_hvcall(u_int cmd, u_int *p)
  {
  
-@@ -575,10 +594,18 @@ tsc_get_timecount(struct timecounter *tc
- 
- 	return (rdtsc32());
- }
+@@ -578,10 +597,18 @@ tsc_get_timecount(struct timecounter *tc
  
  static u_int
  tsc_get_timecount_low(struct timecounter *tc)
  {
+ 	uint32_t rv;
  
- 	return (rdtsc() >> (int)(intptr_t)tc->tc_priv);
+ 	__asm __volatile("rdtsc; shrd %%cl, %%edx, %0"
+ 	: "=a" (rv) : "c" ((int)(intptr_t)tc->tc_priv) : "edx");
+ 	return (rv);
  }
 +
 +#ifdef FFCLOCK
