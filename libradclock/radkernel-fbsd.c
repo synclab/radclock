@@ -29,7 +29,9 @@
 #include <sys/syscall.h>
 #include <sys/sysctl.h>
 #include <sys/time.h>
+#ifdef HAVE_SYS_TIMEFFC_H
 #include <sys/timeffc.h>
+#endif
 #include <sys/socket.h>
 
 #include <net/ethernet.h>	// ETHER_HDR_LEN
@@ -336,6 +338,7 @@ int get_kernel_ffclock(struct radclock *handle)
 	 */
 	struct ffclock_estimate cest;
 	int err;
+	long double tmp;
 
 	/*
 	 * This feature exists since kernel version 2. If kernel too old, don't do
@@ -348,18 +351,36 @@ int get_kernel_ffclock(struct radclock *handle)
 	err = ffclock_getestimate(&cest);
 	if (err < 0) {
 		logger(RADLOG_ERR, "Clock estimate init from kernel failed");
+		fprintf(stdout, "Clock estimate init from kernel failed");
 		return err;
 	}
-	logger(RADLOG_ERR, "Retrieved clock estimate init from kernel");
 
-	/* TODO: check bintime arithmetique */
-	RAD_DATA(handle)->ca		= (long double) cest.time.sec;
-	RAD_DATA(handle)->ca		+= ((long double) cest.time.frac) / (1LL<<63);
-	RAD_DATA(handle)->phat		= cest.period;
-	RAD_DATA(handle)->phat_local= cest.period_shortterm;
-	RAD_DATA(handle)->status	= cest.status;
-	RAD_DATA(handle)->last_changed = cest.last_update;
-	RAD_ERROR(handle)->error_bound_avg = cest.error_bound_avg;
+	/* 
+	 * Cannot push 64 times in a LLU at once. Push twice 32 instead. In this
+	 * direction (get and not set), it is ok to do it that way. We do risk to
+	 * look heavy digits or resolution. See set_kernel_ffclock() in radclock
+	 * code.
+	 */
+	RAD_DATA(handle)->ca = (long double) cest.time.sec;
+	tmp = ((long double) cest.time.frac) / (1LL << 32);
+	RAD_DATA(handle)->ca += tmp / (1LL << 32);
+	
+	tmp = (long double) cest.period / (1LLU << 32);
+	RAD_DATA(handle)->phat = (double) (tmp / (1LLU << 32));
+
+	tmp = (long double) cest.period_shortterm / (1LLU << 32);
+	RAD_DATA(handle)->phat_local = (double) (tmp / (1LLU << 32));
+
+	RAD_DATA(handle)->status = (unsigned int) cest.status;
+	RAD_DATA(handle)->last_changed = (vcounter_t) cest.last_update;
+	RAD_ERROR(handle)->error_bound_avg = (double) (cest.error_bound_avg / 1e9);
+
+	fprintf(stdout, "period=%llu  phat = %.10lg, C = %7.4Lf\n",
+	(unsigned long long) cest.period,
+	RAD_DATA(handle)->phat,
+	RAD_DATA(handle)->ca);
+	fprintf(stdout, "Retrieved clock estimate init from kernel\n");
+			
 	return 0;
 }
 

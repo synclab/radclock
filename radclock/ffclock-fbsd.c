@@ -228,7 +228,7 @@ set_kernel_ffclock(struct radclock *clock)
 	JDEBUG
 
 	int err;
-	struct ffclock_data fdata;
+	struct ffclock_estimate cest;
 	vcounter_t vcount;
 	long double time;
 	uint64_t period;
@@ -252,24 +252,24 @@ set_kernel_ffclock(struct radclock *clock)
 		verbose(LOG_ERR, "Error calculating time");
 
 	/* What I would like to do is: 
-	 * fdata->time.frac = (time - (time_t) time) * (1LLU << 64);
+	 * cest->time.frac = (time - (time_t) time) * (1LLU << 64);
 	 * but cannot push '1' by 64 bits, does not fit in LLU. So push 63 bits,
 	 * multiply for best resolution and loose resolution of 1/2^64.
 	 * Same for phat.
 	 */
-	fdata.time.sec = (time_t) time;
+	cest.time.sec = (time_t) time;
 	frac = (time - (time_t) time) * (1LLU << 63);
-	fdata.time.frac = frac << 1;
+	cest.time.frac = frac << 1;
 
 	period = ((long double) RAD_DATA(clock)->phat) * (1LLU << 63);
-	fdata.period = period << 1;
+	cest.period = period << 1;
 
 	period_shortterm = ((long double) RAD_DATA(clock)->phat_local) * (1LLU << 63);
-	fdata.period_shortterm = period_shortterm << 1;
+	cest.period_shortterm = period_shortterm << 1;
 
-	fdata.last_update = vcount;
-	fdata.status = RAD_DATA(clock)->status;
-	fdata.error_bound_avg = (uint32_t) RAD_ERROR(clock)->error_bound_avg * 1e9;
+	cest.last_update = vcount;
+	cest.status = RAD_DATA(clock)->status;
+	cest.error_bound_avg = (uint32_t) RAD_ERROR(clock)->error_bound_avg * 1e9;
 
 
 	/* Push */
@@ -277,10 +277,10 @@ set_kernel_ffclock(struct radclock *clock)
 	{
 	case 0:
 	case 1:
-		err = syscall(clock->syscall_set_ffclock, &fdata);
+		err = syscall(clock->syscall_set_ffclock, &cest);
 		break;
 	case 2:
-		err = ffclock_setestimate(&fdata);
+		err = ffclock_setestimate(&cest);
 		break;
 	default:
 		verbose(LOG_ERR, "Unknown kernel version");

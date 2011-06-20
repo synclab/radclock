@@ -334,8 +334,15 @@ void init_peer( struct radclock *clock_handle, struct radclock_phyparam *phypara
 	/* vcount period and clock definition.
 	 * Once determined, C only altered to correct phat changes 
 	 * note: phat unavailable after only 1 stamp, use config value, rough guess of 1Ghz beats zero!
+	 * XXX: update comment, if reading first data from kernel timecounter /
+	 * clocksource info. If the user put a default value in the config file,
+	 * trust his choice. Otherwise, use kernel info from the first
+	 * ffclock_getestimate.
 	 */
-	peer->phat = clock_handle->conf->phat_init;
+	if (clock_handle->conf->phat_init == DEFAULT_PHAT_INIT)
+		peer->phat = RAD_DATA(clock_handle)->phat;
+	else
+		peer->phat = clock_handle->conf->phat_init;
 	peer->perr = 0;
 
 	/* switch off pstamp_i search until initialised at top_win/2 */

@@ -133,6 +133,7 @@ dnl ===========================================================================
 case $target_os in
 
 	freebsd*)
+		AC_CHECK_HEADERS([sys/timeffc.h])
 		AC_CHECK_HEADERS([sys/types.h])
 		AC_CHECK_HEADERS([machine/cpufunc.h], [], [],
 		[#ifdef HAVE_SYS_TYPES_H

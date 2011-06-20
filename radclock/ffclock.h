@@ -38,11 +38,11 @@ struct bintime {
 };
 #endif
 
-#include "radclock.h"
-
-
-
-struct ffclock_data
+#if defined (__FreeBSD__)
+#ifdef HAVE_SYS_TIMEFFC_H
+#include <sys/timeffc.h>
+#else
+struct ffclock_estimate
 {
     /* Time conversion of ffcounter below */
     struct bintime time;
@@ -62,6 +62,11 @@ struct ffclock_data
 	/* Average of clock error bound in [ns] */
     uint32_t error_bound_avg;
 };
+#endif
+#endif
+
+
+#include "radclock.h"
 
 
 /**
