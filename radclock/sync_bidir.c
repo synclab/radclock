@@ -825,29 +825,32 @@ void process_RTT_full (struct bidir_peer *peer, vcounter_t RTT)
  * =============================================================================
  */
 
-double compute_phat (struct bidir_peer* peer, struct bidir_stamp* far, struct bidir_stamp* near)
+double compute_phat (struct bidir_peer* peer,
+		struct bidir_stamp* far, struct bidir_stamp* near)
 {
-	long double DelTb, DelTe; 	// Time between j and i based on each NTP timestamp
-	vcounter_t DelTa, DelTf;	// Time between j and i based on each NTP timestamp
-	double phat;			// period estimate for current stamp
-	double phat_b;			// period estimate for current stamp (backward dir)
-	double phat_f; 			// period estimate for current stamp (forward dir)
+	long double DelTb, DelTe;	// Server time intervals between stamps j and i
+	vcounter_t DelTa, DelTf;	// Counter intervals between stamps j and i 
+	double phat;			// Period estimate for current stamp
+	double phat_b;			// Period estimate for current stamp (backward dir)
+	double phat_f; 			// Period estimate for current stamp (forward dir)
 
 	DelTa = near->Ta - far->Ta;
 	DelTb = near->Tb - far->Tb;
 	DelTe = near->Te - far->Te;
 	DelTf = near->Tf - far->Tf;
 
-	/* Check for crazy values, and NaN cases induced by DelTa or DelTf equal zero
-	 * Log a major error and hope someone will call us
+	/* 
+	 * Check for crazy values, and NaN cases induced by DelTa or DelTf equal
+	 * zero Log a major error and hope someone will call us
 	 */
 	if ( ( DelTa <= 0 ) || ( DelTb <= 0 ) || (DelTe <= 0 ) || (DelTf <= 0) ) {
-		verbose(LOG_ERR, "i=%lu we picked up the same i and j stamp. Contact developer.",
-			peer->stamp_i);
+		verbose(LOG_ERR, "i=%lu we picked up the same i and j stamp. "
+				"Contact developer.", peer->stamp_i);
 		return 0;
 	}
 
-	/* Use naive estimates from chosen stamps {i,j}
+	/*
+	 * Use naive estimates from chosen stamps {i,j}
 	 * forward  (OUTGOING, sender)
 	 * backward (INCOMING, receiver)
 	 */
@@ -861,15 +864,16 @@ double compute_phat (struct bidir_peer* peer, struct bidir_stamp* far, struct bi
 
 
 
-int process_phat_warmup (struct bidir_peer* peer, vcounter_t RTT, unsigned int warmup_winratio)
+int process_phat_warmup (struct bidir_peer* peer, vcounter_t RTT,
+		unsigned int warmup_winratio)
 {
 	vcounter_t *RTT_tmp;		// RTT value holder
 	vcounter_t *RTT_far;		// RTT value holder
 	vcounter_t *RTT_near;		// RTT value holder
 	struct bidir_stamp *stamp_near;
 	struct bidir_stamp *stamp_far;
-	long double DelTb; 	// Time between j and i based on each NTP timestamp
-	double phat;			// period estimate for current stamp
+	long double DelTb; 		// Server time intervals between stamps j and i
+	double phat;			// Period estimate for current stamp
 
 	long near_i = 0;
 	long far_i = 0;
@@ -877,19 +881,23 @@ int process_phat_warmup (struct bidir_peer* peer, vcounter_t RTT, unsigned int w
 	near_i = peer->near_i;
 	far_i = peer->far_i;
 
-
-	/* Select indices for new estimate
-	 * Indices taken from a far window: stamps [0 wwidth-1],  and near window:  [i-wwidth+1 i]
-	 * Still works if poll_period changed, but rate increase of end windows can be different
-	 * if stamp index not yet a multiple of warmup_winratio: find near_i by sliding along one on RHS
-	* else: increase near and far windows by 1, find index of new min RTT in both, increase window width
+	/*
+	 * Select indices for new estimate. Indices taken from a far window 
+	 * (stamps in [0 wwidth-1]) and a near window (stamps in [i-wwidth+1 i])
+	 * Still works if poll_period changed, but rate increase of end windows can
+	 * be different
+	 * if stamp index not yet a multiple of warmup_winratio
+	 * 		find near_i by sliding along one on RHS
+	 * else
+	 * 		increase near and far windows by 1, find index of new min RTT in 
+	 * 		both, increase window width
 	*/
-	if ( peer->stamp_i%warmup_winratio )
-	{
-		peer->near_i = history_min_slide(&peer->RTT_hist, peer->near_i, peer->stamp_i-peer->wwidth, peer->stamp_i-1);
+
+	if ( peer->stamp_i%warmup_winratio ) {
+		peer->near_i = history_min_slide(&peer->RTT_hist, peer->near_i, 
+				peer->stamp_i-peer->wwidth, peer->stamp_i-1);
 	}
-	else
-	{
+	else {
 		RTT_tmp = history_find(&peer->RTT_hist, peer->wwidth);
 		RTT_near = history_find(&peer->RTT_hist, peer->near_i);
 		RTT_far = history_find(&peer->RTT_hist, peer->far_i);
@@ -928,7 +936,8 @@ int process_phat_warmup (struct bidir_peer* peer, vcounter_t RTT, unsigned int w
 		RTT_far = history_find(&peer->RTT_hist, peer->far_i);
 		RTT_near = history_find(&peer->RTT_hist, peer->near_i);
 		DelTb = stamp_near->Tb - stamp_far->Tb;
-		peer->perr = peer->phat * (double)((*RTT_far - peer->RTThat) + (*RTT_near - peer->RTThat)) / DelTb;
+		peer->perr = peer->phat * (double)((*RTT_far - peer->RTThat) 
+				+ (*RTT_near - peer->RTThat)) / DelTb;
 	}
 	return 0;
 }
@@ -941,7 +950,8 @@ int process_phat_warmup (struct bidir_peer* peer, vcounter_t RTT, unsigned int w
  * Only track and record the value that will be used in the next top_win/2
  * window it is NOT used for computing phat with the current stamp.
  */
-void record_packet_j (struct bidir_peer* peer, vcounter_t RTT, struct bidir_stamp* stamp)
+void record_packet_j (struct bidir_peer* peer, vcounter_t RTT, 
+		struct bidir_stamp* stamp)
 {
 	vcounter_t next_RTT;
 	next_RTT = peer->next_pstamp.Tf - peer->next_pstamp.Ta;
@@ -965,12 +975,13 @@ int process_phat_full (struct bidir_peer* peer, struct radclock* clock_handle,
 						struct bidir_stamp* stamp, int qual_warning)
 
 {
-	double perr_ij;				// estimate of error of phat using given stamp pair [i,j]
-	long double DelTb; 	// Time between j and i based on each NTP timestamp
-	double baseerr;			// holds difference in quality RTTmin values at different stamps
-	double perr_i;
-	double phat;			// period estimate for current stamp
 	int ret;
+	long double DelTb; 	// Server time interval between stamps j and i
+	double phat;		// Period estimate for current stamp
+	double perr_ij;		// Estimate of error of phat using given stamp pair [i,j]
+	double perr_i;		// Estimate of error of phat at stamp i
+	double baseerr;		// Holds difference in quality RTTmin values at
+						// different stamps
 
 	ret = 0;
 
@@ -984,28 +995,32 @@ int process_phat_full (struct bidir_peer* peer, struct radclock* clock_handle,
 		return 1;
 	}
 
-	/* Determine if quality of i sufficient to bother, if so, if (j,i) sufficient to update phat 
-	 * perr_i: point error of i
+	/*
+	 * Determine if quality of i sufficient to bother, if so, if (j,i)
+	 * sufficient to update phat
 	 * if error smaller than Ep, quality pkt, proceed, else do nothing
 	 */
 	perr_i = peer->phat * (double)(RTT - peer->RTThat);
 
 	if ( perr_i >= peer->Ep )
 	{
-		/* Regular statistics print out every 6 hours*/
+		/* Regular statistics print out every 6 hours */
 		if ( !(peer->stamp_i % (int)(6 * 3600 / peer->poll_period)) ) {
-			verbose(VERB_SYNC, "i=%lu: %s", peer->stamp_i, peer->stats); 
+			verbose(VERB_SYNC, "i=%lu: %s", peer->stamp_i, peer->stats);
 		}
 		return 0;
 	}
 
-	/* Point errors (local)
-	 * level shifts (global)  (can also correct for error in RTThat assuming no true shifts)
-	 * (total err)/Del(t) = (queueing/Delta(vcount))/p  ie  error relative to p
+	/*
+	 * Point errors (local)
+	 * Level shifts (global)  (can also correct for error in RTThat assuming no
+	 * true shifts)
+	 * (total err)/Del(t) = (queueing/Delta(vcount))/p  ie. error relative to p
 	 */
 	DelTb = stamp->Tb - peer->pstamp.Tb;
 	perr_ij = fabs(perr_i) + fabs(peer->pstamp_perr);
-	baseerr = peer->phat * (double) labs( (long)(peer->RTThat-peer->pstamp_RTThat) );
+	// TODO: check values, but long and double casts seem unnecessary
+	baseerr = peer->phat * (double)labs((long)(peer->RTThat-peer->pstamp_RTThat));
 	perr_ij = (perr_ij + baseerr) / DelTb;
 
 	if ( (perr_ij >= peer->perr) && (perr_ij >= peer->Ep_qual) ) 
@@ -1020,8 +1035,10 @@ int process_phat_full (struct bidir_peer* peer, struct radclock* clock_handle,
 		return 0;
 	}
 
-	/* We reach this point, so good candidate.
-	 * If better, or extremely go`od, update with naive estimate using (j,i) , else do nothing
+	/*
+	 * We reach this point, so good candidate.
+	 * If better, or extremely go`od, update with naive estimate using (j,i),
+	 * else do nothing
 	 * if extremely good, accept in order to gracefully track
 	 * avoids possible lock-in (eg due to 'lucky' error on error estimate)
 	 * phat_f: forward  (OUTGOING, sender)*
@@ -1042,17 +1059,20 @@ int process_phat_full (struct bidir_peer* peer, struct radclock* clock_handle,
 
 	if ( fabs((phat - peer->phat)/phat) > phyparam->RateErrBOUND/3 ) {
 		verbose(VERB_SYNC, "i=%lu: Jump in phat update", peer->stamp_i);
-		verbose(VERB_SYNC, "i=%lu: phat candidate found, %s", peer->stamp_i, peer->stats); 
+		verbose(VERB_SYNC, "i=%lu: phat candidate found, %s", peer->stamp_i,
+			   	peer->stats);
 	}
 
 	/* Clock correction and phat update.
 	 * Sanity check applies here 
 	 * correct C to keep C(t) continuous at time of last stamp
 	 */
-	if ( (fabs(peer->phat - phat)/peer->phat > peer->Ep_sanity) || qual_warning ) {
+	if ((fabs(peer->phat - phat)/peer->phat > peer->Ep_sanity) || qual_warning) {
 		if (qual_warning)
-			verbose(VERB_QUALITY, "i=%lu: qual_warning received, following sanity check for phat", peer->stamp_i);
-		verbose(VERB_SANITY, "i=%lu: phat update fails sanity check: %s", peer->stamp_i, peer->stats); 
+			verbose(VERB_QUALITY, "i=%lu: qual_warning received, following "
+					"sanity check for phat", peer->stamp_i);
+		verbose(VERB_SANITY, "i=%lu: phat update fails sanity check: %s",
+				peer->stamp_i, peer->stats);
 		peer->phat_sanity_count++;
 		ADD_STATUS(clock_handle, STARAD_PERIOD_SANITY);
 		ret = STARAD_PERIOD_SANITY;
@@ -1065,9 +1085,9 @@ int process_phat_full (struct bidir_peer* peer, struct radclock* clock_handle,
 
 	/* Regular statistics print out */
 	if ( !(peer->stamp_i % (int)(6 * 3600 / peer->poll_period)) ) {
-		verbose(VERB_SYNC, "i=%lu: %s", peer->stamp_i, peer->stats); 
+		verbose(VERB_SYNC, "i=%lu: %s", peer->stamp_i, peer->stats);
 	}
-	
+
 	return ret;
 }
 
@@ -1091,7 +1111,7 @@ void process_plocal_warmup(struct bidir_peer* peer)
 
 
 int process_plocal_full(struct bidir_peer* peer, struct radclock* clock_handle,
-	   	unsigned int plocal_winratio, int sig_plocal, struct bidir_stamp* stamp, 
+		unsigned int plocal_winratio, int sig_plocal, struct bidir_stamp* stamp,
 		int phat_sanity_raised, int qual_warning)
 {
 
@@ -1110,23 +1130,28 @@ int process_plocal_full(struct bidir_peer* peer, struct radclock* clock_handle,
 	vcounter_t *RTT_near;		// RTT value holder
 
 
-	/* compute index of stamp we require to be available before proceeding (different usage to shift_end etc!)
-	 * if not fully past poll transition and have not history ready then 
+	/*
+	 * Compute index of stamp we require to be available before proceeding
+	 * (different usage to shift_end etc!)
+	 * if not fully past poll transition and have not history ready then
 	 * 		default to phat copy if problems with data or transitions
 	 * 		record a problem, will have to restart when it resolves
-	 * else proceed with plocal processing 
+	 * else proceed with plocal processing
 	 */
-	peer->plocal_end = peer->stamp_i - peer->plocal_win+1 - peer->wwidth - peer->wwidth/2;
+	peer->plocal_end = peer->stamp_i - peer->plocal_win+1 - peer->wwidth 
+		- peer->wwidth/2;
 	st_end  = history_end(&peer->stamp_hist);
 	RTT_end = history_end(&peer->RTT_hist);
 	if ( peer->plocal_end < MAX(peer->poll_changed_i, MAX(st_end,RTT_end)) ) {
 		peer->plocal = peer->phat;
 		peer->plocal_restartscheduled = 1;
 // TODO this is very chatty when it happens ... module the rate?		
-		verbose(VERB_CONTROL, "plocal problem following parameter changes (desired window "
-				"first stamp %lu unavailable), defaulting to phat while windows fill", peer->plocal_end);
-		verbose(VERB_CONTROL, "[plocal_end, lastpoll_i, st_end, RTT_end] : %lu %lu %lu %lu ",
-				peer->plocal_end, peer->poll_changed_i, st_end, RTT_end);
+		verbose(VERB_CONTROL, "plocal problem following parameter changes "
+				"(desired window first stamp %lu unavailable), defaulting to "
+				"phat while windows fill", peer->plocal_end);
+		verbose(VERB_CONTROL, "[plocal_end, lastpoll_i, st_end, RTT_end] : "
+				"%lu %lu %lu %lu ", peer->plocal_end, peer->poll_changed_i, 
+				st_end, RTT_end);
 		return 0;
 	}
 
@@ -1137,12 +1162,13 @@ int process_plocal_full(struct bidir_peer* peer, struct radclock* clock_handle,
 		verbose(VERB_CONTROL, "Restart plocal");
 		init_plocal(peer, plocal_winratio, peer->stamp_i);
 		peer->plocal_restartscheduled = 0;
-	} 
+	}
 	else {
 		lhs = peer->stamp_i - peer->wwidth - peer->plocal_win - peer->wwidth/2;
 		rhs = peer->stamp_i - 1 - peer->plocal_win - peer->wwidth/2;
 		peer->far_i  = history_min_slide(&peer->RTT_hist, peer->far_i, lhs, rhs);
-		peer->near_i = history_min_slide(&peer->RTT_hist, peer->near_i, peer->stamp_i-peer->wwidth, peer->stamp_i-1);
+		peer->near_i = history_min_slide(&peer->RTT_hist, peer->near_i,
+				peer->stamp_i-peer->wwidth, peer->stamp_i-1);
 	}
 
 	/* Compute time intervals between NTP timestamps of selected stamps */
@@ -1150,26 +1176,26 @@ int process_plocal_full(struct bidir_peer* peer, struct radclock* clock_handle,
 	stamp_far = history_find(&peer->stamp_hist, peer->far_i);
 
 	plocal = compute_phat(peer, stamp_far, stamp_near);
-	if ( plocal == 0 )
-	{
-		/* Something bad happen, most likely, we have a bug. The algo may
-		 * recover from this, so do not update and keep going.
-		 */
+	/*
+	 * Something bad happen, most likely, we have a bug. The algo may recover
+	 * from this, so do not update and keep going.
+	 */
+	if ( plocal == 0 ) {
 		return 1;
 	}
-
 
 	RTT_far = history_find(&peer->RTT_hist, peer->far_i);
 	RTT_near = history_find(&peer->RTT_hist, peer->near_i);
 	DelTb = stamp_near->Tb - stamp_far->Tb;
-	plocalerr = peer->phat * (double)((*RTT_far - peer->RTThat) + (*RTT_near - peer->RTThat)) / DelTb;
+	plocalerr = peer->phat * (double)((*RTT_far - peer->RTThat)
+			+ (*RTT_near - peer->RTThat)) / DelTb;
 
 	/* if quality looks bad, retain previous value */
-	if ( fabs(plocalerr) >= peer->Eplocal_qual )
-	{
-		verbose(VERB_QUALITY, "i=%lu: plocal quality low,  (far_i,near_i) = (%lu,%lu), "
-				"not updating plocalerr = %5.3lg,  Eplocal_qual = %5.3lg ",
-				peer->stamp_i, peer->far_i, peer->near_i, peer->plocalerr, peer->Eplocal_qual);
+	if ( fabs(plocalerr) >= peer->Eplocal_qual ) {
+		verbose(VERB_QUALITY, "i=%lu: plocal quality low,  (far_i,near_i) = "
+				"(%lu,%lu), not updating plocalerr = %5.3lg, "
+				"Eplocal_qual = %5.3lg ", peer->stamp_i, peer->far_i,
+				peer->near_i, peer->plocalerr, peer->Eplocal_qual);
 		ADD_STATUS(clock_handle, STARAD_PERIOD_QUALITY);
 		return 0;
 	}
@@ -1181,8 +1207,9 @@ int process_plocal_full(struct bidir_peer* peer, struct radclock* clock_handle,
 	 * damage control.
 	 */
 	if ( (fabs(peer->plocal-plocal)/peer->plocal > peer->Eplocal_sanity) || qual_warning) {
-		if (qual_warning)  
-			verbose(VERB_QUALITY, "qual_warning received, i=%lu, following sanity check for plocal", peer->stamp_i);
+		if (qual_warning)
+			verbose(VERB_QUALITY, "qual_warning received, i=%lu, following "
+					"sanity check for plocal", peer->stamp_i);
 		verbose(VERB_SANITY, "i=%lu: plocal update fails sanity check: relative "
 				"difference is: %5.3lg estimated error was %5.3lg",
 				peer->stamp_i, fabs(peer->plocal-plocal)/peer->plocal, plocalerr);
@@ -1205,7 +1232,7 @@ int process_plocal_full(struct bidir_peer* peer, struct radclock* clock_handle,
 
 
 /* =============================================================================
- * THETAHAT ALGO 
+ * THETAHAT ALGO
  * =============================================================================
  */
 
