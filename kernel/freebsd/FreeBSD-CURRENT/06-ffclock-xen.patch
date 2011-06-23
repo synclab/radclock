@@ -5,15 +5,15 @@ guests see the same time and allow live migration.
 
 ---
  i386/xen/clock.c |   35 +++++++++++++++++++++++++++++++++++
- kern/kern_tc.c   |   42 +++++++++++++++++++++++++++++++++++-------
+ kern/kern_tc.c   |   40 +++++++++++++++++++++++++++++++++-------
  sys/timetc.h     |   14 ++++++++++++++
  x86/x86/tsc.c    |   27 +++++++++++++++++++++++++++
- 4 files changed, 111 insertions(+), 7 deletions(-)
+ 4 files changed, 109 insertions(+), 7 deletions(-)
 
 Index: sys/i386/xen/clock.c
 ===================================================================
---- sys.orig/i386/xen/clock.c	2011-06-17 20:37:44.000000000 +1000
-+++ sys/i386/xen/clock.c	2011-06-20 13:56:44.000000000 +1000
+--- sys.orig/i386/xen/clock.c	2011-06-22 19:13:52.000000000 +1000
++++ sys/i386/xen/clock.c	2011-06-23 17:48:41.000000000 +1000
 @@ -1,17 +1,23 @@
  /*-
   * Copyright (C) 1990 The Regents of the University of California.
@@ -119,9 +119,9 @@ Index: sys/i386/xen/clock.c
  {
 Index: sys/kern/kern_tc.c
 ===================================================================
---- sys.orig/kern/kern_tc.c	2011-06-20 13:56:22.000000000 +1000
-+++ sys/kern/kern_tc.c	2011-06-20 13:56:44.000000000 +1000
-@@ -584,43 +584,64 @@ ffdelta2bintime(ffcounter *ffdelta, stru
+--- sys.orig/kern/kern_tc.c	2011-06-23 17:48:08.000000000 +1000
++++ sys/kern/kern_tc.c	2011-06-23 17:52:31.000000000 +1000
+@@ -604,44 +604,63 @@ ffclock_difftime_tc(ffcounter *ffdelta, 
  			ffdelta2 -= delta_max;
  		}
  		delta.sec = 0;
@@ -129,15 +129,14 @@ Index: sys/kern/kern_tc.c
  		bintime_mul(&delta, ffdelta2);
  		bintime_add(bt, &delta);
  	} while (gen == 0 || gen != ffth->gen);
- }
  
+ }
  
 +static int sysctl_kern_timecounter_passthrough = 0;
 +SYSCTL_INT(_kern_timecounter, OID_AUTO, passthrough, CTLFLAG_RW,
 +	&sysctl_kern_timecounter_passthrough, 0,
 +	"Select universal Feed-Forward timecounter for OS virtualization");
-+
-+
+ 
  /* Return current ffcounter value */
  ffcounter
  read_ffcounter(void)
@@ -193,7 +192,7 @@ Index: sys/kern/kern_tc.c
  tc_init(struct timecounter *tc)
  {
  	u_int u;
-@@ -636,20 +657,27 @@ tc_init(struct timecounter *tc)
+@@ -657,20 +676,27 @@ tc_init(struct timecounter *tc)
  			printf("Timecounter \"%s\" frequency %ju Hz",
  			    tc->tc_name, (uintmax_t)tc->tc_frequency);
  			printf(" -- Insufficient hz, needs at least %u\n", u);
@@ -223,8 +222,8 @@ Index: sys/kern/kern_tc.c
  	    "mask", CTLFLAG_RD, &(tc->tc_counter_mask), 0,
 Index: sys/sys/timetc.h
 ===================================================================
---- sys.orig/sys/timetc.h	2011-06-17 20:37:44.000000000 +1000
-+++ sys/sys/timetc.h	2011-06-20 13:56:44.000000000 +1000
+--- sys.orig/sys/timetc.h	2011-06-22 19:13:52.000000000 +1000
++++ sys/sys/timetc.h	2011-06-23 17:48:41.000000000 +1000
 @@ -1,18 +1,24 @@
  /*-
   * ----------------------------------------------------------------------------
@@ -281,8 +280,8 @@ Index: sys/sys/timetc.h
  void	tc_init(struct timecounter *tc);
 Index: sys/x86/x86/tsc.c
 ===================================================================
---- sys.orig/x86/x86/tsc.c	2011-06-18 12:51:20.000000000 +1000
-+++ sys/x86/x86/tsc.c	2011-06-20 13:59:31.000000000 +1000
+--- sys.orig/x86/x86/tsc.c	2011-06-22 19:13:52.000000000 +1000
++++ sys/x86/x86/tsc.c	2011-06-23 17:48:41.000000000 +1000
 @@ -1,14 +1,20 @@
  /*-
   * Copyright (C) 1998-2003 Poul-Henning Kamp

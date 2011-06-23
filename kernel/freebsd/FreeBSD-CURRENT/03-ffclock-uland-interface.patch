@@ -6,18 +6,17 @@ Allows feed-forward synchronisation daemon to update the kernel feed-forward
 clock.
 
 ---
- compat/freebsd32/syscalls.master |    6 +-
- conf/files                       |    1 
- kern/kern_ffclock.c              |  100 +++++++++++++++++++++++++++++++++++++++
- kern/syscalls.master             |    6 +-
+ compat/freebsd32/syscalls.master |    6 -
+ kern/kern_ffclock.c              |  128 +++++++++++++++++++++++++++++++++++----
+ kern/syscalls.master             |    6 -
  sys/time.h                       |    1 
- sys/timeffc.h                    |    8 +++
- 6 files changed, 116 insertions(+), 6 deletions(-)
+ sys/timeffc.h                    |    8 ++
+ 5 files changed, 132 insertions(+), 17 deletions(-)
 
 Index: sys/kern/syscalls.master
 ===================================================================
---- sys.orig/kern/syscalls.master	2011-06-22 18:18:34.000000000 +1000
-+++ sys/kern/syscalls.master	2011-06-22 18:22:07.000000000 +1000
+--- sys.orig/kern/syscalls.master	2011-06-23 22:37:08.000000000 +1000
++++ sys/kern/syscalls.master	2011-06-23 22:44:57.000000000 +1000
 @@ -449,23 +449,23 @@
  				    struct sigevent *evp, int *timerid); }
  236	AUE_NULL	STD	{ int ktimer_delete(int timerid); }
@@ -47,8 +46,8 @@ Index: sys/kern/syscalls.master
  251	AUE_RFORK	STD	{ int rfork(int flags); }
 Index: sys/sys/time.h
 ===================================================================
---- sys.orig/sys/time.h	2011-06-22 18:18:34.000000000 +1000
-+++ sys/sys/time.h	2011-06-22 18:22:07.000000000 +1000
+--- sys.orig/sys/time.h	2011-06-23 22:37:08.000000000 +1000
++++ sys/sys/time.h	2011-06-23 22:44:57.000000000 +1000
 @@ -26,20 +26,21 @@
   * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
   * SUCH DAMAGE.
@@ -73,19 +72,19 @@ Index: sys/sys/time.h
  #define	DST_USA		1	/* USA style dst */
 Index: sys/sys/timeffc.h
 ===================================================================
---- sys.orig/sys/timeffc.h	2011-06-22 18:18:34.000000000 +1000
-+++ sys/sys/timeffc.h	2011-06-22 18:22:07.000000000 +1000
-@@ -46,20 +46,28 @@ struct ffclock_estimate {
- 	uint64_t	period;				/* Long-term estimate of counter period */
- 	uint64_t	period_shortterm;	/* Short-term estimate of counter period */
- 	uint32_t	error_bound_abs;	/* Bound on absolute clock error [ns] */
- 	uint32_t	error_bound_rate;	/* Bound on counter rate error [ps/s] */
- 	uint32_t	status;				/* Clock status */
- 	int16_t		leapsec_total;		/* All leap seconds seen so far */
- 	int8_t		leapsec;			/* Next leap second, usually in {-1,0,1} */
- };
+--- sys.orig/sys/timeffc.h	2011-06-23 22:37:31.000000000 +1000
++++ sys/sys/timeffc.h	2011-06-23 22:44:57.000000000 +1000
+@@ -97,12 +97,20 @@ void ffclock_microtime(struct timeval *t
  
- #if __BSD_VISIBLE
+ void ffclock_getbintime(struct bintime *bt);
+ void ffclock_getnanotime(struct timespec *tsp);
+ void ffclock_getmicrotime(struct timeval *tvp);
+ 
+ void ffclock_bindifftime(ffcounter *ffdelta, struct bintime *bt);
+ void ffclock_nanodifftime(ffcounter *ffdelta, struct timespec *tsp);
+ void ffclock_microdifftime(ffcounter *ffdelta, struct timeval *tvp);
+ 
+ #endif /* _KERNEL */
 +
 +/* Feed-Forward Clock system calls */
 +__BEGIN_DECLS
@@ -94,20 +93,12 @@ Index: sys/sys/timeffc.h
 +int ffclock_setestimate(struct ffclock_estimate *cest);
 +__END_DECLS
 +
- #ifdef _KERNEL
- 
- /* Resets the feed-forward clock */
- void ffclock_reset_clock(struct timespec *ts);
- 
- /* Read the current value of the feed-forward counter */
- ffcounter read_ffcounter(void);
- 
- /*
-  * These are low level functions to compute absolute time and time intervals
+ #endif /* __BSD_VISIBLE */
+ #endif /* _SYS_TIMEFF_H */
 Index: sys/compat/freebsd32/syscalls.master
 ===================================================================
---- sys.orig/compat/freebsd32/syscalls.master	2011-06-22 18:18:34.000000000 +1000
-+++ sys/compat/freebsd32/syscalls.master	2011-06-22 18:22:07.000000000 +1000
+--- sys.orig/compat/freebsd32/syscalls.master	2011-06-23 22:37:08.000000000 +1000
++++ sys/compat/freebsd32/syscalls.master	2011-06-23 22:44:57.000000000 +1000
 @@ -440,23 +440,23 @@
  234	AUE_NULL	STD	{ int freebsd32_clock_getres(clockid_t clock_id, \
  				    struct timespec32 *tp); }
@@ -137,9 +128,9 @@ Index: sys/compat/freebsd32/syscalls.master
  251	AUE_RFORK	NOPROTO	{ int rfork(int flags); }
 Index: sys/kern/kern_ffclock.c
 ===================================================================
---- sys.orig/kern/kern_ffclock.c	2011-06-22 18:21:59.000000000 +1000
-+++ sys/kern/kern_ffclock.c	2011-06-22 18:24:36.000000000 +1000
-@@ -20,20 +20,32 @@
+--- sys.orig/kern/kern_ffclock.c	2011-06-23 22:42:50.000000000 +1000
++++ sys/kern/kern_ffclock.c	2011-06-23 22:50:45.000000000 +1000
+@@ -20,24 +20,38 @@
   * ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
   * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
   * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
@@ -164,6 +155,23 @@ Index: sys/kern/kern_ffclock.c
 +#include <sys/systm.h>
  #include <sys/timeffc.h>
  
+ 
+ extern struct ffclock_estimate ffclock_estimate;
++extern uint8_t ffclock_fetch_update;
++extern struct mtx ffclock_mtx;	/* lock against concurrent updates of the ffclock estimates */
+ 
+ /*
+  * Feed-Forward Clock time functions
+  */
+ void
+ ffclock_abstime(ffcounter *ffcount, struct bintime *bt,
+ 				struct bintime *error_bound, unsigned char flags)
+ {
+ 	struct ffclock_estimate cest;
+ 	ffcounter last_update;
+@@ -100,73 +114,165 @@ ffclock_difftime(ffcounter *ffdelta, str
+ 
+ 
  /*
   * High level functions to access the Feed-Forward Clock.
   */
@@ -172,18 +180,87 @@ Index: sys/kern/kern_ffclock.c
  	ffcounter ffcount;
  
  	ffcount = read_ffcounter();
-@@ -60,10 +72,98 @@ void ffclock_microtime(struct timeval *t
- 	bintime2timespec(&bt, tvp);
+-	ffclock_abstime(&ffcount, bt, NULL);
++	ffclock_abstime(&ffcount, bt, NULL, 0);
+ }
+ 
+ void ffclock_nanotime(struct timespec *tsp)
+ {
+ 	struct bintime bt;
+ 	ffcounter ffcount;
+ 
+ 	ffcount = read_ffcounter();
+-	ffclock_abstime(&ffcount, &bt, NULL);
++	ffclock_abstime(&ffcount, &bt, NULL, 0);
+ 	bintime2timespec(&bt, tsp);
+ }
+ 
+ void ffclock_microtime(struct timeval *tvp)
+ {
+ 	struct bintime bt;
+ 	ffcounter ffcount;
+ 
+ 	ffcount = read_ffcounter();
+-	ffclock_abstime(&ffcount, &bt, NULL);
++	ffclock_abstime(&ffcount, &bt, NULL, 0);
+ 	bintime2timeval(&bt, tvp);
  }
  
  void ffclock_getbintime(struct bintime *bt)
- void ffclock_getnanotime(struct timespec *tsp)
- void ffclock_getmicrotime(struct timeval *tvp)
+ {
++	ffcounter ffcount;
  
- void ffclock_bindifftime(struct bintime *bt)
- void ffclock_nanodifftime(struct timespec *tsp);
- void ffclock_microdifftime(struct timeval *tvp);
+-	ffclock_abstime_coarse(bt);
++	ffclock_abstime_tc_coarse(&ffcount, bt, NULL, FFCLOCK_FAST);
+ }
+ 
+ void ffclock_getnanotime(struct timespec *tsp)
+ {
+-	ffclock_abstime_coarse(&bt);
++	struct bintime bt;
++	ffcounter ffcount;
 +
++	ffclock_abstime_tc_coarse(&ffcount, &bt, NULL, FFCLOCK_FAST);
+ 	bintime2timespec(&bt, tsp);
+ }
+ 
+ void ffclock_getmicrotime(struct timeval *tvp)
+ {
+-	ffclock_abstime_coarse(&bt);
++	struct bintime bt;
++	ffcounter ffcount;
++
++	ffclock_abstime_tc_coarse(&ffcount, &bt, NULL, FFCLOCK_FAST);
+ 	bintime2timeval(&bt, tvp);
+ }
+ 
+ void ffclock_bindifftime(ffcounter *ffdelta, struct bintime *bt)
+ {
+ 
+-	ffclock_difftime(ffdelta, bt, NULL);
++	ffclock_difftime(ffdelta, bt, NULL, 0);
+ }
+ 
+-void ffclock_nanodifftime(ffcounter *ffdelta, struct timespec *tsp);
++void ffclock_nanodifftime(ffcounter *ffdelta, struct timespec *tsp)
+ {
+ 	struct bintime bt;
+ 
+-	ffclock_difftime(ffdelta, &bt, NULL);
++	ffclock_difftime(ffdelta, &bt, NULL, 0);
+ 	bintime2timespec(&bt, tsp);
+ }
+ 
+-void ffclock_microdifftime(ffcounter *ffdelta, struct timeval *tvp);
++void ffclock_microdifftime(ffcounter *ffdelta, struct timeval *tvp)
+ {
+ 	struct bintime bt;
+ 
+-	ffclock_difftime(ffdelta, &bt, NULL);
++	ffclock_difftime(ffdelta, &bt, NULL, 0);
+ 	bintime2timeval(&bt, tvp);
+ }
+ 
 +/*
 + * Sysctl for the Feed-Forward Clock
 + */
@@ -196,9 +273,6 @@ Index: sys/kern/kern_ffclock.c
 + * System calls returning Feed-Forward Clock counter to user space
 + */
 +
-+extern struct ffclock_estimate ffclock_estimate;
-+extern uint8_t ffclock_fetch_update;
-+extern struct mtx ffclock_mtx;	/* lock against concurrent updates of the ffclock estimates */
 +
 +#ifndef _SYS_SYSPROTO_H_
 +struct ffclock_getcounter_args {
@@ -271,3 +345,4 @@ Index: sys/kern/kern_ffclock.c
 +	mtx_unlock(&ffclock_mtx);
 +	return (error);
 +}
++
