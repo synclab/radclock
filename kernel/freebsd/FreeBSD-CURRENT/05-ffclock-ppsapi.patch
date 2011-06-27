@@ -7,9 +7,9 @@ Modification to the PPS-API to support ffcounter timestamps
 
 Index: sys/kern/kern_tc.c
 ===================================================================
---- sys.orig/kern/kern_tc.c	2011-06-27 16:30:30.000000000 +1000
-+++ sys/kern/kern_tc.c	2011-06-27 16:30:35.000000000 +1000
-@@ -1027,20 +1027,23 @@ SYSCTL_PROC(_kern_timecounter, OID_AUTO,
+--- sys.orig/kern/kern_tc.c	2011-06-27 19:59:55.000000000 +1000
++++ sys/kern/kern_tc.c	2011-06-27 21:12:03.000000000 +1000
+@@ -1007,20 +1007,23 @@ SYSCTL_PROC(_kern_timecounter, OID_AUTO,
  
  /*
   * RFC 2783 PPS-API implementation.
@@ -33,7 +33,7 @@ Index: sys/kern/kern_tc.c
  		return (0);
  	case PPS_IOC_DESTROY:
  		return (0);
-@@ -1060,20 +1063,31 @@ pps_ioctl(u_long cmd, caddr_t data, stru
+@@ -1040,20 +1043,31 @@ pps_ioctl(u_long cmd, caddr_t data, stru
  		return (0);
  	case PPS_IOC_FETCH:
  		fapi = (struct pps_fetch_args *)data;
@@ -65,7 +65,7 @@ Index: sys/kern/kern_tc.c
  			return (EINVAL);
  		if (kapi->edge & ~pps->ppscap)
  			return (EINVAL);
-@@ -1099,82 +1113,109 @@ pps_init(struct pps_state *pps)
+@@ -1079,82 +1093,109 @@ pps_init(struct pps_state *pps)
  
  void
  pps_capture(struct pps_state *pps)
@@ -96,7 +96,7 @@ Index: sys/kern/kern_tc.c
 +	struct timespec *ffclock_tsp;
 +	pps_seq_t *ffclock_pseq;
 +	ffcounter *ffcount;
-+	ffcounter ffcount_mark;
++	ffcounter tick_ffcount;
 +#endif
  
  	KASSERT(pps != NULL, ("NULL pps pointer in pps_event"));
@@ -146,7 +146,7 @@ Index: sys/kern/kern_tc.c
  	tcount = pps->capcount - pps->capth->th_offset_count;
  	tcount &= pps->capth->th_counter->tc_counter_mask;
 +#ifdef FFCLOCK
-+	ffcount_mark = pps->capffth->ffcount_mark;
++	tick_ffcount = pps->capffth->tick_ffcount;
 +#endif
  	bt = pps->capth->th_offset;
  	bintime_addx(&bt, pps->capth->th_scale * tcount);
@@ -163,7 +163,7 @@ Index: sys/kern/kern_tc.c
 +#ifdef FFCLOCK
 +	(*ffclock_pseq)++;
 +	*ffclock_tsp = ts;
-+	*ffcount = (ffcount_mark + tcount);
++	*ffcount = (tick_ffcount + tcount);
 +#endif
  
  	if (foff) {
@@ -177,8 +177,8 @@ Index: sys/kern/kern_tc.c
  	if (fhard) {
 Index: sys/sys/timepps.h
 ===================================================================
---- sys.orig/sys/timepps.h	2011-06-23 17:52:55.000000000 +1000
-+++ sys/sys/timepps.h	2011-06-27 16:30:35.000000000 +1000
+--- sys.orig/sys/timepps.h	2011-06-27 16:58:03.000000000 +1000
++++ sys/sys/timepps.h	2011-06-27 20:56:13.000000000 +1000
 @@ -1,29 +1,38 @@
  /*-
   * ----------------------------------------------------------------------------

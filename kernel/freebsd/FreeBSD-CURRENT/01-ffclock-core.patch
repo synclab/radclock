@@ -5,16 +5,16 @@ Core set of changes to support a feed-forward clock within the kernel.
 ---
  conf/NOTES       |    8 +
  conf/options     |    1 
- kern/kern_tc.c   |  432 +++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ kern/kern_tc.c   |  412 +++++++++++++++++++++++++++++++++++++++++++++++++++++++
  kern/subr_rtc.c  |    8 +
  sys/_ffcounter.h |   43 +++++
- sys/timeffc.h    |   77 +++++++++
- 6 files changed, 569 insertions(+)
+ sys/timeffc.h    |  102 +++++++++++++
+ 6 files changed, 574 insertions(+)
 
 Index: sys/kern/kern_tc.c
 ===================================================================
---- sys.orig/kern/kern_tc.c	2011-06-27 13:33:18.000000000 +1000
-+++ sys/kern/kern_tc.c	2011-06-27 16:24:46.000000000 +1000
+--- sys.orig/kern/kern_tc.c	2011-06-27 19:21:11.000000000 +1000
++++ sys/kern/kern_tc.c	2011-06-27 19:59:55.000000000 +1000
 @@ -1,29 +1,43 @@
  /*-
   * ----------------------------------------------------------------------------
@@ -59,7 +59,7 @@ Index: sys/kern/kern_tc.c
   * in the typical 'missed a couple of seconds' case, but doesn't loop
   * forever when the time step is large.
   */
-@@ -293,20 +307,429 @@ getmicrotime(struct timeval *tvp)
+@@ -293,20 +307,409 @@ getmicrotime(struct timeval *tvp)
  	struct timehands *th;
  	u_int gen;
  
@@ -153,7 +153,7 @@ Index: sys/kern/kern_tc.c
 +
 +	timespec2bintime(ts, &(cest.boot_time));
 +	cest.update_time = cest.boot_time;
-+	cest.update_ffcount = read_ffcounter();
++	ffclock_read_counter(&cest.update_ffcount);
 +	cest.leapsec_next = 0;
 +	cest.period = ((1LLU << 63) / tc->tc_frequency) << 1;
 +	cest.period_shortterm = cest.period;
@@ -265,14 +265,14 @@ Index: sys/kern/kern_tc.c
 +
 +	if (ffth->smoothjump != 0) {
 +		ffth->smoothjump -= ffth->smoothstep;
-+		nsec = (uint64_t)(ffth->smoothjump - ((ffth->smoothjump / 1e9) * 1e9));
++		nsec = (uint64_t)(ffth->smoothjump - (ffth->smoothjump / 1000000000LL) * 1000000000LL);
 +		nsec *= (uint64_t)18446744073LL;
 +
 +		if (ffth->smoothjump > 0)
 +			bintime_subx(&ffth->tick_time_smooth, nsec);
 +		else
 +			bintime_addx(&ffth->tick_time_smooth, nsec);
-+		ffth->tick_time_smooth.sec -= (ffth->smoothjump / 1e9) * 1e9;
++		ffth->tick_time_smooth.sec -= (ffth->smoothjump / 1000000000LL) * 1000000000LL;
 +	}
 +
 +	/*
@@ -304,15 +304,15 @@ Index: sys/kern/kern_tc.c
 +		 * cristals have a drift smaller than 1PPM and would then take over 200
 +		 * days to accumulate 18s of error.
 +		 */
-+		ffth->smoothjump = (ffth->tick_time_smooth.sec - ffth->tick_time.sec) * 1e9;
-+		ffth->smoothjump += ((uint64_t)1e9 * (uint32_t)(ffth->tick_time_smooth.frac >> 32)) >> 32;
-+		ffth->smoothjump -= ((uint64_t)1e9 * (uint32_t)(ffth->tick_time.frac >> 32)) >> 32;
++		ffth->smoothjump = (ffth->tick_time_smooth.sec - ffth->tick_time.sec) * 1000000000LL;
++		ffth->smoothjump += ((uint64_t)1000000000LL * (uint32_t)(ffth->tick_time_smooth.frac >> 32)) >> 32;
++		ffth->smoothjump -= ((uint64_t)1000000000LL * (uint32_t)(ffth->tick_time.frac >> 32)) >> 32;
 +		ffth->smoothjump += ffth->smoothjump;
-+		if ((ffth->smoothjump > 18e9) || (ffth->smoothjump < -18e9))
++		if ((ffth->smoothjump > 1800000000LL) || (ffth->smoothjump < -1800000000LL))
 +			ffth->smoothjump = 0;
 +
 +		ffdelta = cest->update_ffcount - fftimehands->cest.update_ffcount;
-+		ffclock_difftime_tc(&ffdelta, &bt);
++		ffclock_difftime_tc(ffdelta, &bt);
 +		ffth->smoothstep = ffth->smoothjump / bt.sec / hz;
 +
 +		if (ffth->smoothstep > (5000000 / hz))
@@ -375,41 +375,25 @@ Index: sys/kern/kern_tc.c
 +ffclock_abstime_tc(ffcounter *ffcount, struct bintime *bt, uint32_t flags)
 +{
 +	struct fftimehands *ffth;
-+	ffcounter ffdelta;
 +	uint8_t gen;
 +
-+	/* No locking but check generation has not changed. */
++	/*
++	 * No locking but check generation has not changed. Also need to make sure
++	 * ffdelta is positive, ie. ffcount > tick_ffcount
++	 */
 +	do {
 +		ffth = fftimehands;
 +		gen = ffth->gen;
-+		ffdelta = *ffcount - ffth->tick_ffcount;
-+		if (flags & FFCLOCK_MONOTONIC == FFCLOCK_MONOTONIC)
++		if ((flags & FFCLOCK_SMOOTH) == FFCLOCK_SMOOTH)
 +			*bt = ffth->tick_time_smooth;
 +		else
 +			*bt = ffth->tick_time;
-+		ffclock_add_delta(ffdelta, bt, &(ffth->cest));
-+	} while (gen == 0 || gen != ffth->gen);
-+}
-+
-+/*
-+ * Same as above but without reading the Feed-Forward, report the value last
-+ * updated in fftimehands.
-+ */
-+void
-+ffclock_abstime_tc_coarse(ffcounter *ffcount, struct bintime *bt, uint32_t flags)
-+{
-+	struct fftimehands *ffth;
-+	uint8_t gen;
-+
-+	/* No locking but check generation has not changed. */
-+	do {
-+		ffth = fftimehands;
-+		gen = ffth->gen;
-+		*ffcount = ffth->tick_ffcount;
-+		if (flags & FFCLOCK_MONOTONIC == FFCLOCK_MONOTONIC)
-+			*bt = ffth->tick_time_smooth;
-+		else
-+			*bt = ffth->tick_time;
++		if ((flags & FFCLOCK_FAST) == FFCLOCK_FAST)
++			*ffcount = ffth->tick_ffcount;
++		else {
++			ffclock_read_counter(ffcount);
++			ffclock_add_delta(*ffcount - ffth->tick_ffcount, bt, &(ffth->cest));
++		}
 +	} while (gen == 0 || gen != ffth->gen);
 +}
 +
@@ -419,12 +403,11 @@ Index: sys/kern/kern_tc.c
 + * TODO check for SKM_SCALE ?
 + */
 +void
-+ffclock_difftime_tc(ffcounter *ffdelta, struct bintime *bt)
++ffclock_difftime_tc(ffcounter ffdelta, struct bintime *bt)
 +{
 +	struct fftimehands *ffth;
 +	struct bintime delta;
 +	ffcounter delta_max;
-+	ffcounter ffdelta2;
 +	uint8_t gen;
 +
 +	delta_max = (1LLU << (8 * sizeof(u_int))) - 1;
@@ -435,32 +418,29 @@ Index: sys/kern/kern_tc.c
 +		gen = ffth->gen;
 +		bt->sec = 0;
 +		bt->frac = 0;
-+		ffdelta2 = *ffdelta;
 +
-+		while (ffdelta2 > delta_max) {
++		while (ffdelta > delta_max) {
 +			delta.sec = 0;
 +			delta.frac = ffth->cest.period;
 +			bintime_mul(&delta, (u_int)delta_max);
 +			bintime_add(bt, &delta);
-+			ffdelta2 -= delta_max;
++			ffdelta -= delta_max;
 +		}
 +		delta.sec = 0;
 +		delta.frac = ffth->cest.period;
-+		bintime_mul(&delta, ffdelta2);
++		bintime_mul(&delta, ffdelta);
 +		bintime_add(bt, &delta);
 +	} while (gen == 0 || gen != ffth->gen);
-+
 +}
 +
 +
 +/* Return current ffcounter value */
-+ffcounter
-+read_ffcounter(void)
++void
++ffclock_read_counter(ffcounter *ffcount)
 +{
 +	struct timehands *th;
 +	struct fftimehands *ffth;
 +	u_int gen, delta;
-+	ffcounter ffcount;
 +
 +	/*
 +	 * ffclock_windup() called from tc_windup(), safe to rely on
@@ -471,10 +451,10 @@ Index: sys/kern/kern_tc.c
 +		gen = th->th_generation;
 +		ffth = fftimehands;
 +		delta = tc_delta(th);
-+		ffcount = ffth->tick_ffcount;
++		*ffcount = ffth->tick_ffcount;
 +	} while (gen == 0 || gen != th->th_generation);
 +
-+	return (ffcount + delta);
++	*ffcount += delta;
 +}
 +#endif /* FFCLOCK */
 +
@@ -489,7 +469,7 @@ Index: sys/kern/kern_tc.c
  	struct sysctl_oid *tc_root;
  
  	u = tc->tc_frequency / tc->tc_counter_mask;
-@@ -433,20 +856,23 @@ tc_windup(void)
+@@ -433,20 +836,23 @@ tc_windup(void)
  	/*
  	 * Capture a timecounter delta on the current timecounter and if
  	 * changing timecounters, a counter value from the new timecounter.
@@ -513,7 +493,7 @@ Index: sys/kern/kern_tc.c
  	if ((delta > th->th_counter->tc_frequency / 2) &&
  	    (th->th_scale * delta < ((uint64_t)1 << 63))) {
  		/* The product th_scale * delta just barely overflows. */
-@@ -489,20 +915,23 @@ tc_windup(void)
+@@ -489,20 +895,23 @@ tc_windup(void)
  	/* XXX shouldn't do this here.  Should force non-`get' versions. */
  	bintime2timeval(&bt, &th->th_microtime);
  	bintime2timespec(&bt, &th->th_nanotime);
@@ -537,7 +517,7 @@ Index: sys/kern/kern_tc.c
  	 *
  	 * The th_adjustment is nanoseconds per second with 32 bit binary
  	 * fraction and we want 64 bit binary fraction of second:
-@@ -807,20 +1236,23 @@ inittimecounter(void *dummy)
+@@ -807,20 +1216,23 @@ inittimecounter(void *dummy)
  	 * smallest reasonable one.  If they want better timestamps they
  	 * should use the non-"get"* functions.
  	 */
@@ -563,8 +543,8 @@ Index: sys/kern/kern_tc.c
  
 Index: sys/conf/NOTES
 ===================================================================
---- sys.orig/conf/NOTES	2011-06-27 13:33:18.000000000 +1000
-+++ sys/conf/NOTES	2011-06-27 13:35:10.000000000 +1000
+--- sys.orig/conf/NOTES	2011-06-27 19:21:11.000000000 +1000
++++ sys/conf/NOTES	2011-06-27 19:21:43.000000000 +1000
 @@ -1178,20 +1178,28 @@ options 	CAPABILITIES
  # actually reducing the accuracy of operation.
  
@@ -596,8 +576,8 @@ Index: sys/conf/NOTES
  # device configuration sections below.
 Index: sys/conf/options
 ===================================================================
---- sys.orig/conf/options	2011-06-27 13:33:18.000000000 +1000
-+++ sys/conf/options	2011-06-27 13:35:10.000000000 +1000
+--- sys.orig/conf/options	2011-06-27 19:21:11.000000000 +1000
++++ sys/conf/options	2011-06-27 19:21:43.000000000 +1000
 @@ -69,20 +69,21 @@ COMPAT_43	opt_compat.h
  COMPAT_43TTY	opt_compat.h
  COMPAT_FREEBSD4	opt_compat.h
@@ -622,8 +602,8 @@ Index: sys/conf/options
  GEOM_GATE	opt_geom.h
 Index: sys/kern/subr_rtc.c
 ===================================================================
---- sys.orig/kern/subr_rtc.c	2011-06-27 13:33:18.000000000 +1000
-+++ sys/kern/subr_rtc.c	2011-06-27 13:35:10.000000000 +1000
+--- sys.orig/kern/subr_rtc.c	2011-06-27 19:21:11.000000000 +1000
++++ sys/kern/subr_rtc.c	2011-06-27 19:21:43.000000000 +1000
 @@ -53,20 +53,25 @@ __FBSDID("$FreeBSD$");
  #include <sys/param.h>
  #include <sys/systm.h>
@@ -677,8 +657,8 @@ Index: sys/kern/subr_rtc.c
 Index: sys/sys/timeffc.h
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ sys/sys/timeffc.h	2011-06-27 13:35:10.000000000 +1000
-@@ -0,0 +1,77 @@
++++ sys/sys/timeffc.h	2011-06-27 19:21:43.000000000 +1000
+@@ -0,0 +1,102 @@
 +/*-
 + * Copyright (C) 2010 University of Melbourne
 + * All rights reserved.
@@ -738,20 +718,45 @@ Index: sys/sys/timeffc.h
 +#ifdef _KERNEL
 +
 +/*
-+ * These are low level functions to read the value of the Feed-Forward Counter,
-+ * convert the counter value into absolute time and compute time intervals
-+ * between two counter values using the Feed-Forward Clock. These functions rely
-+ * on the timecounters and ffclock_estimates stored in fftimehands. Note that
-+ * the error_bound parameter is not the error of the clock but an upper bound on
-+ * the error of the absolute time or time interval returned.
++ * Clock flags to select how the Feed-Forward counter is converted to
++ * time in seconds.
++ * FAST:	do not read the hardware counter, returns time of last tick. The
++ * 			time returned as the resolution of the kernel tick (1/hz [s]).
++ * SMOOTH:	smoothes clock and prevent it from going backward (monotonic).
++ * 			Slightly less accurate and may take time to converge.
++ * LEAPSEC: returns UTC time, including leap seconds.
 + */
-+ffcounter read_ffcounter(void);
-+void ffclock_difftime_tc(ffcounter *ffdelta, struct bintime *bt);
-+void ffclock_abstime_tc(ffcounter *ffcount, struct bintime *bt);
-+void ffclock_abstime_tc_coarse(ffcounter *ffcount, struct bintime *bt);
++#define FFCLOCK_FAST		1
++#define FFCLOCK_SMOOTH		2
++#define FFCLOCK_LEAPSEC		4
 +
-+/* Resets the feed-forward clock */
++/* Resets Feed-Forward clock from RTC */
 +void ffclock_reset_clock(struct timespec *ts);
++
++/* Low level routines to compute absolute time and time intervals */
++void ffclock_abstime_tc(ffcounter *ffcount, struct bintime *bt, uint32_t flags);
++void ffclock_difftime_tc(ffcounter ffdelta, struct bintime *bt);
++
++/*
++ * Feed-Forward clock routines.
++ *
++ * These functions rely on the timecounters and ffclock_estimates stored in
++ * fftimehands. Note that the error_bound parameter is not the error of the
++ * clock but an upper bound on the error of the absolute time or time interval
++ * returned.
++ *
++ * ffclock_abstime(): retrieves current time as counter value and corresponding
++ * 		conversion in seconds. The value of the time in seconds depends on the
++ *		flags passed: for a unique counter value, different conversions in
++ * 		second are possible.
++ * ffclock_difftime(): computes a time interval in seconds based on an interval
++ * 		measured in counter value. This should be the preferred way to measure
++ * 		 very accurately small time intervals.
++ * ffclock_read_counter(): returned current Feed-Forward counter value.
++ */
++void ffclock_abstime(ffcounter *ffcount, struct bintime *bt, struct bintime *error_bound, uint32_t flags);
++void ffclock_difftime(ffcounter ffdelta, struct bintime *bt, struct bintime *error_bound);
++void ffclock_read_counter(ffcounter *ffcount);
 +
 +#endif /* _KERNEL */
 +#endif /* __BSD_VISIBLE */
@@ -759,7 +764,7 @@ Index: sys/sys/timeffc.h
 Index: sys/sys/_ffcounter.h
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ sys/sys/_ffcounter.h	2011-06-27 13:35:10.000000000 +1000
++++ sys/sys/_ffcounter.h	2011-06-27 19:21:43.000000000 +1000
 @@ -0,0 +1,43 @@
 +/*-
 + * Copyright (C) 2010 University of Melbourne

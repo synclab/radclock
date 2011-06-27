@@ -5,15 +5,15 @@ guests see the same time and allow live migration.
 
 ---
  i386/xen/clock.c |   35 +++++++++++++++++++++++++++++++++++
- kern/kern_tc.c   |   48 +++++++++++++++++++++++++++++++++++++-----------
+ kern/kern_tc.c   |   41 +++++++++++++++++++++++++++++++++--------
  sys/timetc.h     |   14 ++++++++++++++
  x86/x86/tsc.c    |   27 +++++++++++++++++++++++++++
- 4 files changed, 113 insertions(+), 11 deletions(-)
+ 4 files changed, 109 insertions(+), 8 deletions(-)
 
 Index: sys/i386/xen/clock.c
 ===================================================================
---- sys.orig/i386/xen/clock.c	2011-06-23 17:52:55.000000000 +1000
-+++ sys/i386/xen/clock.c	2011-06-27 16:31:11.000000000 +1000
+--- sys.orig/i386/xen/clock.c	2011-06-27 16:58:03.000000000 +1000
++++ sys/i386/xen/clock.c	2011-06-27 20:56:26.000000000 +1000
 @@ -1,17 +1,23 @@
  /*-
   * Copyright (C) 1990 The Regents of the University of California.
@@ -119,17 +119,17 @@ Index: sys/i386/xen/clock.c
  {
 Index: sys/kern/kern_tc.c
 ===================================================================
---- sys.orig/kern/kern_tc.c	2011-06-27 16:30:35.000000000 +1000
-+++ sys/kern/kern_tc.c	2011-06-27 16:57:50.000000000 +1000
-@@ -689,44 +689,63 @@ ffclock_difftime_tc(ffcounter *ffdelta, 
- 			ffdelta2 -= delta_max;
+--- sys.orig/kern/kern_tc.c	2011-06-27 20:56:13.000000000 +1000
++++ sys/kern/kern_tc.c	2011-06-27 21:08:08.000000000 +1000
+@@ -670,42 +670,60 @@ ffclock_difftime_tc(ffcounter ffdelta, s
+ 			bintime_add(bt, &delta);
+ 			ffdelta -= delta_max;
  		}
  		delta.sec = 0;
  		delta.frac = ffth->cest.period;
- 		bintime_mul(&delta, ffdelta2);
+ 		bintime_mul(&delta, ffdelta);
  		bintime_add(bt, &delta);
  	} while (gen == 0 || gen != ffth->gen);
- 
  }
  
 +static int sysctl_kern_timecounter_passthrough = 0;
@@ -138,54 +138,49 @@ Index: sys/kern/kern_tc.c
 +	"Select universal Feed-Forward timecounter for OS virtualization");
  
  /* Return current ffcounter value */
- ffcounter
- read_ffcounter(void)
+ void
+ ffclock_read_counter(ffcounter *ffcount)
  {
  	struct timehands *th;
  	struct fftimehands *ffth;
  	u_int gen, delta;
- 	ffcounter ffcount;
 +	struct timecounter *tc;
  
--	/*
--	 * ffclock_windup() called from tc_windup(), safe to rely on
--	 * th->th_generation only, for correct delta and ffcounter.
--	 */
++	if (sysctl_kern_timecounter_passthrough) {
++		tc = timehands->th_counter;
++		*ffcount = tc->tc_get_timecount_64(tc);
++	}
+ 	/*
+ 	 * ffclock_windup() called from tc_windup(), safe to rely on
+ 	 * th->th_generation only, for correct delta and ffcounter.
+ 	 */
 -	do {
 -		th = timehands;
 -		gen = th->th_generation;
 -		ffth = fftimehands;
 -		delta = tc_delta(th);
--		ffcount = ffth->tick_ffcount;
+-		*ffcount = ffth->tick_ffcount;
 -	} while (gen == 0 || gen != th->th_generation);
-+	if ( sysctl_kern_timecounter_passthrough ) {
-+		tc = timehands->th_counter;
-+		return tc->tc_get_timecount_64(tc);
-+	}
-+ 	/*
-+ 	 * ffclock_windup() called from tc_windup(), safe to rely on
-+ 	 * th->th_generation only, for correct delta and ffcounter.
-+ 	 */
 +	else {
 +		do {
 +			th = timehands;
 +			gen = th->th_generation;
 +			ffth = fftimehands;
 +			delta = tc_delta(th);
-+			ffcount = ffth->ffcount_mark;
++			*ffcount = ffth->tick_ffcount;
 +		} while (gen == 0 || gen != th->th_generation);
++		*ffcount += delta;
 +	}
++}
  
- 	return (ffcount + delta);
- }
-+
+-	*ffcount += delta;
 +static __inline uint64_t
 +tc_get_timecount_fake64(struct timecounter *tc)
 +{
 +	u_int count;
 +	count = tc->tc_get_timecount(tc);
 +	return (uint64_t) count;
-+}
+ }
  #endif /* FFCLOCK */
  
  
@@ -195,8 +190,7 @@ Index: sys/kern/kern_tc.c
  void
  tc_init(struct timecounter *tc)
  {
- 	u_int u;
-@@ -742,20 +761,27 @@ tc_init(struct timecounter *tc)
+@@ -722,20 +740,27 @@ tc_init(struct timecounter *tc)
  			printf("Timecounter \"%s\" frequency %ju Hz",
  			    tc->tc_name, (uintmax_t)tc->tc_frequency);
  			printf(" -- Insufficient hz, needs at least %u\n", u);
@@ -226,8 +220,8 @@ Index: sys/kern/kern_tc.c
  	    "mask", CTLFLAG_RD, &(tc->tc_counter_mask), 0,
 Index: sys/sys/timetc.h
 ===================================================================
---- sys.orig/sys/timetc.h	2011-06-23 17:52:55.000000000 +1000
-+++ sys/sys/timetc.h	2011-06-27 16:31:11.000000000 +1000
+--- sys.orig/sys/timetc.h	2011-06-27 16:58:03.000000000 +1000
++++ sys/sys/timetc.h	2011-06-27 20:56:26.000000000 +1000
 @@ -1,18 +1,24 @@
  /*-
   * ----------------------------------------------------------------------------
@@ -284,8 +278,8 @@ Index: sys/sys/timetc.h
  void	tc_init(struct timecounter *tc);
 Index: sys/x86/x86/tsc.c
 ===================================================================
---- sys.orig/x86/x86/tsc.c	2011-06-23 17:52:55.000000000 +1000
-+++ sys/x86/x86/tsc.c	2011-06-27 16:31:11.000000000 +1000
+--- sys.orig/x86/x86/tsc.c	2011-06-27 16:58:03.000000000 +1000
++++ sys/x86/x86/tsc.c	2011-06-27 20:56:26.000000000 +1000
 @@ -1,14 +1,20 @@
  /*-
   * Copyright (C) 1998-2003 Poul-Henning Kamp
