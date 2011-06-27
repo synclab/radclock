@@ -1,14 +1,14 @@
 ---
  conf/files          |    1 
- kern/kern_ffclock.c |  172 ++++++++++++++++++++++++++++++++++++++++++++++++++++
- sys/timeffc.h       |   32 +++++++++
- 3 files changed, 205 insertions(+)
+ kern/kern_ffclock.c |  254 ++++++++++++++++++++++++++++++++++++++++++++++++++++
+ sys/timeffc.h       |   40 ++++++++
+ 3 files changed, 295 insertions(+)
 
 Index: sys/kern/kern_ffclock.c
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ sys/kern/kern_ffclock.c	2011-06-23 22:42:50.000000000 +1000
-@@ -0,0 +1,172 @@
++++ sys/kern/kern_ffclock.c	2011-06-25 21:45:41.000000000 +1000
+@@ -0,0 +1,254 @@
 +/*-
 + * Copyright (C) 2010 University of Melbourne
 + * All rights reserved.
@@ -42,6 +42,7 @@ Index: sys/kern/kern_ffclock.c
 +
 +
 +extern struct ffclock_estimate ffclock_estimate;
++extern struct bintime ffclock_boottimebin;
 +
 +/*
 + * Feed-Forward Clock time functions
@@ -51,7 +52,7 @@ Index: sys/kern/kern_ffclock.c
 +				struct bintime *error_bound, unsigned char flags)
 +{
 +	struct ffclock_estimate cest;
-+	ffcounter last_update;
++	ffcounter update_ffcount;
 +	ffcounter ffdelta_error;
 +
 +// TODO: Check options, bit mask
@@ -60,11 +61,11 @@ Index: sys/kern/kern_ffclock.c
 +	else
 +		ffclock_abstime_tc_coarse(ffcount, bt);
 +
-+	/* Current ffclock estimate, use last_update as generation number */
++	/* Current ffclock estimate, use update_ffcount as generation number */
 +	do {
-+		last_update = ffclock_estimate.last_update;
++		update_ffcount = ffclock_estimate.update_ffcount;
 +		bcopy(&ffclock_estimate, &cest, sizeof(struct ffclock_estimate));
-+	} while (last_update != ffclock_estimate.last_update);
++	} while (update_ffcount != ffclock_estimate.update_ffcount);
 +
 +	/*
 +	 * Leap second adjustement. Total as seen by synchronisation algorithm since
@@ -73,12 +74,12 @@ Index: sys/kern/kern_ffclock.c
 +	 */
 +	if ((flags & FFCLOCK_LEAPSEC) == FFCLOCK_LEAPSEC) {
 +		bt->sec -= cest.leapsec_total;
-+		if (ffcount > cest.leapsec_next)
++		if (*ffcount > cest.leapsec_next)
 +			bt->sec -= cest.leapsec;
 +	}
 +
 +	if (error_bound) {
-+		ffdelta_error = *ffcount - cest.last_update;
++		ffdelta_error = *ffcount - cest.update_ffcount;
 +		ffclock_difftime_tc(&ffdelta_error, error_bound);
 +		/* 18446744073709 = int(2^64 / 1e12), err_bound_rate in [ps/s] */
 +		bintime_mul(error_bound, cest.error_bound_rate * (uint64_t)18446744073709LL);
@@ -91,7 +92,7 @@ Index: sys/kern/kern_ffclock.c
 +ffclock_difftime(ffcounter *ffdelta, struct bintime *bt,
 +				struct bintime *error_bound, unsigned char flags)
 +{
-+	ffcounter last_update;
++	ffcounter update_ffcount;
 +	uint32_t err_rate;
 +
 +// TODO: Check options, bit mask
@@ -99,9 +100,9 @@ Index: sys/kern/kern_ffclock.c
 +
 +	if (error_bound) {
 +		do {
-+			last_update = ffclock_estimate.last_update;
++			update_ffcount = ffclock_estimate.update_ffcount;
 +			err_rate = ffclock_estimate.error_bound_rate;
-+		} while (last_update != ffclock_estimate.last_update);
++		} while (update_ffcount != ffclock_estimate.update_ffcount);
 +
 +		ffclock_difftime_tc(ffdelta, error_bound);
 +		/* 18446744073709 = int(2^64 / 1e12), err_bound_rate in [ps/s] */
@@ -113,78 +114,159 @@ Index: sys/kern/kern_ffclock.c
 +/*
 + * High level functions to access the Feed-Forward Clock.
 + */
-+void ffclock_bintime(struct bintime *bt)
++void
++ffclock_bintime(struct bintime *bt)
 +{
 +	ffcounter ffcount;
 +
 +	ffcount = read_ffcounter();
-+	ffclock_abstime(&ffcount, bt, NULL);
++	ffclock_abstime(&ffcount, bt, NULL, FFCLOCK_MONOTONIC | FFCLOCK_LEAPSEC);
 +}
 +
-+void ffclock_nanotime(struct timespec *tsp)
++void
++ffclock_nanotime(struct timespec *tsp)
 +{
 +	struct bintime bt;
 +	ffcounter ffcount;
 +
 +	ffcount = read_ffcounter();
-+	ffclock_abstime(&ffcount, &bt, NULL);
++	ffclock_abstime(&ffcount, &bt, NULL, FFCLOCK_MONOTONIC | FFCLOCK_LEAPSEC);
 +	bintime2timespec(&bt, tsp);
 +}
 +
-+void ffclock_microtime(struct timeval *tvp)
++void
++ffclock_microtime(struct timeval *tvp)
 +{
 +	struct bintime bt;
 +	ffcounter ffcount;
 +
 +	ffcount = read_ffcounter();
-+	ffclock_abstime(&ffcount, &bt, NULL);
++	ffclock_abstime(&ffcount, &bt, NULL, FFCLOCK_MONOTONIC | FFCLOCK_LEAPSEC);
 +	bintime2timeval(&bt, tvp);
 +}
 +
-+void ffclock_getbintime(struct bintime *bt)
++void
++ffclock_getbintime(struct bintime *bt)
 +{
++	ffcounter ffcount;
 +
-+	ffclock_abstime_coarse(bt);
++	ffclock_abstime(&ffcount, bt, NULL, FFCLOCK_FAST | FFCLOCK_LEAPSEC);
 +}
 +
-+void ffclock_getnanotime(struct timespec *tsp)
++void
++ffclock_getnanotime(struct timespec *tsp)
 +{
-+	ffclock_abstime_coarse(&bt);
++	struct bintime bt;
++	ffcounter ffcount;
++
++	ffclock_abstime(&ffcount, &bt, NULL, FFCLOCK_FAST | FFCLOCK_LEAPSEC);
 +	bintime2timespec(&bt, tsp);
 +}
 +
-+void ffclock_getmicrotime(struct timeval *tvp)
++void
++ffclock_getmicrotime(struct timeval *tvp)
 +{
-+	ffclock_abstime_coarse(&bt);
++	struct bintime bt;
++	ffcounter ffcount;
++
++	ffclock_abstime(&ffcount, &bt, NULL, FFCLOCK_FAST | FFCLOCK_LEAPSEC);
 +	bintime2timeval(&bt, tvp);
 +}
 +
-+void ffclock_bindifftime(ffcounter *ffdelta, struct bintime *bt)
++void
++ffclock_binuptime(struct bintime *bt)
 +{
++	ffcounter ffcount;
 +
-+	ffclock_difftime(ffdelta, bt, NULL);
++	ffcount = read_ffcounter();
++	ffclock_abstime(&ffcount, bt, NULL, FFCLOCK_MONOTONIC | FFCLOCK_LEAPSEC);
++	bintime_sub(bt, &ffclock_boottimebin);
 +}
 +
-+void ffclock_nanodifftime(ffcounter *ffdelta, struct timespec *tsp);
++void
++ffclock_nanouptime(struct timespec *tsp)
 +{
 +	struct bintime bt;
++	ffcounter ffcount;
 +
-+	ffclock_difftime(ffdelta, &bt, NULL);
++	ffcount = read_ffcounter();
++	ffclock_abstime(&ffcount, &bt, NULL, FFCLOCK_MONOTONIC | FFCLOCK_LEAPSEC);
++	bintime_sub(bt, &ffclock_boottimebin);
 +	bintime2timespec(&bt, tsp);
 +}
 +
-+void ffclock_microdifftime(ffcounter *ffdelta, struct timeval *tvp);
++void
++ffclock_microuptime(struct timeval *tvp)
++{
++	struct bintime bt;
++	ffcounter ffcount;
++
++	ffcount = read_ffcounter();
++	ffclock_abstime(&ffcount, &bt, NULL, FFCLOCK_MONOTONIC | FFCLOCK_LEAPSEC);
++	bintime_sub(bt, &ffclock_boottimebin);
++	bintime2timeval(&bt, tvp);
++}
++
++void
++ffclock_getbinuptime(struct bintime *bt)
++{
++	ffcounter ffcount;
++
++	ffclock_abstime(&ffcount, bt, NULL, FFCLOCK_FAST | FFCLOCK_LEAPSEC);
++	bintime_sub(bt, &ffclock_boottimebin);
++}
++
++void
++ffclock_getnanouptime(struct timespec *tsp)
++{
++	struct bintime bt;
++	ffcounter ffcount;
++
++	ffclock_abstime(&ffcount, &bt, NULL, FFCLOCK_FAST | FFCLOCK_LEAPSEC);
++	bintime_sub(bt, &ffclock_boottimebin);
++	bintime2timespec(&bt, tsp);
++}
++
++void
++ffclock_getmicrouptime(struct timeval *tvp)
++{
++	struct bintime bt;
++	ffcounter ffcount;
++
++	ffclock_abstime(&ffcount, &bt, NULL, FFCLOCK_FAST | FFCLOCK_LEAPSEC);
++	bintime_sub(bt, &ffclock_boottimebin);
++	bintime2timeval(&bt, tvp);
++}
++
++void
++ffclock_bindifftime(ffcounter *ffdelta, struct bintime *bt)
++{
++
++	ffclock_difftime(ffdelta, bt, NULL, 0);
++}
++
++void
++ffclock_nanodifftime(ffcounter *ffdelta, struct timespec *tsp)
 +{
 +	struct bintime bt;
 +
-+	ffclock_difftime(ffdelta, &bt, NULL);
++	ffclock_difftime(ffdelta, &bt, NULL, 0);
++	bintime2timespec(&bt, tsp);
++}
++
++void
++ffclock_microdifftime(ffcounter *ffdelta, struct timeval *tvp)
++{
++	struct bintime bt;
++
++	ffclock_difftime(ffdelta, &bt, NULL, 0);
 +	bintime2timeval(&bt, tvp);
 +}
 +
 Index: sys/conf/files
 ===================================================================
---- sys.orig/conf/files	2011-06-23 22:37:11.000000000 +1000
-+++ sys/conf/files	2011-06-23 22:37:31.000000000 +1000
+--- sys.orig/conf/files	2011-06-24 17:36:47.000000000 +1000
++++ sys/conf/files	2011-06-24 18:19:05.000000000 +1000
 @@ -2293,20 +2293,21 @@ kern/kern_cpu.c			standard
  kern/kern_cpuset.c		standard
  kern/kern_context.c		standard
@@ -209,9 +291,9 @@ Index: sys/conf/files
  kern/kern_ktrace.c		standard
 Index: sys/sys/timeffc.h
 ===================================================================
---- sys.orig/sys/timeffc.h	2011-06-23 22:37:11.000000000 +1000
-+++ sys/sys/timeffc.h	2011-06-23 22:37:31.000000000 +1000
-@@ -64,13 +64,45 @@ struct ffclock_estimate {
+--- sys.orig/sys/timeffc.h	2011-06-24 17:36:47.000000000 +1000
++++ sys/sys/timeffc.h	2011-06-24 18:19:05.000000000 +1000
+@@ -65,13 +65,53 @@ struct ffclock_estimate {
   * the error of the absolute time or time interval returned.
   */
  ffcounter read_ffcounter(void);
@@ -249,6 +331,14 @@ Index: sys/sys/timeffc.h
 +void ffclock_getbintime(struct bintime *bt);
 +void ffclock_getnanotime(struct timespec *tsp);
 +void ffclock_getmicrotime(struct timeval *tvp);
++
++void ffclock_binuptime(struct bintime *bt);
++void ffclock_nanouptime(struct timespec *tsp);
++void ffclock_microuptime(struct timeval *tvp);
++
++void ffclock_getbinuptime(struct bintime *bt);
++void ffclock_getnanouptime(struct timespec *tsp);
++void ffclock_getmicrouptime(struct timeval *tvp);
 +
 +void ffclock_bindifftime(ffcounter *ffdelta, struct bintime *bt);
 +void ffclock_nanodifftime(ffcounter *ffdelta, struct timespec *tsp);
