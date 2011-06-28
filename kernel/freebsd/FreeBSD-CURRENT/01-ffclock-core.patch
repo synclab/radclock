@@ -5,16 +5,16 @@ Core set of changes to support a feed-forward clock within the kernel.
 ---
  conf/NOTES       |    8 +
  conf/options     |    1 
- kern/kern_tc.c   |  412 +++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ kern/kern_tc.c   |  415 +++++++++++++++++++++++++++++++++++++++++++++++++++++++
  kern/subr_rtc.c  |    8 +
  sys/_ffcounter.h |   43 +++++
  sys/timeffc.h    |  102 +++++++++++++
- 6 files changed, 574 insertions(+)
+ 6 files changed, 577 insertions(+)
 
 Index: sys/kern/kern_tc.c
 ===================================================================
 --- sys.orig/kern/kern_tc.c	2011-06-27 19:21:11.000000000 +1000
-+++ sys/kern/kern_tc.c	2011-06-27 19:59:55.000000000 +1000
++++ sys/kern/kern_tc.c	2011-06-28 15:42:56.000000000 +1000
 @@ -1,29 +1,43 @@
  /*-
   * ----------------------------------------------------------------------------
@@ -59,7 +59,7 @@ Index: sys/kern/kern_tc.c
   * in the typical 'missed a couple of seconds' case, but doesn't loop
   * forever when the time step is large.
   */
-@@ -293,20 +307,409 @@ getmicrotime(struct timeval *tvp)
+@@ -293,20 +307,412 @@ getmicrotime(struct timeval *tvp)
  	struct timehands *th;
  	u_int gen;
  
@@ -313,6 +313,9 @@ Index: sys/kern/kern_tc.c
 +
 +		ffdelta = cest->update_ffcount - fftimehands->cest.update_ffcount;
 +		ffclock_difftime_tc(ffdelta, &bt);
++		/* If clock has been reset, no good estimate. Default to small polling period */
++		if (bt.sec == 0)
++			bt.sec = 16;
 +		ffth->smoothstep = ffth->smoothjump / bt.sec / hz;
 +
 +		if (ffth->smoothstep > (5000000 / hz))
@@ -469,7 +472,7 @@ Index: sys/kern/kern_tc.c
  	struct sysctl_oid *tc_root;
  
  	u = tc->tc_frequency / tc->tc_counter_mask;
-@@ -433,20 +836,23 @@ tc_windup(void)
+@@ -433,20 +839,23 @@ tc_windup(void)
  	/*
  	 * Capture a timecounter delta on the current timecounter and if
  	 * changing timecounters, a counter value from the new timecounter.
@@ -493,7 +496,7 @@ Index: sys/kern/kern_tc.c
  	if ((delta > th->th_counter->tc_frequency / 2) &&
  	    (th->th_scale * delta < ((uint64_t)1 << 63))) {
  		/* The product th_scale * delta just barely overflows. */
-@@ -489,20 +895,23 @@ tc_windup(void)
+@@ -489,20 +898,23 @@ tc_windup(void)
  	/* XXX shouldn't do this here.  Should force non-`get' versions. */
  	bintime2timeval(&bt, &th->th_microtime);
  	bintime2timespec(&bt, &th->th_nanotime);
@@ -517,7 +520,7 @@ Index: sys/kern/kern_tc.c
  	 *
  	 * The th_adjustment is nanoseconds per second with 32 bit binary
  	 * fraction and we want 64 bit binary fraction of second:
-@@ -807,20 +1216,23 @@ inittimecounter(void *dummy)
+@@ -807,20 +1219,23 @@ inittimecounter(void *dummy)
  	 * smallest reasonable one.  If they want better timestamps they
  	 * should use the non-"get"* functions.
  	 */
@@ -657,7 +660,7 @@ Index: sys/kern/subr_rtc.c
 Index: sys/sys/timeffc.h
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ sys/sys/timeffc.h	2011-06-27 19:21:43.000000000 +1000
++++ sys/sys/timeffc.h	2011-06-28 15:43:11.000000000 +1000
 @@ -0,0 +1,102 @@
 +/*-
 + * Copyright (C) 2010 University of Melbourne

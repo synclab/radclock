@@ -1,14 +1,14 @@
 ---
  conf/files          |    1 
- kern/kern_ffclock.c |  238 ++++++++++++++++++++++++++++++++++++++++++++++++++++
- sys/timeffc.h       |   31 ++++++
- 3 files changed, 270 insertions(+)
+ kern/kern_ffclock.c |  237 ++++++++++++++++++++++++++++++++++++++++++++++++++++
+ sys/timeffc.h       |   34 +++++++
+ 3 files changed, 272 insertions(+)
 
 Index: sys/kern/kern_ffclock.c
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ sys/kern/kern_ffclock.c	2011-06-27 20:41:48.000000000 +1000
-@@ -0,0 +1,238 @@
++++ sys/kern/kern_ffclock.c	2011-06-28 15:43:26.000000000 +1000
+@@ -0,0 +1,237 @@
 +/*-
 + * Copyright (C) 2010 University of Melbourne
 + * All rights reserved.
@@ -44,7 +44,6 @@ Index: sys/kern/kern_ffclock.c
 +#include <sys/timeffc.h>
 +
 +extern struct ffclock_estimate ffclock_estimate;
-+extern struct bintime ffclock_boottime;
 +
 +/*
 + * Feed-Forward Clock time functions
@@ -249,8 +248,8 @@ Index: sys/kern/kern_ffclock.c
 +}
 Index: sys/conf/files
 ===================================================================
---- sys.orig/conf/files	2011-06-27 19:21:11.000000000 +1000
-+++ sys/conf/files	2011-06-27 20:03:53.000000000 +1000
+--- sys.orig/conf/files	2011-06-28 15:43:11.000000000 +1000
++++ sys/conf/files	2011-06-28 15:43:26.000000000 +1000
 @@ -2293,20 +2293,21 @@ kern/kern_cpu.c			standard
  kern/kern_cpuset.c		standard
  kern/kern_context.c		standard
@@ -275,9 +274,33 @@ Index: sys/conf/files
  kern/kern_ktrace.c		standard
 Index: sys/sys/timeffc.h
 ===================================================================
---- sys.orig/sys/timeffc.h	2011-06-27 19:21:43.000000000 +1000
-+++ sys/sys/timeffc.h	2011-06-27 20:26:15.000000000 +1000
-@@ -90,13 +90,44 @@ void ffclock_difftime_tc(ffcounter ffdel
+--- sys.orig/sys/timeffc.h	2011-06-28 15:43:11.000000000 +1000
++++ sys/sys/timeffc.h	2011-06-28 15:43:26.000000000 +1000
+@@ -61,20 +61,23 @@ struct ffclock_estimate {
+  * time in seconds.
+  * FAST:	do not read the hardware counter, returns time of last tick. The
+  * 			time returned as the resolution of the kernel tick (1/hz [s]).
+  * SMOOTH:	smoothes clock and prevent it from going backward (monotonic).
+  * 			Slightly less accurate and may take time to converge.
+  * LEAPSEC: returns UTC time, including leap seconds.
+  */
+ #define FFCLOCK_FAST		1
+ #define FFCLOCK_SMOOTH		2
+ #define FFCLOCK_LEAPSEC		4
++#define FFCLOCK_UTC			(FFCLOCK_SMOOTH | FFCLOCK_LEAPSEC)
++
++extern struct bintime ffclock_boottime;
+ 
+ /* Resets Feed-Forward clock from RTC */
+ void ffclock_reset_clock(struct timespec *ts);
+ 
+ /* Low level routines to compute absolute time and time intervals */
+ void ffclock_abstime_tc(ffcounter *ffcount, struct bintime *bt, uint32_t flags);
+ void ffclock_difftime_tc(ffcounter ffdelta, struct bintime *bt);
+ 
+ /*
+  * Feed-Forward clock routines.
+@@ -90,13 +93,44 @@ void ffclock_difftime_tc(ffcounter ffdel
   * 		second are possible.
   * ffclock_difftime(): computes a time interval in seconds based on an interval
   * 		measured in counter value. This should be the preferred way to measure

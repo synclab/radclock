@@ -14,8 +14,8 @@ clock.
 
 Index: sys/kern/syscalls.master
 ===================================================================
---- sys.orig/kern/syscalls.master	2011-06-27 16:58:03.000000000 +1000
-+++ sys/kern/syscalls.master	2011-06-27 20:42:07.000000000 +1000
+--- sys.orig/kern/syscalls.master	2011-06-28 14:46:40.000000000 +1000
++++ sys/kern/syscalls.master	2011-06-28 15:52:44.000000000 +1000
 @@ -449,23 +449,23 @@
  				    struct sigevent *evp, int *timerid); }
  236	AUE_NULL	STD	{ int ktimer_delete(int timerid); }
@@ -45,8 +45,8 @@ Index: sys/kern/syscalls.master
  251	AUE_RFORK	STD	{ int rfork(int flags); }
 Index: sys/sys/time.h
 ===================================================================
---- sys.orig/sys/time.h	2011-06-27 17:05:29.000000000 +1000
-+++ sys/sys/time.h	2011-06-27 20:42:07.000000000 +1000
+--- sys.orig/sys/time.h	2011-06-28 14:46:40.000000000 +1000
++++ sys/sys/time.h	2011-06-28 15:52:44.000000000 +1000
 @@ -26,20 +26,21 @@
   * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
   * SUCH DAMAGE.
@@ -71,8 +71,8 @@ Index: sys/sys/time.h
  #define	DST_USA		1	/* USA style dst */
 Index: sys/compat/freebsd32/syscalls.master
 ===================================================================
---- sys.orig/compat/freebsd32/syscalls.master	2011-06-27 16:58:03.000000000 +1000
-+++ sys/compat/freebsd32/syscalls.master	2011-06-27 20:42:07.000000000 +1000
+--- sys.orig/compat/freebsd32/syscalls.master	2011-06-28 14:46:40.000000000 +1000
++++ sys/compat/freebsd32/syscalls.master	2011-06-28 15:52:44.000000000 +1000
 @@ -440,23 +440,23 @@
  234	AUE_NULL	STD	{ int freebsd32_clock_getres(clockid_t clock_id, \
  				    struct timespec32 *tp); }
@@ -102,9 +102,9 @@ Index: sys/compat/freebsd32/syscalls.master
  251	AUE_RFORK	NOPROTO	{ int rfork(int flags); }
 Index: sys/kern/kern_ffclock.c
 ===================================================================
---- sys.orig/kern/kern_ffclock.c	2011-06-27 20:41:48.000000000 +1000
-+++ sys/kern/kern_ffclock.c	2011-06-27 20:45:32.000000000 +1000
-@@ -22,25 +22,36 @@
+--- sys.orig/kern/kern_ffclock.c	2011-06-28 15:43:26.000000000 +1000
++++ sys/kern/kern_ffclock.c	2011-06-28 15:53:45.000000000 +1000
+@@ -22,24 +22,35 @@
   * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
   * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
   * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
@@ -128,7 +128,6 @@ Index: sys/kern/kern_ffclock.c
  #include <sys/timeffc.h>
  
  extern struct ffclock_estimate ffclock_estimate;
- extern struct bintime ffclock_boottime;
 +extern uint8_t ffclock_fetch_update;
 +extern struct mtx ffclock_mtx;	/* lock against concurrent updates of the ffclock estimates */
  
@@ -141,7 +140,7 @@ Index: sys/kern/kern_ffclock.c
  {
  	struct ffclock_estimate cest;
  	ffcounter ffc;
-@@ -229,10 +240,95 @@ ffclock_nanodifftime(ffcounter ffdelta, 
+@@ -228,10 +239,95 @@ ffclock_nanodifftime(ffcounter ffdelta, 
  }
  
  void

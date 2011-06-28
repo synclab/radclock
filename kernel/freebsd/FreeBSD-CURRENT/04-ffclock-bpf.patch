@@ -4,14 +4,14 @@ Add ffcounter timestamps to the BPF header for export via libpcap.
 Allow to choose between feedback and feed-forward clock for timestamping.
 
 ---
- net/bpf.c |  112 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
- net/bpf.h |   25 +++++++++++++
- 2 files changed, 137 insertions(+)
+ net/bpf.c |  135 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++-
+ net/bpf.h |   18 ++++++++
+ 2 files changed, 152 insertions(+), 1 deletion(-)
 
 Index: sys/net/bpf.h
 ===================================================================
---- sys.orig/net/bpf.h	2011-03-31 21:54:36.000000000 +1100
-+++ sys/net/bpf.h	2011-06-15 16:28:20.000000000 +1000
+--- sys.orig/net/bpf.h	2011-06-28 13:48:48.000000000 +1000
++++ sys/net/bpf.h	2011-06-28 13:50:30.000000000 +1000
 @@ -1,19 +1,25 @@
  /*-
   * Copyright (C) 1990, 1991, 1993
@@ -38,8 +38,7 @@ Index: sys/net/bpf.h
   *    documentation and/or other materials provided with the distribution.
   * 4. Neither the name of the University nor the names of its contributors
   *    may be used to endorse or promote products derived from this software
-@@ -162,59 +168,78 @@ enum bpf_direction {
- /* Time stamping functions */
+@@ -163,20 +169,23 @@ enum bpf_direction {
  #define	BPF_T_MICROTIME		0x0000
  #define	BPF_T_NANOTIME		0x0001
  #define	BPF_T_BINTIME		0x0002
@@ -49,11 +48,9 @@ Index: sys/net/bpf.h
  #define	BPF_T_FAST		0x0100
  #define	BPF_T_MONOTONIC		0x0200
  #define	BPF_T_MONOTONIC_FAST	(BPF_T_FAST | BPF_T_MONOTONIC)
-+#ifdef FFCLOCK
-+#define	BPF_T_FFCLOCK		0x0400
-+#define	BPF_T_FLAG_MASK		0x0700
-+#else
  #define	BPF_T_FLAG_MASK		0x0300
++#ifdef FFCLOCK
++#define	BPF_T_FFCLOCK		0x8000
 +#endif
  #define	BPF_T_FORMAT(t)		((t) & BPF_T_FORMAT_MASK)
  #define	BPF_T_FLAG(t)		((t) & BPF_T_FLAG_MASK)
@@ -65,16 +62,9 @@ Index: sys/net/bpf.h
  #define	BPF_T_NANOTIME_FAST		(BPF_T_NANOTIME | BPF_T_FAST)
  #define	BPF_T_BINTIME_FAST		(BPF_T_BINTIME | BPF_T_FAST)
  #define	BPF_T_MICROTIME_MONOTONIC	(BPF_T_MICROTIME | BPF_T_MONOTONIC)
- #define	BPF_T_NANOTIME_MONOTONIC	(BPF_T_NANOTIME | BPF_T_MONOTONIC)
- #define	BPF_T_BINTIME_MONOTONIC		(BPF_T_BINTIME | BPF_T_MONOTONIC)
- #define	BPF_T_MICROTIME_MONOTONIC_FAST	(BPF_T_MICROTIME | BPF_T_MONOTONIC_FAST)
+@@ -186,35 +195,44 @@ enum bpf_direction {
  #define	BPF_T_NANOTIME_MONOTONIC_FAST	(BPF_T_NANOTIME | BPF_T_MONOTONIC_FAST)
  #define	BPF_T_BINTIME_MONOTONIC_FAST	(BPF_T_BINTIME | BPF_T_MONOTONIC_FAST)
-+#ifdef FFCLOCK
-+#define BPF_T_MICROTIME_FFCLOCK		(BPF_T_MICROTIME | BPF_T_FFCLOCK)
-+#define BPF_T_NANOTIME_FFCLOCK		(BPF_T_NANOTIME | BPF_T_FFCLOCK)
-+#define BPF_T_BINTIME_FFCLOCK		(BPF_T_BINTIME | BPF_T_FFCLOCK)
-+#endif
  
  /*
   * Structure prepended to each packet.
@@ -119,8 +109,8 @@ Index: sys/net/bpf.h
   * accessing these fields, appropriate atomic operation and memory barriers
 Index: sys/net/bpf.c
 ===================================================================
---- sys.orig/net/bpf.c	2011-03-31 21:54:36.000000000 +1100
-+++ sys/net/bpf.c	2011-06-15 17:18:49.000000000 +1000
+--- sys.orig/net/bpf.c	2011-06-28 13:48:48.000000000 +1000
++++ sys/net/bpf.c	2011-06-28 14:09:24.000000000 +1000
 @@ -1,19 +1,25 @@
  /*-
   * Copyright (C) 1990, 1991, 1993
@@ -305,7 +295,7 @@ Index: sys/net/bpf.c
 +	 * bootime to the timestamps to be computed.
 +	 */
 +	if (bpf_ffclock_tstamp)
-+		d->bd_tstamp = d->bd_tstamp | BPF_T_FFCLOCK | BPF_T_MONOTONIC;
++		d->bd_tstamp = d->bd_tstamp | BPF_T_FFCLOCK;
 +#endif
 +
  	return (0);
@@ -318,7 +308,65 @@ Index: sys/net/bpf.c
  bpfread(struct cdev *dev, struct uio *uio, int ioflag)
  {
  	struct bpf_d *d;
-@@ -1810,20 +1850,23 @@ bpf_gettime(struct bintime *bt, int tsty
+@@ -1769,61 +1809,80 @@ bpf_ts_quality(int tstype)
+ {
+ 
+ 	if (tstype == BPF_T_NONE)
+ 		return (BPF_TSTAMP_NONE);
+ 	if ((tstype & BPF_T_FAST) != 0)
+ 		return (BPF_TSTAMP_FAST);
+ 
+ 	return (BPF_TSTAMP_NORMAL);
+ }
+ 
++#ifdef FFCLOCK
++static int
++bpf_gettime(struct bintime *bt, ffcounter *ffcount, int tstype, struct mbuf *m)
++#else
+ static int
+ bpf_gettime(struct bintime *bt, int tstype, struct mbuf *m)
++#endif
+ {
+ 	struct m_tag *tag;
+ 	int quality;
+ 
+ 	quality = bpf_ts_quality(tstype);
+ 	if (quality == BPF_TSTAMP_NONE)
+ 		return (quality);
+ 
+ 	if (m != NULL) {
+ 		tag = m_tag_locate(m, MTAG_BPF, MTAG_BPF_TIMESTAMP, NULL);
+ 		if (tag != NULL) {
+ 			*bt = *(struct bintime *)(tag + 1);
+ 			return (BPF_TSTAMP_EXTERN);
+ 		}
+ 	}
++#ifdef FFCLOCK
++	if ((tstype & BPF_T_FFCLOCK) == 0) {
++		ffclock_read_counter(ffcount);
++#endif
+ 	if (quality == BPF_TSTAMP_NORMAL)
+ 		binuptime(bt);
+ 	else
+ 		getbinuptime(bt);
+-
++#ifdef FFCLOCK
++	} else {
++	if (quality == BPF_TSTAMP_NORMAL)
++		ffclock_abstime_tc(ffcount, bt, FFCLOCK_UTC);
++	else
++		ffclock_abstime_tc(ffcount, bt, FFCLOCK_UTC | FFCLOCK_FAST);
++	}
++#endif
+ 	return (quality);
+ }
+ 
+ /*
+  * Incoming linkage from device drivers.  Process the packet pkt, of length
+  * pktlen, which is stored in a contiguous buffer.  The packet is parsed
+  * by each process' filter, and if accepted, stashed into the corresponding
+  * buffer.
+  */
  void
  bpf_tap(struct bpf_if *bp, u_char *pkt, u_int pktlen)
  {
@@ -342,7 +390,7 @@ Index: sys/net/bpf.c
  		 * NB: We dont call BPF_CHECK_DIRECTION() here since there is no
  		 * way for the caller to indiciate to us whether this packet
  		 * is inbound or outbound.  In the bpf_mtap() routines, we use
-@@ -1832,26 +1875,36 @@ bpf_tap(struct bpf_if *bp, u_char *pkt, 
+@@ -1832,26 +1891,37 @@ bpf_tap(struct bpf_if *bp, u_char *pkt, 
  #ifdef BPF_JITTER
  		bf = bpf_jitter_enable != 0 ? d->bd_bfilter : NULL;
  		if (bf != NULL)
@@ -354,9 +402,10 @@ Index: sys/net/bpf.c
  			d->bd_fcount++;
  			if (gottime < bpf_ts_quality(d->bd_tstamp))
 +			{
- 				gottime = bpf_gettime(&bt, d->bd_tstamp, NULL);
 +#ifdef FFCLOCK
-+				ffcount = read_ffcounter();
++				gottime = bpf_gettime(&bt, &ffcount, d->bd_tstamp, NULL);
++#else
+ 				gottime = bpf_gettime(&bt, d->bd_tstamp, NULL);
 +#endif
 +			}
  #ifdef MAC
@@ -379,7 +428,7 @@ Index: sys/net/bpf.c
  	    (((d)->bd_direction == BPF_D_IN && (r) != (i)) ||	\
  	    ((d)->bd_direction == BPF_D_OUT && (r) == (i)))
  
-@@ -1861,20 +1914,23 @@ bpf_tap(struct bpf_if *bp, u_char *pkt, 
+@@ -1861,20 +1931,23 @@ bpf_tap(struct bpf_if *bp, u_char *pkt, 
  void
  bpf_mtap(struct bpf_if *bp, struct mbuf *m)
  {
@@ -403,7 +452,7 @@ Index: sys/net/bpf.c
  	pktlen = m_length(m, NULL);
  
  	gottime = BPF_TSTAMP_NONE;
-@@ -1888,44 +1944,58 @@ bpf_mtap(struct bpf_if *bp, struct mbuf 
+@@ -1888,44 +1961,58 @@ bpf_mtap(struct bpf_if *bp, struct mbuf 
  		bf = bpf_jitter_enable != 0 ? d->bd_bfilter : NULL;
  		/* XXX We cannot handle multiple mbufs. */
  		if (bf != NULL && m->m_next == NULL)
@@ -415,10 +464,10 @@ Index: sys/net/bpf.c
  			d->bd_fcount++;
  			if (gottime < bpf_ts_quality(d->bd_tstamp))
 +			{
- 				gottime = bpf_gettime(&bt, d->bd_tstamp, m);
-+
 +#ifdef FFCLOCK
-+				ffcount = read_ffcounter();
++				gottime = bpf_gettime(&bt, &ffcount, d->bd_tstamp, m);
++#else
+ 				gottime = bpf_gettime(&bt, d->bd_tstamp, m);
 +#endif
 +			}
  #ifdef MAC
@@ -462,7 +511,7 @@ Index: sys/net/bpf.c
  	pktlen = m_length(m, NULL);
  	/*
  	 * Craft on-stack mbuf suitable for passing to bpf_filter.
-@@ -1941,26 +2011,36 @@ bpf_mtap2(struct bpf_if *bp, void *data,
+@@ -1941,26 +2028,37 @@ bpf_mtap2(struct bpf_if *bp, void *data,
  	BPFIF_LOCK(bp);
  	LIST_FOREACH(d, &bp->bif_dlist, bd_next) {
  		if (BPF_CHECK_DIRECTION(d, m->m_pkthdr.rcvif, bp->bif_ifp))
@@ -474,9 +523,10 @@ Index: sys/net/bpf.c
  			d->bd_fcount++;
  			if (gottime < bpf_ts_quality(d->bd_tstamp))
 +			{
- 				gottime = bpf_gettime(&bt, d->bd_tstamp, m);
 +#ifdef FFCLOCK
-+				ffcount = read_ffcounter();
++				gottime = bpf_gettime(&bt, &ffcount, d->bd_tstamp, m);
++#else
+ 				gottime = bpf_gettime(&bt, d->bd_tstamp, m);
 +#endif
 +			}
  #ifdef MAC
@@ -499,7 +549,45 @@ Index: sys/net/bpf.c
  
  #undef	BPF_TSTAMP_NONE
  #undef	BPF_TSTAMP_FAST
-@@ -2025,24 +2105,30 @@ bpf_bintime2ts(struct bintime *bt, struc
+@@ -1995,25 +2093,37 @@ bpf_hdrlen(struct bpf_d *d)
+ 	return (hdrlen - d->bd_bif->bif_hdrlen);
+ }
+ 
+ static void
+ bpf_bintime2ts(struct bintime *bt, struct bpf_ts *ts, int tstype)
+ {
+ 	struct bintime bt2;
+ 	struct timeval tsm;
+ 	struct timespec tsn;
+ 
++#ifdef FFCLOCK
++	if ((tstype & BPF_T_FFCLOCK) == 0) {
++#endif
+ 	if ((tstype & BPF_T_MONOTONIC) == 0) {
+ 		bt2 = *bt;
+ 		bintime_add(&bt2, &boottimebin);
+ 		bt = &bt2;
+ 	}
++#ifdef FFCLOCK
++	} else {
++		if ((tstype & BPF_T_MONOTONIC) == BPF_T_MONOTONIC) {
++			bt2 = *bt;
++			bintime_sub(&bt2, &ffclock_boottime);
++			bt = &bt2;
++		}
++	}
++#endif
+ 	switch (BPF_T_FORMAT(tstype)) {
+ 	case BPF_T_MICROTIME:
+ 		bintime2timeval(bt, &tsm);
+ 		ts->bt_sec = tsm.tv_sec;
+ 		ts->bt_frac = tsm.tv_usec;
+ 		break;
+ 	case BPF_T_NANOTIME:
+ 		bintime2timespec(bt, &tsn);
+ 		ts->bt_sec = tsn.tv_sec;
+ 		ts->bt_frac = tsn.tv_nsec;
+@@ -2025,24 +2135,31 @@ bpf_bintime2ts(struct bintime *bt, struc
  	}
  }
  
@@ -511,13 +599,14 @@ Index: sys/net/bpf.c
   * pkt is really an mbuf.
   */
 +#ifdef FFCLOCK
++static void
++catchpacket(struct bpf_d *d, u_char *pkt, u_int pktlen, u_int snaplen,
++    void (*cpfn)(struct bpf_d *, caddr_t, u_int, void *, u_int),
++    struct bintime *bt, ffcounter *ffcount)
++#else
  static void
  catchpacket(struct bpf_d *d, u_char *pkt, u_int pktlen, u_int snaplen,
      void (*cpfn)(struct bpf_d *, caddr_t, u_int, void *, u_int),
-+    struct bintime *bt, ffcounter *ffcount)
-+#else
-+catchpacket(struct bpf_d *d, u_char *pkt, u_int pktlen, u_int snaplen,
-+    void (*cpfn)(struct bpf_d *, caddr_t, u_int, void *, u_int),
      struct bintime *bt)
 +#endif
  {
@@ -530,7 +619,7 @@ Index: sys/net/bpf.c
  #endif
  	int caplen, curlen, hdrlen, totlen;
  	int do_wakeup = 0;
-@@ -2111,60 +2197,86 @@ catchpacket(struct bpf_d *d, u_char *pkt
+@@ -2111,60 +2228,76 @@ catchpacket(struct bpf_d *d, u_char *pkt
  		 * reader should be woken up.
  		 */
  		do_wakeup = 1;
@@ -542,14 +631,6 @@ Index: sys/net/bpf.c
  		struct bpf_ts ts;
  		if (do_timestamp)
 +		{
-+#ifdef FFCLOCK
-+			/*
-+			 * If requested, use the feedforward clock to instead of the
-+			 * feedback/ntpd clock
-+			 */
-+			if ( (tstype & BPF_T_FFCLOCK) == BPF_T_FFCLOCK )
-+				ffcounter2bintime(ffcount, bt);
-+#endif /* FFCLOCK */
  			bpf_bintime2ts(bt, &ts, tstype);
 +		}
  #ifdef COMPAT_FREEBSD32
@@ -598,8 +679,6 @@ Index: sys/net/bpf.c
 +	{
 +#ifdef FFCLOCK
 +		hdr.ffcount_stamp = *ffcount;
-+		if ( (tstype & BPF_T_FFCLOCK) == BPF_T_FFCLOCK )
-+			ffcounter2bintime(ffcount, bt);
 +#endif
  		bpf_bintime2ts(bt, &hdr.bh_tstamp, tstype);
 +	}
