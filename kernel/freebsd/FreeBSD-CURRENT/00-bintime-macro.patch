@@ -6,8 +6,8 @@ Add bintime_subx() macro
 
 Index: sys/sys/time.h
 ===================================================================
---- sys.orig/sys/time.h	2011-06-27 10:04:53.000000000 +1000
-+++ sys/sys/time.h	2011-06-27 13:33:59.000000000 +1000
+--- sys.orig/sys/time.h	2011-06-28 19:37:17.000000000 +1000
++++ sys/sys/time.h	2011-06-29 13:17:46.000000000 +1000
 @@ -72,20 +72,31 @@ bintime_add(struct bintime *bt, const st
  	uint64_t u;
  

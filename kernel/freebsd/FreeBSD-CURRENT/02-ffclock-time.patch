@@ -1,14 +1,40 @@
 ---
  conf/files          |    1 
- kern/kern_ffclock.c |  237 ++++++++++++++++++++++++++++++++++++++++++++++++++++
- sys/timeffc.h       |   34 +++++++
- 3 files changed, 272 insertions(+)
+ kern/kern_ffclock.c |  242 ++++++++++++++++++++++++++++++++++++++++++++++++++++
+ sys/timeffc.h       |   53 +++++++++++
+ 3 files changed, 296 insertions(+)
 
+Index: sys/conf/files
+===================================================================
+--- sys.orig/conf/files	2011-06-29 13:19:33.000000000 +1000
++++ sys/conf/files	2011-06-29 16:05:46.000000000 +1000
+@@ -2298,20 +2298,21 @@ kern/kern_cpu.c			standard
+ kern/kern_cpuset.c		standard
+ kern/kern_context.c		standard
+ kern/kern_descrip.c		standard
+ kern/kern_dtrace.c		optional kdtrace_hooks
+ kern/kern_environment.c		standard
+ kern/kern_et.c			standard
+ kern/kern_event.c		standard
+ kern/kern_exec.c		standard
+ kern/kern_exit.c		standard
+ kern/kern_fail.c		standard
++kern/kern_ffclock.c		optional ffclock
+ kern/kern_fork.c		standard
+ kern/kern_gzio.c		optional gzio
+ kern/kern_hhook.c		standard
+ kern/kern_idle.c		standard
+ kern/kern_intr.c		standard
+ kern/kern_jail.c		standard
+ kern/kern_khelp.c		standard
+ kern/kern_kthread.c		standard
+ kern/kern_ktr.c			optional ktr
+ kern/kern_ktrace.c		standard
 Index: sys/kern/kern_ffclock.c
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ sys/kern/kern_ffclock.c	2011-06-28 15:43:26.000000000 +1000
-@@ -0,0 +1,237 @@
++++ sys/kern/kern_ffclock.c	2011-06-29 16:17:12.000000000 +1000
+@@ -0,0 +1,242 @@
 +/*-
 + * Copyright (C) 2010 University of Melbourne
 + * All rights reserved.
@@ -58,7 +84,12 @@ Index: sys/kern/kern_ffclock.c
 +	ffcounter ffdelta_error;
 +
 +	/* Get counter and corresponding time */
-+	ffclock_abstime_tc(&ffc, bt, flags);
++	if ((flags & FFCLOCK_FAST) == FFCLOCK_FAST)
++		ffclock_last_tick(&ffc, bt, flags);
++	else {
++		ffclock_read_counter(&ffc);
++		ffclock_convert_abs(ffc, bt, flags);
++	}
 +
 +	/* Current ffclock estimate, use update_ffcount as generation number */
 +	do {
@@ -79,7 +110,7 @@ Index: sys/kern/kern_ffclock.c
 +
 +	if (error_bound) {
 +		ffdelta_error = ffc - cest.update_ffcount;
-+		ffclock_difftime_tc(ffdelta_error, error_bound);
++		ffclock_convert_diff(ffdelta_error, error_bound);
 +		/* 18446744073709 = int(2^64 / 1e12), err_bound_rate in [ps/s] */
 +		bintime_mul(error_bound, cest.error_bound_rate * (uint64_t)18446744073709LL);
 +		/* 18446744073 = int(2^64 / 1e9), since err_abs in [ns] */
@@ -98,7 +129,7 @@ Index: sys/kern/kern_ffclock.c
 +	uint32_t err_rate;
 +
 +// TODO: Check options, bit mask
-+	ffclock_difftime_tc(ffdelta, bt);
++	ffclock_convert_diff(ffdelta, bt);
 +
 +	if (error_bound) {
 +		do {
@@ -106,7 +137,7 @@ Index: sys/kern/kern_ffclock.c
 +			err_rate = ffclock_estimate.error_bound_rate;
 +		} while (update_ffcount != ffclock_estimate.update_ffcount);
 +
-+		ffclock_difftime_tc(ffdelta, error_bound);
++		ffclock_convert_diff(ffdelta, error_bound);
 +		/* 18446744073709 = int(2^64 / 1e12), err_bound_rate in [ps/s] */
 +		bintime_mul(error_bound, err_rate * (uint64_t)18446744073709LL);
 +	}
@@ -246,36 +277,10 @@ Index: sys/kern/kern_ffclock.c
 +	ffclock_difftime(ffdelta, &bt, NULL);
 +	bintime2timeval(&bt, tvp);
 +}
-Index: sys/conf/files
-===================================================================
---- sys.orig/conf/files	2011-06-28 15:43:11.000000000 +1000
-+++ sys/conf/files	2011-06-28 15:43:26.000000000 +1000
-@@ -2293,20 +2293,21 @@ kern/kern_cpu.c			standard
- kern/kern_cpuset.c		standard
- kern/kern_context.c		standard
- kern/kern_descrip.c		standard
- kern/kern_dtrace.c		optional kdtrace_hooks
- kern/kern_environment.c		standard
- kern/kern_et.c			standard
- kern/kern_event.c		standard
- kern/kern_exec.c		standard
- kern/kern_exit.c		standard
- kern/kern_fail.c		standard
-+kern/kern_ffclock.c		optional ffclock
- kern/kern_fork.c		standard
- kern/kern_gzio.c		optional gzio
- kern/kern_hhook.c		standard
- kern/kern_idle.c		standard
- kern/kern_intr.c		standard
- kern/kern_jail.c		standard
- kern/kern_khelp.c		standard
- kern/kern_kthread.c		standard
- kern/kern_ktr.c			optional ktr
- kern/kern_ktrace.c		standard
 Index: sys/sys/timeffc.h
 ===================================================================
---- sys.orig/sys/timeffc.h	2011-06-28 15:43:11.000000000 +1000
-+++ sys/sys/timeffc.h	2011-06-28 15:43:26.000000000 +1000
+--- sys.orig/sys/timeffc.h	2011-06-29 15:36:15.000000000 +1000
++++ sys/sys/timeffc.h	2011-06-29 16:08:34.000000000 +1000
 @@ -61,20 +61,23 @@ struct ffclock_estimate {
   * time in seconds.
   * FAST:	do not read the hardware counter, returns time of last tick. The
@@ -294,23 +299,42 @@ Index: sys/sys/timeffc.h
  /* Resets Feed-Forward clock from RTC */
  void ffclock_reset_clock(struct timespec *ts);
  
- /* Low level routines to compute absolute time and time intervals */
- void ffclock_abstime_tc(ffcounter *ffcount, struct bintime *bt, uint32_t flags);
- void ffclock_difftime_tc(ffcounter ffdelta, struct bintime *bt);
+ /*
+  * Return the current value of the Feed-Forward Clock counter. Essential to
+  * measure time interval in counter units. If a fast timecounter is used by the
+  * system, may also allow fast but accurate timestamping.
+  */
+ void ffclock_read_counter(ffcounter *ffcount);
+@@ -86,13 +89,63 @@ void ffclock_read_counter(ffcounter *ffc
+ void ffclock_last_tick(ffcounter *ffcount, struct bintime *bt, uint32_t flags);
  
  /*
-  * Feed-Forward clock routines.
-@@ -90,13 +93,44 @@ void ffclock_difftime_tc(ffcounter ffdel
-  * 		second are possible.
-  * ffclock_difftime(): computes a time interval in seconds based on an interval
-  * 		measured in counter value. This should be the preferred way to measure
-  * 		 very accurately small time intervals.
-  * ffclock_read_counter(): returned current Feed-Forward counter value.
+  * Low level routines to convert a counter timestamp into absolute time and a
+  * counter timestamp interval into interval in seconds. The absolute time
+  * conversion accepts the FFCLOCK_SMOOTH flag.
   */
- void ffclock_abstime(ffcounter *ffcount, struct bintime *bt, struct bintime *error_bound, uint32_t flags);
- void ffclock_difftime(ffcounter ffdelta, struct bintime *bt, struct bintime *error_bound);
- void ffclock_read_counter(ffcounter *ffcount);
+ void ffclock_convert_abs(ffcounter ffcount, struct bintime *bt, uint32_t flags);
+ void ffclock_convert_diff(ffcounter ffdelta, struct bintime *bt);
  
++/*
++ * Feed-Forward clock routines.
++ *
++ * These functions rely on the timecounters and ffclock_estimates stored in
++ * fftimehands. Note that the error_bound parameter is not the error of the
++ * clock but an upper bound on the error of the absolute time or time interval
++ * returned.
++ *
++ * ffclock_abstime(): retrieves current time as counter value and corresponding
++ * 		conversion in seconds. The value of the time in seconds depends on the
++ *		flags passed: for a unique counter value, different conversions in
++ * 		second are possible.
++ * ffclock_difftime(): computes a time interval in seconds based on an interval
++ * 		measured in counter value. This should be the preferred way to measure
++ * 		 very accurately small time intervals.
++ */
++void ffclock_abstime(ffcounter *ffcount, struct bintime *bt, struct bintime *error_bound, uint32_t flags);
++void ffclock_difftime(ffcounter ffdelta, struct bintime *bt, struct bintime *error_bound);
++
 +/*
 + * Wrapper routines to return current absolute time using the Feed-Forward
 + * Clock. These functions are named after those defined in <sys/time.h>, which

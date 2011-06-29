@@ -10,69 +10,13 @@ clock.
  kern/kern_ffclock.c              |   96 +++++++++++++++++++++++++++++++++++++++
  kern/syscalls.master             |    6 +-
  sys/time.h                       |    1 
- 4 files changed, 103 insertions(+), 6 deletions(-)
+ sys/timeffc.h                    |    9 +++
+ 5 files changed, 112 insertions(+), 6 deletions(-)
 
-Index: sys/kern/syscalls.master
-===================================================================
---- sys.orig/kern/syscalls.master	2011-06-28 14:46:40.000000000 +1000
-+++ sys/kern/syscalls.master	2011-06-28 15:52:44.000000000 +1000
-@@ -449,23 +449,23 @@
- 				    struct sigevent *evp, int *timerid); }
- 236	AUE_NULL	STD	{ int ktimer_delete(int timerid); }
- 237	AUE_NULL	STD	{ int ktimer_settime(int timerid, int flags, \
- 				    const struct itimerspec *value, \
- 				    struct itimerspec *ovalue); }
- 238	AUE_NULL	STD	{ int ktimer_gettime(int timerid, struct \
- 				    itimerspec *value); }
- 239	AUE_NULL	STD	{ int ktimer_getoverrun(int timerid); }
- 240	AUE_NULL	STD	{ int nanosleep(const struct timespec *rqtp, \
- 				    struct timespec *rmtp); }
--241	AUE_NULL	UNIMPL	nosys
--242	AUE_NULL	UNIMPL	nosys
--243	AUE_NULL	UNIMPL	nosys
-+241	AUE_NULL	STD	{ int ffclock_getcounter(ffcounter *ffcount); }
-+242	AUE_NULL	STD	{ int ffclock_setestimate(struct ffclock_estimate *cest); }
-+243	AUE_NULL	STD	{ int ffclock_getestimate(struct ffclock_estimate *cest); }
- 244	AUE_NULL	UNIMPL	nosys
- 245	AUE_NULL	UNIMPL	nosys
- 246	AUE_NULL	UNIMPL	nosys
- 247	AUE_NULL	UNIMPL	nosys
- 248	AUE_NULL	STD	{ int ntp_gettime(struct ntptimeval *ntvp); }
- 249	AUE_NULL	UNIMPL	nosys
- ; syscall numbers initially used in OpenBSD
- 250	AUE_MINHERIT	STD	{ int minherit(void *addr, size_t len, \
- 				    int inherit); }
- 251	AUE_RFORK	STD	{ int rfork(int flags); }
-Index: sys/sys/time.h
-===================================================================
---- sys.orig/sys/time.h	2011-06-28 14:46:40.000000000 +1000
-+++ sys/sys/time.h	2011-06-28 15:52:44.000000000 +1000
-@@ -26,20 +26,21 @@
-  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
-  * SUCH DAMAGE.
-  *
-  *	@(#)time.h	8.5 (Berkeley) 5/4/95
-  * $FreeBSD$
-  */
- 
- #ifndef _SYS_TIME_H_
- #define _SYS_TIME_H_
- 
-+#include <sys/_ffcounter.h>
- #include <sys/_timeval.h>
- #include <sys/types.h>
- #include <sys/timespec.h>
- 
- struct timezone {
- 	int	tz_minuteswest;	/* minutes west of Greenwich */
- 	int	tz_dsttime;	/* type of dst correction */
- };
- #define	DST_NONE	0	/* not on dst */
- #define	DST_USA		1	/* USA style dst */
 Index: sys/compat/freebsd32/syscalls.master
 ===================================================================
---- sys.orig/compat/freebsd32/syscalls.master	2011-06-28 14:46:40.000000000 +1000
-+++ sys/compat/freebsd32/syscalls.master	2011-06-28 15:52:44.000000000 +1000
+--- sys.orig/compat/freebsd32/syscalls.master	2011-06-29 13:17:46.000000000 +1000
++++ sys/compat/freebsd32/syscalls.master	2011-06-29 16:19:12.000000000 +1000
 @@ -440,23 +440,23 @@
  234	AUE_NULL	STD	{ int freebsd32_clock_getres(clockid_t clock_id, \
  				    struct timespec32 *tp); }
@@ -102,8 +46,8 @@ Index: sys/compat/freebsd32/syscalls.master
  251	AUE_RFORK	NOPROTO	{ int rfork(int flags); }
 Index: sys/kern/kern_ffclock.c
 ===================================================================
---- sys.orig/kern/kern_ffclock.c	2011-06-28 15:43:26.000000000 +1000
-+++ sys/kern/kern_ffclock.c	2011-06-28 15:53:45.000000000 +1000
+--- sys.orig/kern/kern_ffclock.c	2011-06-29 16:17:12.000000000 +1000
++++ sys/kern/kern_ffclock.c	2011-06-29 16:19:12.000000000 +1000
 @@ -22,24 +22,35 @@
   * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
   * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
@@ -140,7 +84,7 @@ Index: sys/kern/kern_ffclock.c
  {
  	struct ffclock_estimate cest;
  	ffcounter ffc;
-@@ -228,10 +239,95 @@ ffclock_nanodifftime(ffcounter ffdelta, 
+@@ -233,10 +244,95 @@ ffclock_nanodifftime(ffcounter ffdelta, 
  }
  
  void
@@ -236,3 +180,87 @@ Index: sys/kern/kern_ffclock.c
 +	mtx_unlock(&ffclock_mtx);
 +	return (error);
 +}
+Index: sys/kern/syscalls.master
+===================================================================
+--- sys.orig/kern/syscalls.master	2011-06-29 13:17:46.000000000 +1000
++++ sys/kern/syscalls.master	2011-06-29 16:19:12.000000000 +1000
+@@ -449,23 +449,23 @@
+ 				    struct sigevent *evp, int *timerid); }
+ 236	AUE_NULL	STD	{ int ktimer_delete(int timerid); }
+ 237	AUE_NULL	STD	{ int ktimer_settime(int timerid, int flags, \
+ 				    const struct itimerspec *value, \
+ 				    struct itimerspec *ovalue); }
+ 238	AUE_NULL	STD	{ int ktimer_gettime(int timerid, struct \
+ 				    itimerspec *value); }
+ 239	AUE_NULL	STD	{ int ktimer_getoverrun(int timerid); }
+ 240	AUE_NULL	STD	{ int nanosleep(const struct timespec *rqtp, \
+ 				    struct timespec *rmtp); }
+-241	AUE_NULL	UNIMPL	nosys
+-242	AUE_NULL	UNIMPL	nosys
+-243	AUE_NULL	UNIMPL	nosys
++241	AUE_NULL	STD	{ int ffclock_getcounter(ffcounter *ffcount); }
++242	AUE_NULL	STD	{ int ffclock_setestimate(struct ffclock_estimate *cest); }
++243	AUE_NULL	STD	{ int ffclock_getestimate(struct ffclock_estimate *cest); }
+ 244	AUE_NULL	UNIMPL	nosys
+ 245	AUE_NULL	UNIMPL	nosys
+ 246	AUE_NULL	UNIMPL	nosys
+ 247	AUE_NULL	UNIMPL	nosys
+ 248	AUE_NULL	STD	{ int ntp_gettime(struct ntptimeval *ntvp); }
+ 249	AUE_NULL	UNIMPL	nosys
+ ; syscall numbers initially used in OpenBSD
+ 250	AUE_MINHERIT	STD	{ int minherit(void *addr, size_t len, \
+ 				    int inherit); }
+ 251	AUE_RFORK	STD	{ int rfork(int flags); }
+Index: sys/sys/time.h
+===================================================================
+--- sys.orig/sys/time.h	2011-06-29 13:24:45.000000000 +1000
++++ sys/sys/time.h	2011-06-29 16:19:12.000000000 +1000
+@@ -26,20 +26,21 @@
+  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+  * SUCH DAMAGE.
+  *
+  *	@(#)time.h	8.5 (Berkeley) 5/4/95
+  * $FreeBSD$
+  */
+ 
+ #ifndef _SYS_TIME_H_
+ #define _SYS_TIME_H_
+ 
++#include <sys/_ffcounter.h>
+ #include <sys/_timeval.h>
+ #include <sys/types.h>
+ #include <sys/timespec.h>
+ 
+ struct timezone {
+ 	int	tz_minuteswest;	/* minutes west of Greenwich */
+ 	int	tz_dsttime;	/* type of dst correction */
+ };
+ #define	DST_NONE	0	/* not on dst */
+ #define	DST_USA		1	/* USA style dst */
+Index: sys/sys/timeffc.h
+===================================================================
+--- sys.orig/sys/timeffc.h	2011-06-29 16:08:34.000000000 +1000
++++ sys/sys/timeffc.h	2011-06-29 16:43:11.000000000 +1000
+@@ -139,13 +139,22 @@ void ffclock_nanouptime(struct timespec 
+ void ffclock_microuptime(struct timeval *tvp);
+ 
+ void ffclock_getbinuptime(struct bintime *bt);
+ void ffclock_getnanouptime(struct timespec *tsp);
+ void ffclock_getmicrouptime(struct timeval *tvp);
+ 
+ void ffclock_bindifftime(ffcounter ffdelta, struct bintime *bt);
+ void ffclock_nanodifftime(ffcounter ffdelta, struct timespec *tsp);
+ void ffclock_microdifftime(ffcounter ffdelta, struct timeval *tvp);
+ 
++#else /* !_KERNEL */
++
++/* Feed-Forward Clock system calls */
++__BEGIN_DECLS
++int ffclock_getcounter(ffcounter *ffcount);
++int ffclock_getestimate(struct ffclock_estimate *cest);
++int ffclock_setestimate(struct ffclock_estimate *cest);
++__END_DECLS
++
+ #endif /* _KERNEL */
+ #endif /* __BSD_VISIBLE */
+ #endif /* _SYS_TIMEFF_H */

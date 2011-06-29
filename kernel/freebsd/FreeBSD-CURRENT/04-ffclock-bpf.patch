@@ -4,113 +4,14 @@ Add ffcounter timestamps to the BPF header for export via libpcap.
 Allow to choose between feedback and feed-forward clock for timestamping.
 
 ---
- net/bpf.c |  135 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++-
- net/bpf.h |   18 ++++++++
- 2 files changed, 152 insertions(+), 1 deletion(-)
+ net/bpf.c |  147 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++---
+ net/bpf.h |   18 +++++++
+ 2 files changed, 160 insertions(+), 5 deletions(-)
 
-Index: sys/net/bpf.h
-===================================================================
---- sys.orig/net/bpf.h	2011-06-28 13:48:48.000000000 +1000
-+++ sys/net/bpf.h	2011-06-28 13:50:30.000000000 +1000
-@@ -1,19 +1,25 @@
- /*-
-  * Copyright (C) 1990, 1991, 1993
-  *	The Regents of the University of California.  All rights reserved.
-  *
-  * This code is derived from the Stanford/CMU enet packet filter,
-  * (net/enet.c) distributed as part of 4.3BSD, and code contributed
-  * to Berkeley by Steven McCanne and Van Jacobson both of Lawrence
-  * Berkeley Laboratory.
-  *
-+ * Copyright (C) 2010 The University of Melbourne
-+ * All rights reserved.
-+ *
-+ * Portions of this software were developed by the University of Melbourne
-+ * under sponsorship from the FreeBSD Foundation.
-+ *
-  * Redistribution and use in source and binary forms, with or without
-  * modification, are permitted provided that the following conditions
-  * are met:
-  * 1. Redistributions of source code must retain the above copyright
-  *    notice, this list of conditions and the following disclaimer.
-  * 2. Redistributions in binary form must reproduce the above copyright
-  *    notice, this list of conditions and the following disclaimer in the
-  *    documentation and/or other materials provided with the distribution.
-  * 4. Neither the name of the University nor the names of its contributors
-  *    may be used to endorse or promote products derived from this software
-@@ -163,20 +169,23 @@ enum bpf_direction {
- #define	BPF_T_MICROTIME		0x0000
- #define	BPF_T_NANOTIME		0x0001
- #define	BPF_T_BINTIME		0x0002
- #define	BPF_T_NONE		0x0003
- #define	BPF_T_FORMAT_MASK	0x0003
- #define	BPF_T_NORMAL		0x0000
- #define	BPF_T_FAST		0x0100
- #define	BPF_T_MONOTONIC		0x0200
- #define	BPF_T_MONOTONIC_FAST	(BPF_T_FAST | BPF_T_MONOTONIC)
- #define	BPF_T_FLAG_MASK		0x0300
-+#ifdef FFCLOCK
-+#define	BPF_T_FFCLOCK		0x8000
-+#endif
- #define	BPF_T_FORMAT(t)		((t) & BPF_T_FORMAT_MASK)
- #define	BPF_T_FLAG(t)		((t) & BPF_T_FLAG_MASK)
- #define	BPF_T_VALID(t)						\
-     ((t) == BPF_T_NONE || (BPF_T_FORMAT(t) != BPF_T_NONE &&	\
-     ((t) & ~(BPF_T_FORMAT_MASK | BPF_T_FLAG_MASK)) == 0))
- 
- #define	BPF_T_MICROTIME_FAST		(BPF_T_MICROTIME | BPF_T_FAST)
- #define	BPF_T_NANOTIME_FAST		(BPF_T_NANOTIME | BPF_T_FAST)
- #define	BPF_T_BINTIME_FAST		(BPF_T_BINTIME | BPF_T_FAST)
- #define	BPF_T_MICROTIME_MONOTONIC	(BPF_T_MICROTIME | BPF_T_MONOTONIC)
-@@ -186,35 +195,44 @@ enum bpf_direction {
- #define	BPF_T_NANOTIME_MONOTONIC_FAST	(BPF_T_NANOTIME | BPF_T_MONOTONIC_FAST)
- #define	BPF_T_BINTIME_MONOTONIC_FAST	(BPF_T_BINTIME | BPF_T_MONOTONIC_FAST)
- 
- /*
-  * Structure prepended to each packet.
-  */
- struct bpf_ts {
- 	bpf_int64	bt_sec;		/* seconds */
- 	bpf_u_int64	bt_frac;	/* fraction */
- };
-+
- struct bpf_xhdr {
- 	struct bpf_ts	bh_tstamp;	/* time stamp */
- 	bpf_u_int32	bh_caplen;	/* length of captured portion */
- 	bpf_u_int32	bh_datalen;	/* original length of packet */
- 	u_short		bh_hdrlen;	/* length of bpf header (this struct
- 					   plus alignment padding) */
-+#ifdef FFCLOCK
-+	ffcounter	ffcount_stamp;	/* feed-forward counter timestamp */
-+#endif
- };
-+
- /* Obsolete */
- struct bpf_hdr {
- 	struct timeval	bh_tstamp;	/* time stamp */
- 	bpf_u_int32	bh_caplen;	/* length of captured portion */
- 	bpf_u_int32	bh_datalen;	/* original length of packet */
- 	u_short		bh_hdrlen;	/* length of bpf header (this struct
- 					   plus alignment padding) */
-+#ifdef FFCLOCK
-+	ffcounter	ffcount_stamp;	/* feed-forward counter timestamp */
-+#endif
- };
-+
- #ifdef _KERNEL
- #define	MTAG_BPF		0x627066
- #define	MTAG_BPF_TIMESTAMP	0
- #endif
- 
- /*
-  * When using zero-copy BPF buffers, a shared memory header is present
-  * allowing the kernel BPF implementation and user process to synchronize
-  * without using system calls.  This structure defines that header.  When
-  * accessing these fields, appropriate atomic operation and memory barriers
 Index: sys/net/bpf.c
 ===================================================================
---- sys.orig/net/bpf.c	2011-06-28 13:48:48.000000000 +1000
-+++ sys/net/bpf.c	2011-06-28 14:09:24.000000000 +1000
+--- sys.orig/net/bpf.c	2011-06-29 16:57:27.000000000 +1000
++++ sys/net/bpf.c	2011-06-29 17:11:27.000000000 +1000
 @@ -1,19 +1,25 @@
  /*-
   * Copyright (C) 1990, 1991, 1993
@@ -308,7 +209,7 @@ Index: sys/net/bpf.c
  bpfread(struct cdev *dev, struct uio *uio, int ioflag)
  {
  	struct bpf_d *d;
-@@ -1769,61 +1809,80 @@ bpf_ts_quality(int tstype)
+@@ -1769,61 +1809,84 @@ bpf_ts_quality(int tstype)
  {
  
  	if (tstype == BPF_T_NONE)
@@ -341,23 +242,31 @@ Index: sys/net/bpf.c
  			return (BPF_TSTAMP_EXTERN);
  		}
  	}
-+#ifdef FFCLOCK
-+	if ((tstype & BPF_T_FFCLOCK) == 0) {
-+		ffclock_read_counter(ffcount);
-+#endif
- 	if (quality == BPF_TSTAMP_NORMAL)
- 		binuptime(bt);
- 	else
- 		getbinuptime(bt);
+-	if (quality == BPF_TSTAMP_NORMAL)
+-		binuptime(bt);
+-	else
+-		getbinuptime(bt);
 -
++	if (quality == BPF_TSTAMP_NORMAL) {
 +#ifdef FFCLOCK
-+	} else {
-+	if (quality == BPF_TSTAMP_NORMAL)
-+		ffclock_abstime_tc(ffcount, bt, FFCLOCK_UTC);
-+	else
-+		ffclock_abstime_tc(ffcount, bt, FFCLOCK_UTC | FFCLOCK_FAST);
-+	}
++		if ((tstype & BPF_T_FFCLOCK) == 0)
 +#endif
++			binuptime(bt);
++#ifdef FFCLOCK
++		else {
++			ffclock_abstime(ffcount, bt, NULL, FFCLOCK_UTC);
++		}
++#endif
++	} else {
++#ifdef FFCLOCK
++		if ((tstype & BPF_T_FFCLOCK) == 0)
++#endif
++			getbinuptime(bt);
++#ifdef FFCLOCK
++		else
++			ffclock_last_tick(ffcount, bt, FFCLOCK_UTC);
++#endif
++	}
  	return (quality);
  }
  
@@ -390,7 +299,7 @@ Index: sys/net/bpf.c
  		 * NB: We dont call BPF_CHECK_DIRECTION() here since there is no
  		 * way for the caller to indiciate to us whether this packet
  		 * is inbound or outbound.  In the bpf_mtap() routines, we use
-@@ -1832,26 +1891,37 @@ bpf_tap(struct bpf_if *bp, u_char *pkt, 
+@@ -1832,26 +1895,37 @@ bpf_tap(struct bpf_if *bp, u_char *pkt, 
  #ifdef BPF_JITTER
  		bf = bpf_jitter_enable != 0 ? d->bd_bfilter : NULL;
  		if (bf != NULL)
@@ -428,7 +337,7 @@ Index: sys/net/bpf.c
  	    (((d)->bd_direction == BPF_D_IN && (r) != (i)) ||	\
  	    ((d)->bd_direction == BPF_D_OUT && (r) == (i)))
  
-@@ -1861,20 +1931,23 @@ bpf_tap(struct bpf_if *bp, u_char *pkt, 
+@@ -1861,20 +1935,23 @@ bpf_tap(struct bpf_if *bp, u_char *pkt, 
  void
  bpf_mtap(struct bpf_if *bp, struct mbuf *m)
  {
@@ -452,7 +361,7 @@ Index: sys/net/bpf.c
  	pktlen = m_length(m, NULL);
  
  	gottime = BPF_TSTAMP_NONE;
-@@ -1888,44 +1961,58 @@ bpf_mtap(struct bpf_if *bp, struct mbuf 
+@@ -1888,44 +1965,58 @@ bpf_mtap(struct bpf_if *bp, struct mbuf 
  		bf = bpf_jitter_enable != 0 ? d->bd_bfilter : NULL;
  		/* XXX We cannot handle multiple mbufs. */
  		if (bf != NULL && m->m_next == NULL)
@@ -511,7 +420,7 @@ Index: sys/net/bpf.c
  	pktlen = m_length(m, NULL);
  	/*
  	 * Craft on-stack mbuf suitable for passing to bpf_filter.
-@@ -1941,26 +2028,37 @@ bpf_mtap2(struct bpf_if *bp, void *data,
+@@ -1941,26 +2032,37 @@ bpf_mtap2(struct bpf_if *bp, void *data,
  	BPFIF_LOCK(bp);
  	LIST_FOREACH(d, &bp->bif_dlist, bd_next) {
  		if (BPF_CHECK_DIRECTION(d, m->m_pkthdr.rcvif, bp->bif_ifp))
@@ -549,7 +458,7 @@ Index: sys/net/bpf.c
  
  #undef	BPF_TSTAMP_NONE
  #undef	BPF_TSTAMP_FAST
-@@ -1995,25 +2093,37 @@ bpf_hdrlen(struct bpf_d *d)
+@@ -1995,25 +2097,37 @@ bpf_hdrlen(struct bpf_d *d)
  	return (hdrlen - d->bd_bif->bif_hdrlen);
  }
  
@@ -587,7 +496,7 @@ Index: sys/net/bpf.c
  		bintime2timespec(bt, &tsn);
  		ts->bt_sec = tsn.tv_sec;
  		ts->bt_frac = tsn.tv_nsec;
-@@ -2025,24 +2135,31 @@ bpf_bintime2ts(struct bintime *bt, struc
+@@ -2025,24 +2139,31 @@ bpf_bintime2ts(struct bintime *bt, struc
  	}
  }
  
@@ -619,7 +528,7 @@ Index: sys/net/bpf.c
  #endif
  	int caplen, curlen, hdrlen, totlen;
  	int do_wakeup = 0;
-@@ -2111,60 +2228,76 @@ catchpacket(struct bpf_d *d, u_char *pkt
+@@ -2111,60 +2232,76 @@ catchpacket(struct bpf_d *d, u_char *pkt
  		 * reader should be woken up.
  		 */
  		do_wakeup = 1;
@@ -696,3 +605,102 @@ Index: sys/net/bpf.c
  #endif
  	(*cpfn)(d, d->bd_sbuf, curlen + hdrlen, pkt, caplen);
  	d->bd_slen = curlen + totlen;
+Index: sys/net/bpf.h
+===================================================================
+--- sys.orig/net/bpf.h	2011-06-29 16:57:27.000000000 +1000
++++ sys/net/bpf.h	2011-06-29 16:57:31.000000000 +1000
+@@ -1,19 +1,25 @@
+ /*-
+  * Copyright (C) 1990, 1991, 1993
+  *	The Regents of the University of California.  All rights reserved.
+  *
+  * This code is derived from the Stanford/CMU enet packet filter,
+  * (net/enet.c) distributed as part of 4.3BSD, and code contributed
+  * to Berkeley by Steven McCanne and Van Jacobson both of Lawrence
+  * Berkeley Laboratory.
+  *
++ * Copyright (C) 2010 The University of Melbourne
++ * All rights reserved.
++ *
++ * Portions of this software were developed by the University of Melbourne
++ * under sponsorship from the FreeBSD Foundation.
++ *
+  * Redistribution and use in source and binary forms, with or without
+  * modification, are permitted provided that the following conditions
+  * are met:
+  * 1. Redistributions of source code must retain the above copyright
+  *    notice, this list of conditions and the following disclaimer.
+  * 2. Redistributions in binary form must reproduce the above copyright
+  *    notice, this list of conditions and the following disclaimer in the
+  *    documentation and/or other materials provided with the distribution.
+  * 4. Neither the name of the University nor the names of its contributors
+  *    may be used to endorse or promote products derived from this software
+@@ -163,20 +169,23 @@ enum bpf_direction {
+ #define	BPF_T_MICROTIME		0x0000
+ #define	BPF_T_NANOTIME		0x0001
+ #define	BPF_T_BINTIME		0x0002
+ #define	BPF_T_NONE		0x0003
+ #define	BPF_T_FORMAT_MASK	0x0003
+ #define	BPF_T_NORMAL		0x0000
+ #define	BPF_T_FAST		0x0100
+ #define	BPF_T_MONOTONIC		0x0200
+ #define	BPF_T_MONOTONIC_FAST	(BPF_T_FAST | BPF_T_MONOTONIC)
+ #define	BPF_T_FLAG_MASK		0x0300
++#ifdef FFCLOCK
++#define	BPF_T_FFCLOCK		0x8000
++#endif
+ #define	BPF_T_FORMAT(t)		((t) & BPF_T_FORMAT_MASK)
+ #define	BPF_T_FLAG(t)		((t) & BPF_T_FLAG_MASK)
+ #define	BPF_T_VALID(t)						\
+     ((t) == BPF_T_NONE || (BPF_T_FORMAT(t) != BPF_T_NONE &&	\
+     ((t) & ~(BPF_T_FORMAT_MASK | BPF_T_FLAG_MASK)) == 0))
+ 
+ #define	BPF_T_MICROTIME_FAST		(BPF_T_MICROTIME | BPF_T_FAST)
+ #define	BPF_T_NANOTIME_FAST		(BPF_T_NANOTIME | BPF_T_FAST)
+ #define	BPF_T_BINTIME_FAST		(BPF_T_BINTIME | BPF_T_FAST)
+ #define	BPF_T_MICROTIME_MONOTONIC	(BPF_T_MICROTIME | BPF_T_MONOTONIC)
+@@ -186,35 +195,44 @@ enum bpf_direction {
+ #define	BPF_T_NANOTIME_MONOTONIC_FAST	(BPF_T_NANOTIME | BPF_T_MONOTONIC_FAST)
+ #define	BPF_T_BINTIME_MONOTONIC_FAST	(BPF_T_BINTIME | BPF_T_MONOTONIC_FAST)
+ 
+ /*
+  * Structure prepended to each packet.
+  */
+ struct bpf_ts {
+ 	bpf_int64	bt_sec;		/* seconds */
+ 	bpf_u_int64	bt_frac;	/* fraction */
+ };
++
+ struct bpf_xhdr {
+ 	struct bpf_ts	bh_tstamp;	/* time stamp */
+ 	bpf_u_int32	bh_caplen;	/* length of captured portion */
+ 	bpf_u_int32	bh_datalen;	/* original length of packet */
+ 	u_short		bh_hdrlen;	/* length of bpf header (this struct
+ 					   plus alignment padding) */
++#ifdef FFCLOCK
++	ffcounter	ffcount_stamp;	/* feed-forward counter timestamp */
++#endif
+ };
++
+ /* Obsolete */
+ struct bpf_hdr {
+ 	struct timeval	bh_tstamp;	/* time stamp */
+ 	bpf_u_int32	bh_caplen;	/* length of captured portion */
+ 	bpf_u_int32	bh_datalen;	/* original length of packet */
+ 	u_short		bh_hdrlen;	/* length of bpf header (this struct
+ 					   plus alignment padding) */
++#ifdef FFCLOCK
++	ffcounter	ffcount_stamp;	/* feed-forward counter timestamp */
++#endif
+ };
++
+ #ifdef _KERNEL
+ #define	MTAG_BPF		0x627066
+ #define	MTAG_BPF_TIMESTAMP	0
+ #endif
+ 
+ /*
+  * When using zero-copy BPF buffers, a shared memory header is present
+  * allowing the kernel BPF implementation and user process to synchronize
+  * without using system calls.  This structure defines that header.  When
+  * accessing these fields, appropriate atomic operation and memory barriers
