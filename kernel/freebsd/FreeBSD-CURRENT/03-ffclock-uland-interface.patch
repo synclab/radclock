@@ -15,8 +15,8 @@ clock.
 
 Index: sys/compat/freebsd32/syscalls.master
 ===================================================================
---- sys.orig/compat/freebsd32/syscalls.master	2011-06-29 13:17:46.000000000 +1000
-+++ sys/compat/freebsd32/syscalls.master	2011-06-29 16:19:12.000000000 +1000
+--- sys.orig/compat/freebsd32/syscalls.master	2011-06-29 21:45:35.000000000 +1000
++++ sys/compat/freebsd32/syscalls.master	2011-06-29 22:05:37.000000000 +1000
 @@ -440,23 +440,23 @@
  234	AUE_NULL	STD	{ int freebsd32_clock_getres(clockid_t clock_id, \
  				    struct timespec32 *tp); }
@@ -46,8 +46,8 @@ Index: sys/compat/freebsd32/syscalls.master
  251	AUE_RFORK	NOPROTO	{ int rfork(int flags); }
 Index: sys/kern/kern_ffclock.c
 ===================================================================
---- sys.orig/kern/kern_ffclock.c	2011-06-29 16:17:12.000000000 +1000
-+++ sys/kern/kern_ffclock.c	2011-06-29 16:19:12.000000000 +1000
+--- sys.orig/kern/kern_ffclock.c	2011-06-29 22:05:37.000000000 +1000
++++ sys/kern/kern_ffclock.c	2011-06-29 22:05:37.000000000 +1000
 @@ -22,24 +22,35 @@
   * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
   * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
@@ -182,8 +182,8 @@ Index: sys/kern/kern_ffclock.c
 +}
 Index: sys/kern/syscalls.master
 ===================================================================
---- sys.orig/kern/syscalls.master	2011-06-29 13:17:46.000000000 +1000
-+++ sys/kern/syscalls.master	2011-06-29 16:19:12.000000000 +1000
+--- sys.orig/kern/syscalls.master	2011-06-29 21:45:35.000000000 +1000
++++ sys/kern/syscalls.master	2011-06-29 22:05:37.000000000 +1000
 @@ -449,23 +449,23 @@
  				    struct sigevent *evp, int *timerid); }
  236	AUE_NULL	STD	{ int ktimer_delete(int timerid); }
@@ -213,8 +213,8 @@ Index: sys/kern/syscalls.master
  251	AUE_RFORK	STD	{ int rfork(int flags); }
 Index: sys/sys/time.h
 ===================================================================
---- sys.orig/sys/time.h	2011-06-29 13:24:45.000000000 +1000
-+++ sys/sys/time.h	2011-06-29 16:19:12.000000000 +1000
+--- sys.orig/sys/time.h	2011-06-29 21:45:35.000000000 +1000
++++ sys/sys/time.h	2011-06-29 22:05:37.000000000 +1000
 @@ -26,20 +26,21 @@
   * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
   * SUCH DAMAGE.
@@ -239,8 +239,8 @@ Index: sys/sys/time.h
  #define	DST_USA		1	/* USA style dst */
 Index: sys/sys/timeffc.h
 ===================================================================
---- sys.orig/sys/timeffc.h	2011-06-29 16:08:34.000000000 +1000
-+++ sys/sys/timeffc.h	2011-06-29 16:43:11.000000000 +1000
+--- sys.orig/sys/timeffc.h	2011-06-29 22:05:37.000000000 +1000
++++ sys/sys/timeffc.h	2011-06-29 22:05:37.000000000 +1000
 @@ -139,13 +139,22 @@ void ffclock_nanouptime(struct timespec 
  void ffclock_microuptime(struct timeval *tvp);
  

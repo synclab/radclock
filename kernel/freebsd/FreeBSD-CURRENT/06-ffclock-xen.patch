@@ -12,8 +12,8 @@ guests see the same time and allow live migration.
 
 Index: sys/i386/xen/clock.c
 ===================================================================
---- sys.orig/i386/xen/clock.c	2011-06-29 13:17:46.000000000 +1000
-+++ sys/i386/xen/clock.c	2011-06-29 16:47:46.000000000 +1000
+--- sys.orig/i386/xen/clock.c	2011-06-29 21:45:35.000000000 +1000
++++ sys/i386/xen/clock.c	2011-06-29 22:05:38.000000000 +1000
 @@ -1,17 +1,23 @@
  /*-
   * Copyright (C) 1990 The Regents of the University of California.
@@ -119,9 +119,9 @@ Index: sys/i386/xen/clock.c
  {
 Index: sys/kern/kern_tc.c
 ===================================================================
---- sys.orig/kern/kern_tc.c	2011-06-29 16:47:26.000000000 +1000
-+++ sys/kern/kern_tc.c	2011-06-29 16:51:23.000000000 +1000
-@@ -761,41 +761,60 @@ ffclock_convert_diff(ffcounter ffdelta, 
+--- sys.orig/kern/kern_tc.c	2011-06-29 22:05:38.000000000 +1000
++++ sys/kern/kern_tc.c	2011-06-29 22:05:38.000000000 +1000
+@@ -752,41 +752,60 @@ ffclock_convert_diff(ffcounter ffdelta, 
  			bintime_add(bt, &delta);
  			ffdelta -= delta_max;
  		}
@@ -190,7 +190,7 @@ Index: sys/kern/kern_tc.c
  void
  tc_init(struct timecounter *tc)
  {
-@@ -812,20 +831,27 @@ tc_init(struct timecounter *tc)
+@@ -803,20 +822,27 @@ tc_init(struct timecounter *tc)
  			printf("Timecounter \"%s\" frequency %ju Hz",
  			    tc->tc_name, (uintmax_t)tc->tc_frequency);
  			printf(" -- Insufficient hz, needs at least %u\n", u);
@@ -220,8 +220,8 @@ Index: sys/kern/kern_tc.c
  	    "mask", CTLFLAG_RD, &(tc->tc_counter_mask), 0,
 Index: sys/sys/timetc.h
 ===================================================================
---- sys.orig/sys/timetc.h	2011-06-29 13:17:46.000000000 +1000
-+++ sys/sys/timetc.h	2011-06-29 16:47:46.000000000 +1000
+--- sys.orig/sys/timetc.h	2011-06-29 21:45:35.000000000 +1000
++++ sys/sys/timetc.h	2011-06-29 22:05:38.000000000 +1000
 @@ -1,18 +1,24 @@
  /*-
   * ----------------------------------------------------------------------------
@@ -278,8 +278,8 @@ Index: sys/sys/timetc.h
  void	tc_init(struct timecounter *tc);
 Index: sys/x86/x86/tsc.c
 ===================================================================
---- sys.orig/x86/x86/tsc.c	2011-06-29 13:17:46.000000000 +1000
-+++ sys/x86/x86/tsc.c	2011-06-29 16:47:46.000000000 +1000
+--- sys.orig/x86/x86/tsc.c	2011-06-29 21:45:35.000000000 +1000
++++ sys/x86/x86/tsc.c	2011-06-29 22:05:38.000000000 +1000
 @@ -1,14 +1,20 @@
  /*-
   * Copyright (C) 1998-2003 Poul-Henning Kamp
