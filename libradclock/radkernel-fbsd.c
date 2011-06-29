@@ -361,8 +361,8 @@ int get_kernel_ffclock(struct radclock *handle)
 	 * look heavy digits or resolution. See set_kernel_ffclock() in radclock
 	 * code.
 	 */
-	RAD_DATA(handle)->ca = (long double) cest.time.sec;
-	tmp = ((long double) cest.time.frac) / (1LL << 32);
+	RAD_DATA(handle)->ca = (long double) cest.update_time.sec;
+	tmp = ((long double) cest.update_time.frac) / (1LL << 32);
 	RAD_DATA(handle)->ca += tmp / (1LL << 32);
 	
 	tmp = (long double) cest.period / (1LLU << 32);
@@ -372,8 +372,8 @@ int get_kernel_ffclock(struct radclock *handle)
 	RAD_DATA(handle)->phat_local = (double) (tmp / (1LLU << 32));
 
 	RAD_DATA(handle)->status = (unsigned int) cest.status;
-	RAD_DATA(handle)->last_changed = (vcounter_t) cest.last_update;
-	RAD_ERROR(handle)->error_bound_avg = (double) (cest.error_bound_avg / 1e9);
+	RAD_DATA(handle)->last_changed = (vcounter_t) cest.update_ffcount;
+	RAD_ERROR(handle)->error_bound_avg = (double) (cest.error_bound_abs / 1e9);
 
 	fprintf(stdout, "period=%llu  phat = %.10lg, C = %7.4Lf\n",
 	(unsigned long long) cest.period,

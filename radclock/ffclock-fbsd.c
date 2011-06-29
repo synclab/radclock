@@ -257,9 +257,9 @@ set_kernel_ffclock(struct radclock *clock)
 	 * multiply for best resolution and loose resolution of 1/2^64.
 	 * Same for phat.
 	 */
-	cest.time.sec = (time_t) time;
+	cest.update_time.sec = (time_t) time;
 	frac = (time - (time_t) time) * (1LLU << 63);
-	cest.time.frac = frac << 1;
+	cest.update_time.frac = frac << 1;
 
 	period = ((long double) RAD_DATA(clock)->phat) * (1LLU << 63);
 	cest.period = period << 1;
@@ -267,9 +267,12 @@ set_kernel_ffclock(struct radclock *clock)
 	period_shortterm = ((long double) RAD_DATA(clock)->phat_local) * (1LLU << 63);
 	cest.period_shortterm = period_shortterm << 1;
 
-	cest.last_update = vcount;
+	cest.update_ffcount = vcount;
 	cest.status = RAD_DATA(clock)->status;
-	cest.error_bound_avg = (uint32_t) RAD_ERROR(clock)->error_bound_avg * 1e9;
+	cest.error_bound_abs = (uint32_t) RAD_ERROR(clock)->error_bound_avg * 1e9;
+	// TODO XXX: this should be made an average value of some kind !! and not the
+	// 'instantaneous' one
+	cest.error_bound_rate = (uint32_t) RAD_DATA(clock)->phat_local_err * 1e9;
 
 
 	/* Push */
