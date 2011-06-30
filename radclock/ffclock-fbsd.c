@@ -274,6 +274,14 @@ set_kernel_ffclock(struct radclock *clock)
 	// 'instantaneous' one
 	cest.error_bound_rate = (uint32_t) RAD_DATA(clock)->phat_local_err * 1e9;
 
+	struct timespec ts; 
+	bintime2timespec(&(cest.update_time), &ts);
+	fprintf(stdout, "\n");
+	fprintf(stdout, "Kernel update\n");
+	fprintf(stdout, "  count=%llu, period= %llu\n", (long long unsigned)cest.update_ffcount, (long long unsigned)cest.period);
+
+	fprintf(stdout, "  time=%.09Lf, = %ld.%lu\n", time, ts.tv_sec, ts.tv_nsec);
+	
 
 	/* Push */
 	switch (clock->kernel_version)

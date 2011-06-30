@@ -87,8 +87,7 @@
 #define	BPF_T_FAST		0x0100
 #define	BPF_T_MONOTONIC		0x0200
 #define	BPF_T_MONOTONIC_FAST	(BPF_T_FAST | BPF_T_MONOTONIC)
-#define	BPF_T_FFCLOCK		0x0400
-
+#define	BPF_T_FFCLOCK		0x8000
 //#endif
 
 
@@ -414,7 +413,7 @@ int descriptor_set_tsmode(struct radclock *handle, pcap_t *p_handle, int kmode)
 				bd_tstamp = BPF_T_MICROTIME;
 				break;
 			case RADCLOCK_TSMODE_RADCLOCK:
-				bd_tstamp = BPF_T_MICROTIME | BPF_T_FFCLOCK | BPF_T_MONOTONIC;
+				bd_tstamp = BPF_T_MICROTIME | BPF_T_FFCLOCK;
 				break;
 			default:
 				logger(LOG_ERR, "descriptor_set_tsmode: Unknown timestamping mode.");
@@ -423,7 +422,7 @@ int descriptor_set_tsmode(struct radclock *handle, pcap_t *p_handle, int kmode)
 
 		if (ioctl(pcap_fileno(p_handle), BIOCSTSTAMP, (caddr_t)&bd_tstamp) == -1) 
 		{
-			logger(LOG_ERR, "Setting capture mode failed");
+			logger(LOG_ERR, "Setting capture mode failed: %s", strerror(errno));
 			return -1;
 		}
 
@@ -457,7 +456,7 @@ int descriptor_get_tsmode(struct radclock *handle, pcap_t *p_handle, int *kmode)
 	case 2:
 		if (ioctl(pcap_fileno(p_handle), BIOCGTSTAMP, (caddr_t)(&bd_tstamp)) == -1)
 		{
-			logger(LOG_ERR, "Getting timestamping mode failed");
+			logger(LOG_ERR, "Getting timestamping mode failed: %s", strerror(errno));
 			return -1;
 		}
 
