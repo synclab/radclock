@@ -5,11 +5,11 @@ Core set of changes to support a feed-forward clock within the kernel.
 ---
  conf/NOTES       |    8 
  conf/options     |    1 
- kern/kern_tc.c   |  493 +++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ kern/kern_tc.c   |  494 +++++++++++++++++++++++++++++++++++++++++++++++++++++++
  kern/subr_rtc.c  |    8 
  sys/_ffcounter.h |   43 ++++
- sys/timeffc.h    |   98 ++++++++++
- 6 files changed, 651 insertions(+)
+ sys/timeffc.h    |   99 +++++++++++
+ 6 files changed, 653 insertions(+)
 
 Index: sys/conf/NOTES
 ===================================================================
@@ -73,7 +73,7 @@ Index: sys/conf/options
 Index: sys/kern/kern_tc.c
 ===================================================================
 --- sys.orig/kern/kern_tc.c	2011-06-29 15:36:10.000000000 +1000
-+++ sys/kern/kern_tc.c	2011-06-30 11:28:18.000000000 +1000
++++ sys/kern/kern_tc.c	2011-06-30 22:25:53.000000000 +1000
 @@ -1,29 +1,43 @@
  /*-
   * ----------------------------------------------------------------------------
@@ -118,7 +118,7 @@ Index: sys/kern/kern_tc.c
   * in the typical 'missed a couple of seconds' case, but doesn't loop
   * forever when the time step is large.
   */
-@@ -293,20 +307,490 @@ getmicrotime(struct timeval *tvp)
+@@ -293,20 +307,491 @@ getmicrotime(struct timeval *tvp)
  	struct timehands *th;
  	u_int gen;
  
@@ -139,7 +139,7 @@ Index: sys/kern/kern_tc.c
 +
 +/* Feed-Forward Clock estimates kept updated by the synchronization daemon. */
 +struct ffclock_estimate ffclock_estimate;
-+struct bintime ffclock_boottime;
++struct bintime ffclock_monotonic_boot;
 +uint8_t ffclock_fetch_update;
 +struct mtx ffclock_mtx;
 +
@@ -190,7 +190,6 @@ Index: sys/kern/kern_tc.c
 +	ffth7.next = &ffth8;
 +	ffth8.next = &ffth9;
 +	ffth9.next = &ffth0;
-+	bintime_clear(&ffclock_boottime);
 +	ffclock_fetch_update = 0;
 +	mtx_init(&ffclock_mtx, "ffclock lock", NULL, MTX_DEF);
 +}
@@ -200,6 +199,8 @@ Index: sys/kern/kern_tc.c
 + * Called from inittodr() to get things kickstarted and uses the timecounter
 + * nominal frequency as a first period estimate.
 + * Note: this function may be called several time just after boot.
++ * Note: this is the only function that sets the value of boottime for the
++ * monotonic (ie uptime) version of the feed-forward clock.
 + */
 +void
 +ffclock_reset_clock(struct timespec *ts)
@@ -210,6 +211,7 @@ Index: sys/kern/kern_tc.c
 +	tc = timehands->th_counter;
 +	memset(&cest, 0, sizeof(struct ffclock_estimate));
 +
++	timespec2bintime(ts, &ffclock_monotonic_boot);
 +	timespec2bintime(ts, &(cest.boot_time));
 +	cest.update_time = cest.boot_time;
 +	ffclock_read_counter(&cest.update_ffcount);
@@ -398,7 +400,6 @@ Index: sys/kern/kern_tc.c
 +	 */
 +	if (ffclock_fetch_update) {
 +		bcopy(&ffclock_estimate, cest, sizeof(struct ffclock_estimate));
-+		ffclock_boottime = cest->boot_time;
 +		ffdelta = ffth->tick_ffcount - cest->update_ffcount;
 +		ffth->tick_time = cest->update_time;
 +		ffclock_absdelta_add(ffdelta, &(ffth->tick_time), cest);
@@ -609,7 +610,7 @@ Index: sys/kern/kern_tc.c
  	struct sysctl_oid *tc_root;
  
  	u = tc->tc_frequency / tc->tc_counter_mask;
-@@ -433,20 +917,23 @@ tc_windup(void)
+@@ -433,20 +918,23 @@ tc_windup(void)
  	/*
  	 * Capture a timecounter delta on the current timecounter and if
  	 * changing timecounters, a counter value from the new timecounter.
@@ -633,7 +634,7 @@ Index: sys/kern/kern_tc.c
  	if ((delta > th->th_counter->tc_frequency / 2) &&
  	    (th->th_scale * delta < ((uint64_t)1 << 63))) {
  		/* The product th_scale * delta just barely overflows. */
-@@ -489,20 +976,23 @@ tc_windup(void)
+@@ -489,20 +977,23 @@ tc_windup(void)
  	/* XXX shouldn't do this here.  Should force non-`get' versions. */
  	bintime2timeval(&bt, &th->th_microtime);
  	bintime2timespec(&bt, &th->th_nanotime);
@@ -657,7 +658,7 @@ Index: sys/kern/kern_tc.c
  	 *
  	 * The th_adjustment is nanoseconds per second with 32 bit binary
  	 * fraction and we want 64 bit binary fraction of second:
-@@ -807,20 +1297,23 @@ inittimecounter(void *dummy)
+@@ -807,20 +1298,23 @@ inittimecounter(void *dummy)
  	 * smallest reasonable one.  If they want better timestamps they
  	 * should use the non-"get"* functions.
  	 */
@@ -786,8 +787,8 @@ Index: sys/sys/_ffcounter.h
 Index: sys/sys/timeffc.h
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ sys/sys/timeffc.h	2011-06-30 11:27:40.000000000 +1000
-@@ -0,0 +1,98 @@
++++ sys/sys/timeffc.h	2011-06-30 22:53:46.000000000 +1000
+@@ -0,0 +1,99 @@
 +/*-
 + * Copyright (C) 2010 University of Melbourne
 + * All rights reserved.
@@ -858,6 +859,7 @@ Index: sys/sys/timeffc.h
 +#define FFCLOCK_FAST		1
 +#define FFCLOCK_SMOOTH		2
 +#define FFCLOCK_LEAPSEC		4
++#define FFCLOCK_BOOTTIME	8
 +
 +/* Resets Feed-Forward clock from RTC */
 +void ffclock_reset_clock(struct timespec *ts);

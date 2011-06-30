@@ -4,14 +4,14 @@ Add ffcounter timestamps to the BPF header for export via libpcap.
 Allow to choose between feedback and feed-forward clock for timestamping.
 
 ---
- net/bpf.c |  148 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++---
+ net/bpf.c |  143 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++---
  net/bpf.h |   25 ++++++++++
- 2 files changed, 168 insertions(+), 5 deletions(-)
+ 2 files changed, 163 insertions(+), 5 deletions(-)
 
 Index: sys/net/bpf.c
 ===================================================================
---- sys.orig/net/bpf.c	2011-06-30 19:08:26.000000000 +1000
-+++ sys/net/bpf.c	2011-06-30 19:29:20.000000000 +1000
+--- sys.orig/net/bpf.c	2011-06-30 22:09:29.000000000 +1000
++++ sys/net/bpf.c	2011-06-30 23:15:24.000000000 +1000
 @@ -1,19 +1,25 @@
  /*-
   * Copyright (C) 1990, 1991, 1993
@@ -209,7 +209,7 @@ Index: sys/net/bpf.c
  bpfread(struct cdev *dev, struct uio *uio, int ioflag)
  {
  	struct bpf_d *d;
-@@ -1769,61 +1809,85 @@ bpf_ts_quality(int tstype)
+@@ -1769,61 +1809,86 @@ bpf_ts_quality(int tstype)
  {
  
  	if (tstype == BPF_T_NONE)
@@ -256,15 +256,16 @@ Index: sys/net/bpf.c
 +#ifdef FFCLOCK
 +		} else {
 +			if ((tstype & BPF_T_MONOTONIC) == 0)
-+				ffclock_abstime(ffcount, bt, NULL, FFCLOCK_LEAPSEC);
++				ffclock_abstime(CLOCK_REALTIME, ffcount, bt, NULL);
 +			else
-+				ffclock_abstime(ffcount, bt, NULL, FFCLOCK_UTC);
++				ffclock_abstime(CLOCK_MONOTONIC, ffcount, bt, NULL);
 +		}
 +#endif
 +	} else {
 +#ifdef FFCLOCK
-+		ffclock_last_tick(ffcount, bt, FFCLOCK_UTC);
-+		if ((tstype & BPF_T_FFCLOCK) == 0)
++		if ((tstype & BPF_T_FFCLOCK) == BPF_T_FFCLOCK)
++			ffclock_abstime(CLOCK_REALTIME_FAST, ffcount, bt, NULL);
++		else
 +#endif
 +			getbinuptime(bt);
 +	}
@@ -300,7 +301,7 @@ Index: sys/net/bpf.c
  		 * NB: We dont call BPF_CHECK_DIRECTION() here since there is no
  		 * way for the caller to indiciate to us whether this packet
  		 * is inbound or outbound.  In the bpf_mtap() routines, we use
-@@ -1832,26 +1896,37 @@ bpf_tap(struct bpf_if *bp, u_char *pkt, 
+@@ -1832,26 +1897,37 @@ bpf_tap(struct bpf_if *bp, u_char *pkt, 
  #ifdef BPF_JITTER
  		bf = bpf_jitter_enable != 0 ? d->bd_bfilter : NULL;
  		if (bf != NULL)
@@ -338,7 +339,7 @@ Index: sys/net/bpf.c
  	    (((d)->bd_direction == BPF_D_IN && (r) != (i)) ||	\
  	    ((d)->bd_direction == BPF_D_OUT && (r) == (i)))
  
-@@ -1861,20 +1936,23 @@ bpf_tap(struct bpf_if *bp, u_char *pkt, 
+@@ -1861,20 +1937,23 @@ bpf_tap(struct bpf_if *bp, u_char *pkt, 
  void
  bpf_mtap(struct bpf_if *bp, struct mbuf *m)
  {
@@ -362,7 +363,7 @@ Index: sys/net/bpf.c
  	pktlen = m_length(m, NULL);
  
  	gottime = BPF_TSTAMP_NONE;
-@@ -1888,44 +1966,58 @@ bpf_mtap(struct bpf_if *bp, struct mbuf 
+@@ -1888,44 +1967,58 @@ bpf_mtap(struct bpf_if *bp, struct mbuf 
  		bf = bpf_jitter_enable != 0 ? d->bd_bfilter : NULL;
  		/* XXX We cannot handle multiple mbufs. */
  		if (bf != NULL && m->m_next == NULL)
@@ -421,7 +422,7 @@ Index: sys/net/bpf.c
  	pktlen = m_length(m, NULL);
  	/*
  	 * Craft on-stack mbuf suitable for passing to bpf_filter.
-@@ -1941,26 +2033,37 @@ bpf_mtap2(struct bpf_if *bp, void *data,
+@@ -1941,26 +2034,37 @@ bpf_mtap2(struct bpf_if *bp, void *data,
  	BPFIF_LOCK(bp);
  	LIST_FOREACH(d, &bp->bif_dlist, bd_next) {
  		if (BPF_CHECK_DIRECTION(d, m->m_pkthdr.rcvif, bp->bif_ifp))
@@ -459,7 +460,7 @@ Index: sys/net/bpf.c
  
  #undef	BPF_TSTAMP_NONE
  #undef	BPF_TSTAMP_FAST
-@@ -1995,25 +2098,37 @@ bpf_hdrlen(struct bpf_d *d)
+@@ -1995,25 +2099,31 @@ bpf_hdrlen(struct bpf_d *d)
  	return (hdrlen - d->bd_bif->bif_hdrlen);
  }
  
@@ -479,12 +480,6 @@ Index: sys/net/bpf.c
  		bt = &bt2;
  	}
 +#ifdef FFCLOCK
-+	} else {
-+		if ((tstype & BPF_T_MONOTONIC) == BPF_T_MONOTONIC) {
-+			bt2 = *bt;
-+			bintime_sub(&bt2, &ffclock_boottime);
-+			bt = &bt2;
-+		}
 +	}
 +#endif
  	switch (BPF_T_FORMAT(tstype)) {
@@ -497,7 +492,7 @@ Index: sys/net/bpf.c
  		bintime2timespec(bt, &tsn);
  		ts->bt_sec = tsn.tv_sec;
  		ts->bt_frac = tsn.tv_nsec;
-@@ -2025,24 +2140,31 @@ bpf_bintime2ts(struct bintime *bt, struc
+@@ -2025,24 +2135,31 @@ bpf_bintime2ts(struct bintime *bt, struc
  	}
  }
  
@@ -529,7 +524,7 @@ Index: sys/net/bpf.c
  #endif
  	int caplen, curlen, hdrlen, totlen;
  	int do_wakeup = 0;
-@@ -2111,60 +2233,76 @@ catchpacket(struct bpf_d *d, u_char *pkt
+@@ -2111,60 +2228,76 @@ catchpacket(struct bpf_d *d, u_char *pkt
  		 * reader should be woken up.
  		 */
  		do_wakeup = 1;
@@ -608,8 +603,8 @@ Index: sys/net/bpf.c
  	d->bd_slen = curlen + totlen;
 Index: sys/net/bpf.h
 ===================================================================
---- sys.orig/net/bpf.h	2011-06-30 19:08:26.000000000 +1000
-+++ sys/net/bpf.h	2011-06-30 19:12:03.000000000 +1000
+--- sys.orig/net/bpf.h	2011-06-30 22:09:29.000000000 +1000
++++ sys/net/bpf.h	2011-06-30 23:07:37.000000000 +1000
 @@ -1,19 +1,25 @@
  /*-
   * Copyright (C) 1990, 1991, 1993

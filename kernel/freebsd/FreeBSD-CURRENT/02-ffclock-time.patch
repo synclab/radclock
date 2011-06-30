@@ -1,13 +1,14 @@
 ---
  conf/files          |    1 
- kern/kern_ffclock.c |  242 ++++++++++++++++++++++++++++++++++++++++++++++++++++
- sys/timeffc.h       |   53 +++++++++++
- 3 files changed, 296 insertions(+)
+ kern/kern_ffclock.c |  317 ++++++++++++++++++++++++++++++++++++++++++++++++++++
+ sys/time.h          |    1 
+ sys/timeffc.h       |   50 ++++++++
+ 4 files changed, 369 insertions(+)
 
 Index: sys/conf/files
 ===================================================================
---- sys.orig/conf/files	2011-06-29 13:19:33.000000000 +1000
-+++ sys/conf/files	2011-06-29 16:05:46.000000000 +1000
+--- sys.orig/conf/files	2011-06-30 23:15:59.000000000 +1000
++++ sys/conf/files	2011-06-30 23:16:05.000000000 +1000
 @@ -2298,20 +2298,21 @@ kern/kern_cpu.c			standard
  kern/kern_cpuset.c		standard
  kern/kern_context.c		standard
@@ -33,8 +34,8 @@ Index: sys/conf/files
 Index: sys/kern/kern_ffclock.c
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ sys/kern/kern_ffclock.c	2011-06-29 16:17:12.000000000 +1000
-@@ -0,0 +1,242 @@
++++ sys/kern/kern_ffclock.c	2011-06-30 23:51:25.000000000 +1000
+@@ -0,0 +1,317 @@
 +/*-
 + * Copyright (C) 2010 University of Melbourne
 + * All rights reserved.
@@ -70,18 +71,81 @@ Index: sys/kern/kern_ffclock.c
 +#include <sys/timeffc.h>
 +
 +extern struct ffclock_estimate ffclock_estimate;
++extern struct bintime ffclock_monotonic_boot;
 +
 +/*
 + * Feed-Forward Clock time functions
 + */
 +void
-+ffclock_abstime(ffcounter *ffcount, struct bintime *bt,
-+				struct bintime *error_bound, uint32_t flags)
++ffclock_abstime(clockid_t clock_id, ffcounter *ffcount, struct bintime *bt,
++				struct bintime *error_bound)
 +{
 +	struct ffclock_estimate cest;
++	struct bintime bt2;
 +	ffcounter ffc;
 +	ffcounter update_ffcount;
 +	ffcounter ffdelta_error;
++	uint32_t flags;
++
++	flags = 0;
++	switch (clock_id) {
++	case CLOCK_MONOTONIC_FAST:
++	case CLOCK_REALTIME_FAST:
++	case CLOCK_UPTIME_FAST:
++		flags |= FFCLOCK_FAST;
++		break;
++	default:
++		break;
++	}
++
++	switch (clock_id) {
++	case CLOCK_REALTIME:
++	case CLOCK_REALTIME_FAST:
++	case CLOCK_REALTIME_PRECISE:
++	case CLOCK_MONOTONIC:
++	case CLOCK_MONOTONIC_FAST:
++	case CLOCK_MONOTONIC_PRECISE:
++	case CLOCK_UPTIME:
++	case CLOCK_UPTIME_FAST:
++	case CLOCK_UPTIME_PRECISE:
++		flags |= FFCLOCK_SMOOTH;
++		break;
++	default:
++		break;
++	}
++
++	switch (clock_id) {
++	case CLOCK_REALTIME:
++	case CLOCK_REALTIME_FAST:
++	case CLOCK_REALTIME_PRECISE:
++		flags |= FFCLOCK_LEAPSEC;
++		break;
++	default:
++		break;
++	}
++
++	switch (clock_id) {
++	case CLOCK_MONOTONIC:
++	case CLOCK_MONOTONIC_FAST:
++	case CLOCK_MONOTONIC_PRECISE:
++	case CLOCK_UPTIME:
++	case CLOCK_UPTIME_FAST:
++	case CLOCK_UPTIME_PRECISE:
++		flags |= FFCLOCK_BOOTTIME;
++		break;
++	default:
++		break;
++	}
++
++	switch (clock_id) {
++	case CLOCK_VIRTUAL:				/* TODO Not Implemented yet */
++	case CLOCK_PROF:				/* TODO Not Implemented yet */
++	case CLOCK_SECOND:				/* TODO Not Implemented yet */
++	case CLOCK_THREAD_CPUTIME_ID:	/* TODO Not Implemented yet */
++	case CLOCK_BARE:
++	default:
++		break;
++	}
 +
 +	/* Get counter and corresponding time */
 +	if ((flags & FFCLOCK_FAST) == FFCLOCK_FAST)
@@ -108,6 +172,24 @@ Index: sys/kern/kern_ffclock.c
 +			bt->sec -= cest.leapsec;
 +	}
 +
++	/*
++	 * Boot time adjustement, for uptime/monotonic clocks.
++	 */
++	if ((flags & FFCLOCK_BOOTTIME) == FFCLOCK_BOOTTIME) {
++		if (bintime_cmp(&(cest.boot_time), &ffclock_monotonic_boot, >)) {
++			bt2 = cest.boot_time;
++			bintime_sub(&bt2, &ffclock_monotonic_boot);
++			bintime_sub(bt, &bt2);
++		} else {
++			bt2 = ffclock_monotonic_boot;
++			bintime_sub(&bt2, &(cest.boot_time));
++			bintime_add(bt, &bt2);
++		}
++	}
++
++	/*
++	 * Compute error bound if passed a valid pointer.
++	 */
 +	if (error_bound) {
 +		ffdelta_error = ffc - cest.update_ffcount;
 +		ffclock_convert_diff(ffdelta_error, error_bound);
@@ -151,7 +233,7 @@ Index: sys/kern/kern_ffclock.c
 +ffclock_bintime(struct bintime *bt)
 +{
 +
-+	ffclock_abstime(NULL, bt, NULL, FFCLOCK_SMOOTH | FFCLOCK_LEAPSEC);
++	ffclock_abstime(CLOCK_REALTIME, NULL, bt, NULL);
 +}
 +
 +void
@@ -159,7 +241,7 @@ Index: sys/kern/kern_ffclock.c
 +{
 +	struct bintime bt;
 +
-+	ffclock_abstime(NULL, &bt, NULL, FFCLOCK_SMOOTH | FFCLOCK_LEAPSEC);
++	ffclock_abstime(CLOCK_REALTIME, NULL, &bt, NULL);
 +	bintime2timespec(&bt, tsp);
 +}
 +
@@ -168,7 +250,7 @@ Index: sys/kern/kern_ffclock.c
 +{
 +	struct bintime bt;
 +
-+	ffclock_abstime(NULL, &bt, NULL, FFCLOCK_SMOOTH | FFCLOCK_LEAPSEC);
++	ffclock_abstime(CLOCK_REALTIME, NULL, &bt, NULL);
 +	bintime2timeval(&bt, tvp);
 +}
 +
@@ -176,7 +258,7 @@ Index: sys/kern/kern_ffclock.c
 +ffclock_getbintime(struct bintime *bt)
 +{
 +
-+	ffclock_abstime(NULL, bt, NULL, FFCLOCK_FAST | FFCLOCK_LEAPSEC);
++	ffclock_abstime(CLOCK_REALTIME_FAST, NULL, bt, NULL);
 +}
 +
 +void
@@ -184,7 +266,7 @@ Index: sys/kern/kern_ffclock.c
 +{
 +	struct bintime bt;
 +
-+	ffclock_abstime(NULL, &bt, NULL, FFCLOCK_FAST | FFCLOCK_LEAPSEC);
++	ffclock_abstime(CLOCK_REALTIME_FAST, NULL, &bt, NULL);
 +	bintime2timespec(&bt, tsp);
 +}
 +
@@ -193,7 +275,7 @@ Index: sys/kern/kern_ffclock.c
 +{
 +	struct bintime bt;
 +
-+	ffclock_abstime(NULL, &bt, NULL, FFCLOCK_FAST | FFCLOCK_LEAPSEC);
++	ffclock_abstime(CLOCK_REALTIME_FAST, NULL, &bt, NULL);
 +	bintime2timeval(&bt, tvp);
 +}
 +
@@ -201,8 +283,7 @@ Index: sys/kern/kern_ffclock.c
 +ffclock_binuptime(struct bintime *bt)
 +{
 +
-+	ffclock_abstime(NULL, bt, NULL, FFCLOCK_SMOOTH | FFCLOCK_LEAPSEC);
-+	bintime_sub(bt, &ffclock_boottime);
++	ffclock_abstime(CLOCK_UPTIME, NULL, bt, NULL);
 +}
 +
 +void
@@ -210,8 +291,7 @@ Index: sys/kern/kern_ffclock.c
 +{
 +	struct bintime bt;
 +
-+	ffclock_abstime(NULL, &bt, NULL, FFCLOCK_SMOOTH | FFCLOCK_LEAPSEC);
-+	bintime_sub(&bt, &ffclock_boottime);
++	ffclock_abstime(CLOCK_UPTIME, NULL, &bt, NULL);
 +	bintime2timespec(&bt, tsp);
 +}
 +
@@ -220,8 +300,7 @@ Index: sys/kern/kern_ffclock.c
 +{
 +	struct bintime bt;
 +
-+	ffclock_abstime(NULL, &bt, NULL, FFCLOCK_SMOOTH | FFCLOCK_LEAPSEC);
-+	bintime_sub(&bt, &ffclock_boottime);
++	ffclock_abstime(CLOCK_UPTIME, NULL, &bt, NULL);
 +	bintime2timeval(&bt, tvp);
 +}
 +
@@ -229,8 +308,7 @@ Index: sys/kern/kern_ffclock.c
 +ffclock_getbinuptime(struct bintime *bt)
 +{
 +
-+	ffclock_abstime(NULL, bt, NULL, FFCLOCK_FAST | FFCLOCK_LEAPSEC);
-+	bintime_sub(bt, &ffclock_boottime);
++	ffclock_abstime(CLOCK_UPTIME_FAST, NULL, bt, NULL);
 +}
 +
 +void
@@ -238,8 +316,7 @@ Index: sys/kern/kern_ffclock.c
 +{
 +	struct bintime bt;
 +
-+	ffclock_abstime(NULL, &bt, NULL, FFCLOCK_FAST | FFCLOCK_LEAPSEC);
-+	bintime_sub(&bt, &ffclock_boottime);
++	ffclock_abstime(CLOCK_UPTIME_FAST, NULL, &bt, NULL);
 +	bintime2timespec(&bt, tsp);
 +}
 +
@@ -248,8 +325,7 @@ Index: sys/kern/kern_ffclock.c
 +{
 +	struct bintime bt;
 +
-+	ffclock_abstime(NULL, &bt, NULL, FFCLOCK_FAST | FFCLOCK_LEAPSEC);
-+	bintime_sub(&bt, &ffclock_boottime);
++	ffclock_abstime(CLOCK_UPTIME_FAST, NULL, &bt, NULL);
 +	bintime2timeval(&bt, tvp);
 +}
 +
@@ -277,35 +353,37 @@ Index: sys/kern/kern_ffclock.c
 +	ffclock_difftime(ffdelta, &bt, NULL);
 +	bintime2timeval(&bt, tvp);
 +}
-Index: sys/sys/timeffc.h
+Index: sys/sys/time.h
 ===================================================================
---- sys.orig/sys/timeffc.h	2011-06-29 15:36:15.000000000 +1000
-+++ sys/sys/timeffc.h	2011-06-29 16:08:34.000000000 +1000
-@@ -61,20 +61,23 @@ struct ffclock_estimate {
-  * time in seconds.
-  * FAST:	do not read the hardware counter, returns time of last tick. The
-  * 			time returned as the resolution of the kernel tick (1/hz [s]).
-  * SMOOTH:	smoothes clock and prevent it from going backward (monotonic).
-  * 			Slightly less accurate and may take time to converge.
-  * LEAPSEC: returns UTC time, including leap seconds.
-  */
- #define FFCLOCK_FAST		1
- #define FFCLOCK_SMOOTH		2
- #define FFCLOCK_LEAPSEC		4
-+#define FFCLOCK_UTC			(FFCLOCK_SMOOTH | FFCLOCK_LEAPSEC)
-+
-+extern struct bintime ffclock_boottime;
+--- sys.orig/sys/time.h	2011-06-30 23:15:59.000000000 +1000
++++ sys/sys/time.h	2011-06-30 23:49:24.000000000 +1000
+@@ -270,20 +270,21 @@ struct clockinfo {
+ #define CLOCK_MONOTONIC	4
+ #define CLOCK_UPTIME	5		/* FreeBSD-specific. */
+ #define CLOCK_UPTIME_PRECISE	7	/* FreeBSD-specific. */
+ #define CLOCK_UPTIME_FAST	8	/* FreeBSD-specific. */
+ #define CLOCK_REALTIME_PRECISE	9	/* FreeBSD-specific. */
+ #define CLOCK_REALTIME_FAST	10	/* FreeBSD-specific. */
+ #define CLOCK_MONOTONIC_PRECISE	11	/* FreeBSD-specific. */
+ #define CLOCK_MONOTONIC_FAST	12	/* FreeBSD-specific. */
+ #define CLOCK_SECOND	13		/* FreeBSD-specific. */
+ #define CLOCK_THREAD_CPUTIME_ID	14
++#define CLOCK_BARE	15	// TODO that is a pretty bad name
+ #endif
  
- /* Resets Feed-Forward clock from RTC */
- void ffclock_reset_clock(struct timespec *ts);
+ #ifndef TIMER_ABSTIME
+ #define TIMER_RELTIME	0x0	/* relative timer */
+ #define TIMER_ABSTIME	0x1	/* absolute timer */
+ #endif
+ 
+ #ifdef _KERNEL
  
  /*
-  * Return the current value of the Feed-Forward Clock counter. Essential to
-  * measure time interval in counter units. If a fast timecounter is used by the
-  * system, may also allow fast but accurate timestamping.
-  */
- void ffclock_read_counter(ffcounter *ffcount);
-@@ -86,13 +89,63 @@ void ffclock_read_counter(ffcounter *ffc
+Index: sys/sys/timeffc.h
+===================================================================
+--- sys.orig/sys/timeffc.h	2011-06-30 23:15:59.000000000 +1000
++++ sys/sys/timeffc.h	2011-06-30 23:49:24.000000000 +1000
+@@ -87,13 +87,63 @@ void ffclock_read_counter(ffcounter *ffc
  void ffclock_last_tick(ffcounter *ffcount, struct bintime *bt, uint32_t flags);
  
  /*
@@ -332,7 +410,7 @@ Index: sys/sys/timeffc.h
 + * 		measured in counter value. This should be the preferred way to measure
 + * 		 very accurately small time intervals.
 + */
-+void ffclock_abstime(ffcounter *ffcount, struct bintime *bt, struct bintime *error_bound, uint32_t flags);
++void ffclock_abstime(clockid_t clock_id, ffcounter *ffcount, struct bintime *bt, struct bintime *error_bound);
 +void ffclock_difftime(ffcounter ffdelta, struct bintime *bt, struct bintime *error_bound);
 +
 +/*
