@@ -73,7 +73,7 @@ Index: sys/conf/options
 Index: sys/kern/kern_tc.c
 ===================================================================
 --- sys.orig/kern/kern_tc.c	2011-06-29 15:36:10.000000000 +1000
-+++ sys/kern/kern_tc.c	2011-06-29 22:40:09.000000000 +1000
++++ sys/kern/kern_tc.c	2011-06-30 11:28:18.000000000 +1000
 @@ -1,29 +1,43 @@
  /*-
   * ----------------------------------------------------------------------------
@@ -351,7 +351,7 @@ Index: sys/kern/kern_tc.c
 +	uint64_t nsec;
 +	uint8_t ogen;
 +
-+	/*
++	/*s
 +	 * Pick the next timehand, copy current ffclock estimates and move tick
 +	 * times and counter forward.
 +	 */
@@ -786,7 +786,7 @@ Index: sys/sys/_ffcounter.h
 Index: sys/sys/timeffc.h
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ sys/sys/timeffc.h	2011-06-29 22:34:21.000000000 +1000
++++ sys/sys/timeffc.h	2011-06-30 11:27:40.000000000 +1000
 @@ -0,0 +1,98 @@
 +/*-
 + * Copyright (C) 2010 University of Melbourne

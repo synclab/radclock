@@ -7,8 +7,8 @@ Modification to the PPS-API to support ffcounter timestamps
 
 Index: sys/kern/kern_tc.c
 ===================================================================
---- sys.orig/kern/kern_tc.c	2011-06-29 22:05:11.000000000 +1000
-+++ sys/kern/kern_tc.c	2011-06-29 22:05:50.000000000 +1000
+--- sys.orig/kern/kern_tc.c	2011-06-30 11:28:18.000000000 +1000
++++ sys/kern/kern_tc.c	2011-06-30 11:28:34.000000000 +1000
 @@ -1088,20 +1088,23 @@ SYSCTL_PROC(_kern_timecounter, OID_AUTO,
  
  /*
@@ -177,8 +177,8 @@ Index: sys/kern/kern_tc.c
  	if (fhard) {
 Index: sys/sys/timepps.h
 ===================================================================
---- sys.orig/sys/timepps.h	2011-06-29 21:45:35.000000000 +1000
-+++ sys/sys/timepps.h	2011-06-29 22:05:38.000000000 +1000
+--- sys.orig/sys/timepps.h	2011-06-30 11:27:40.000000000 +1000
++++ sys/sys/timepps.h	2011-06-30 11:28:34.000000000 +1000
 @@ -1,29 +1,38 @@
  /*-
   * ----------------------------------------------------------------------------
