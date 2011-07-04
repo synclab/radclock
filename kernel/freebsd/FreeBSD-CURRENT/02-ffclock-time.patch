@@ -2,8 +2,8 @@
  conf/files          |    1 
  kern/kern_ffclock.c |  317 ++++++++++++++++++++++++++++++++++++++++++++++++++++
  sys/time.h          |    1 
- sys/timeffc.h       |   50 ++++++++
- 4 files changed, 369 insertions(+)
+ sys/timeffc.h       |   56 +++++++++
+ 4 files changed, 375 insertions(+)
 
 Index: sys/conf/files
 ===================================================================
@@ -34,7 +34,7 @@ Index: sys/conf/files
 Index: sys/kern/kern_ffclock.c
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ sys/kern/kern_ffclock.c	2011-06-30 23:51:25.000000000 +1000
++++ sys/kern/kern_ffclock.c	2011-07-04 15:59:54.000000000 +1000
 @@ -0,0 +1,317 @@
 +/*-
 + * Copyright (C) 2010 University of Melbourne
@@ -356,7 +356,7 @@ Index: sys/kern/kern_ffclock.c
 Index: sys/sys/time.h
 ===================================================================
 --- sys.orig/sys/time.h	2011-06-30 23:15:59.000000000 +1000
-+++ sys/sys/time.h	2011-06-30 23:49:24.000000000 +1000
++++ sys/sys/time.h	2011-07-04 15:59:54.000000000 +1000
 @@ -270,20 +270,21 @@ struct clockinfo {
  #define CLOCK_MONOTONIC	4
  #define CLOCK_UPTIME	5		/* FreeBSD-specific. */
@@ -382,8 +382,35 @@ Index: sys/sys/time.h
 Index: sys/sys/timeffc.h
 ===================================================================
 --- sys.orig/sys/timeffc.h	2011-06-30 23:15:59.000000000 +1000
-+++ sys/sys/timeffc.h	2011-06-30 23:49:24.000000000 +1000
-@@ -87,13 +87,63 @@ void ffclock_read_counter(ffcounter *ffc
++++ sys/sys/timeffc.h	2011-07-04 15:59:54.000000000 +1000
+@@ -63,20 +63,26 @@ struct ffclock_estimate {
+  * 			time returned as the resolution of the kernel tick (1/hz [s]).
+  * SMOOTH:	smoothes clock and prevent it from going backward (monotonic).
+  * 			Slightly less accurate and may take time to converge.
+  * LEAPSEC: returns UTC time, including leap seconds.
+  */
+ #define FFCLOCK_FAST		1
+ #define FFCLOCK_SMOOTH		2
+ #define FFCLOCK_LEAPSEC		4
+ #define FFCLOCK_BOOTTIME	8
+ 
++/*
++ * Feed-Forward Clock status
++ */
++#define FFCLOCK_STA_UNSYNC	1
++#define FFCLOCK_STA_WARMUP	2
++
+ /* Resets Feed-Forward clock from RTC */
+ void ffclock_reset_clock(struct timespec *ts);
+ 
+ /*
+  * Return the current value of the Feed-Forward Clock counter. Essential to
+  * measure time interval in counter units. If a fast timecounter is used by the
+  * system, may also allow fast but accurate timestamping.
+  */
+ void ffclock_read_counter(ffcounter *ffcount);
+ 
+@@ -87,13 +93,63 @@ void ffclock_read_counter(ffcounter *ffc
  void ffclock_last_tick(ffcounter *ffcount, struct bintime *bt, uint32_t flags);
  
  /*
