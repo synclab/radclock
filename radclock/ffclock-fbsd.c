@@ -39,6 +39,7 @@
 #include "radclock-private.h"
 #include "ffclock.h"
 #include "fixedpoint.h"
+#include "sync_algo.h"		// To be able to access boottime 'C' from sync output. TODO add C into radclock_data structure?
 #include "verbose.h"
 #include "jdebug.h"
 
@@ -247,16 +248,21 @@ set_kernel_ffclock(struct radclock *clock)
 	 */
 	vcount = RAD_DATA(clock)->last_changed;
 
-	/* Convert vcount to long double time and to bintime */
-	if (radclock_vcount_to_abstime_fp(clock, &vcount, &time))
-		verbose(LOG_ERR, "Error calculating time");
-
 	/* What I would like to do is: 
 	 * cest->time.frac = (time - (time_t) time) * (1LLU << 64);
 	 * but cannot push '1' by 64 bits, does not fit in LLU. So push 63 bits,
 	 * multiply for best resolution and loose resolution of 1/2^64.
 	 * Same for phat.
 	 */
+	time = OUTPUT(clock, C);
+	cest.boot_time.sec = (time_t)time;
+	frac = (time - (time_t)time) * (1LLU << 63);
+	cest.boot_time.frac = frac << 1;
+
+	/* Convert vcount to long double time and to bintime */
+	if (radclock_vcount_to_abstime_fp(clock, &vcount, &time))
+		verbose(LOG_ERR, "Error calculating time");
+
 	cest.update_time.sec = (time_t) time;
 	frac = (time - (time_t) time) * (1LLU << 63);
 	cest.update_time.frac = frac << 1;
@@ -268,11 +274,19 @@ set_kernel_ffclock(struct radclock *clock)
 	cest.period_shortterm = period_shortterm << 1;
 
 	cest.update_ffcount = vcount;
-	cest.status = RAD_DATA(clock)->status;
+	
+
+	/*  TODO XXX: this should be made an average value of some kind !! and not the
+	 * 'instantaneous' one
+	 */
 	cest.error_bound_abs = (uint32_t) RAD_ERROR(clock)->error_bound_avg * 1e9;
-	// TODO XXX: this should be made an average value of some kind !! and not the
-	// 'instantaneous' one
 	cest.error_bound_rate = (uint32_t) RAD_DATA(clock)->phat_local_err * 1e9;
+	cest.status = RAD_DATA(clock)->status;
+
+	/* Next leapsec in counter units, and side infos */
+	cest.leapsec = 0;
+	cest.leapsec_total = 0;
+	cest.leapsec = 0;
 
 	struct timespec ts; 
 	bintime2timespec(&(cest.update_time), &ts);
