@@ -365,10 +365,8 @@ int get_kernel_ffclock(struct radclock *handle)
 	RAD_DATA(handle)->ca += tmp / (1LL << 32);
 	
 	tmp = (long double) cest.period / (1LLU << 32);
-	RAD_DATA(handle)->phat = (double) (tmp / (1LLU << 32));
-
-	tmp = (long double) cest.period_shortterm / (1LLU << 32);
 	RAD_DATA(handle)->phat_local = (double) (tmp / (1LLU << 32));
+	RAD_DATA(handle)->phat = RAD_DATA(handle)->phat_local;
 
 	RAD_DATA(handle)->status = (unsigned int) cest.status;
 	RAD_DATA(handle)->last_changed = (vcounter_t) cest.update_ffcount;
