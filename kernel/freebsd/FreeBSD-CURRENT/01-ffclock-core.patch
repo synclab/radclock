@@ -5,11 +5,11 @@ Core set of changes to support a feed-forward clock within the kernel.
 ---
  conf/NOTES       |    8 
  conf/options     |    1 
- kern/kern_tc.c   |  562 +++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ kern/kern_tc.c   |  563 +++++++++++++++++++++++++++++++++++++++++++++++++++++++
  kern/subr_rtc.c  |    8 
  sys/_ffcounter.h |   43 ++++
  sys/timeffc.h    |  105 ++++++++++
- 6 files changed, 727 insertions(+)
+ 6 files changed, 728 insertions(+)
 
 Index: sys/conf/NOTES
 ===================================================================
@@ -73,7 +73,7 @@ Index: sys/conf/options
 Index: sys/kern/kern_tc.c
 ===================================================================
 --- sys.orig/kern/kern_tc.c	2011-06-29 15:36:10.000000000 +1000
-+++ sys/kern/kern_tc.c	2011-07-05 16:45:36.000000000 +1000
++++ sys/kern/kern_tc.c	2011-07-06 10:42:28.000000000 +1000
 @@ -1,29 +1,43 @@
  /*-
   * ----------------------------------------------------------------------------
@@ -118,7 +118,7 @@ Index: sys/kern/kern_tc.c
   * in the typical 'missed a couple of seconds' case, but doesn't loop
   * forever when the time step is large.
   */
-@@ -293,20 +307,559 @@ getmicrotime(struct timeval *tvp)
+@@ -293,20 +307,560 @@ getmicrotime(struct timeval *tvp)
  	struct timehands *th;
  	u_int gen;
  
@@ -394,10 +394,10 @@ Index: sys/kern/kern_tc.c
 +		frac *= (uint64_t)18446744073LL;
 +
 +		if (ffth->sm_gap > 0)
-+			bintime_subx(&(ffth->tick_time_smooth), frac);
-+		else
 +			bintime_addx(&(ffth->tick_time_smooth), frac);
-+		ffth->tick_time_smooth.sec -= ffclock_sm_step / 1000000000LL;
++		else
++			bintime_subx(&(ffth->tick_time_smooth), frac);
++		ffth->tick_time_smooth.sec += ffclock_sm_step / 1000000000LL;
 +	}
 +
 +	/*
@@ -435,9 +435,9 @@ Index: sys/kern/kern_tc.c
 +		 *
 +		 * TODO: check impact of set on monotonic ffclock
 +		 */
-+		ffth->sm_gap = (ffth->tick_time_smooth.sec - ffth->tick_time.sec) * 1000000000;
-+		ffth->sm_gap += ((uint64_t)1000000000 * (uint32_t)(ffth->tick_time_smooth.frac >> 32)) >> 32;
-+		ffth->sm_gap -= ((uint64_t)1000000000 * (uint32_t)(ffth->tick_time.frac >> 32)) >> 32;
++		ffth->sm_gap = (ffth->tick_time.sec - ffth->tick_time_smooth.sec) * 1000000000;
++		ffth->sm_gap += ((uint64_t)1000000000 * (uint32_t)(ffth->tick_time.frac >> 32)) >> 32;
++		ffth->sm_gap -= ((uint64_t)1000000000 * (uint32_t)(ffth->tick_time_smooth.frac >> 32)) >> 32;
 +
 +		if ((cest->status & FFCLOCK_STA_WARMUP) == FFCLOCK_STA_WARMUP) {
 +			if ((ffth->sm_gap > 18000000000LL) || (ffth->sm_gap < -18000000000LL)) {
@@ -458,13 +458,15 @@ Index: sys/kern/kern_tc.c
 +		 * filled, ensure the steps are at least +/-1 ns, which is the unit of
 +		 * the step (do not want steps of 0 ns).
 +		 *
-+		 * If the gap is positive, steps of any size will respect monotonicity.
-+		 * However, the monotonic clock is smoothed over the entire polling
-+		 * period at a rat no larger than 5000PPM (ie, 5e6 ns/s)
++		 * If the gap is positive, smoothed time is behind real time. Steps of
++		 * any size will respect monotonicity. However, the monotonic clock is
++		 * smoothed over the entire polling period at a rate no larger than
++		 * 5000PPM (ie, 5e6 ns/s).
 +		 *
-+		 * If the gap is negative, time is not allowed to go backward. Steps are
-+		 * capped by the latency of the timecounter so that a hardware read
-+		 * immediately after the update does not result in time going backward.
++		 * If the gap is negative, smoothed time is ahead, but not allowed to go
++		 * backward. Steps are capped by the latency of the timecounter so that
++		 * a hardware read immediately after the update does not result in time
++		 * going backward.
 +		 */
 +		if (ffth->sm_gap > 0) {
 +			if (ffclock_sm_step > (5000000 / hz))
@@ -510,6 +512,11 @@ Index: sys/kern/kern_tc.c
 +
 +	cest = &(ffth->cest);
 +	bcopy(&(fftimehands->cest), cest, sizeof(struct ffclock_estimate));
++	cest->period = ((1LLU << 63) / tc->tc_frequency ) << 1;
++	cest->period_shortterm = cest->period;
++	cest->error_bound_abs = 0;
++	cest->error_bound_rate = 0;
++	cest->status = FFCLOCK_STA_UNSYNC;
 +
 +	/*
 +	 * When the timecounter is changed, so is the max step for negative
@@ -519,6 +526,9 @@ Index: sys/kern/kern_tc.c
 +	ffth->tick_time_smooth = fftimehands->tick_time_smooth;
 +	ffth->tick_time = fftimehands->tick_time;
 +	ffth->sm_gap = 0;
++
++	// TODO take ncount into account here?
++	ffth->tick_ffcount = fftimehands->tick_ffcount;
 +
 +	/* Very conservative catch all case, biggest negative smooth step is 1ns */
 +	ffclock_sm_tclat = 1;
@@ -534,15 +544,6 @@ Index: sys/kern/kern_tc.c
 +	/* Measured latency (ACPI-fast) is 3000 CPU cycles (CPU @10GHz) */
 +	if (strncmp(tc->tc_name, "ACPI", 4) == 0)
 +		ffclock_sm_tclat = (3000 * 1000000000LLU) / 10000000000;
-+
-+	// TODO take ncount into account here?
-+	ffth->tick_ffcount = fftimehands->tick_ffcount;
-+
-+	cest->period = ((1LLU << 63) / th->th_counter->tc_frequency ) << 1;
-+	cest->period_shortterm = cest->period;
-+	cest->error_bound_abs = 0;
-+	cest->error_bound_rate = 0;
-+	cest->status = FFCLOCK_STA_UNSYNC;
 +
 +// TODO XXX should put fetch_update at 0 to prevent overwrite from sync algo?
 +
@@ -678,7 +679,7 @@ Index: sys/kern/kern_tc.c
  	struct sysctl_oid *tc_root;
  
  	u = tc->tc_frequency / tc->tc_counter_mask;
-@@ -433,20 +986,23 @@ tc_windup(void)
+@@ -433,20 +987,23 @@ tc_windup(void)
  	/*
  	 * Capture a timecounter delta on the current timecounter and if
  	 * changing timecounters, a counter value from the new timecounter.
@@ -702,7 +703,7 @@ Index: sys/kern/kern_tc.c
  	if ((delta > th->th_counter->tc_frequency / 2) &&
  	    (th->th_scale * delta < ((uint64_t)1 << 63))) {
  		/* The product th_scale * delta just barely overflows. */
-@@ -489,20 +1045,23 @@ tc_windup(void)
+@@ -489,20 +1046,23 @@ tc_windup(void)
  	/* XXX shouldn't do this here.  Should force non-`get' versions. */
  	bintime2timeval(&bt, &th->th_microtime);
  	bintime2timespec(&bt, &th->th_nanotime);
@@ -726,7 +727,7 @@ Index: sys/kern/kern_tc.c
  	 *
  	 * The th_adjustment is nanoseconds per second with 32 bit binary
  	 * fraction and we want 64 bit binary fraction of second:
-@@ -807,20 +1366,23 @@ inittimecounter(void *dummy)
+@@ -807,20 +1367,23 @@ inittimecounter(void *dummy)
  	 * smallest reasonable one.  If they want better timestamps they
  	 * should use the non-"get"* functions.
  	 */
@@ -855,7 +856,7 @@ Index: sys/sys/_ffcounter.h
 Index: sys/sys/timeffc.h
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ sys/sys/timeffc.h	2011-07-05 16:43:50.000000000 +1000
++++ sys/sys/timeffc.h	2011-07-06 10:42:43.000000000 +1000
 @@ -0,0 +1,105 @@
 +/*-
 + * Copyright (C) 2010 University of Melbourne

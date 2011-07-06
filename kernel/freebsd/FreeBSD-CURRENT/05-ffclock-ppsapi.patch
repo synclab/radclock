@@ -7,9 +7,9 @@ Modification to the PPS-API to support ffcounter timestamps
 
 Index: sys/kern/kern_tc.c
 ===================================================================
---- sys.orig/kern/kern_tc.c	2011-07-05 16:50:30.000000000 +1000
-+++ sys/kern/kern_tc.c	2011-07-05 16:50:43.000000000 +1000
-@@ -1157,20 +1157,23 @@ SYSCTL_PROC(_kern_timecounter, OID_AUTO,
+--- sys.orig/kern/kern_tc.c	2011-07-06 10:42:53.000000000 +1000
++++ sys/kern/kern_tc.c	2011-07-06 10:42:56.000000000 +1000
+@@ -1158,20 +1158,23 @@ SYSCTL_PROC(_kern_timecounter, OID_AUTO,
  
  /*
   * RFC 2783 PPS-API implementation.
@@ -33,7 +33,7 @@ Index: sys/kern/kern_tc.c
  		return (0);
  	case PPS_IOC_DESTROY:
  		return (0);
-@@ -1190,20 +1193,31 @@ pps_ioctl(u_long cmd, caddr_t data, stru
+@@ -1191,20 +1194,31 @@ pps_ioctl(u_long cmd, caddr_t data, stru
  		return (0);
  	case PPS_IOC_FETCH:
  		fapi = (struct pps_fetch_args *)data;
@@ -65,7 +65,7 @@ Index: sys/kern/kern_tc.c
  			return (EINVAL);
  		if (kapi->edge & ~pps->ppscap)
  			return (EINVAL);
-@@ -1229,82 +1243,109 @@ pps_init(struct pps_state *pps)
+@@ -1230,82 +1244,109 @@ pps_init(struct pps_state *pps)
  
  void
  pps_capture(struct pps_state *pps)
@@ -177,8 +177,8 @@ Index: sys/kern/kern_tc.c
  	if (fhard) {
 Index: sys/sys/timepps.h
 ===================================================================
---- sys.orig/sys/timepps.h	2011-07-05 16:50:30.000000000 +1000
-+++ sys/sys/timepps.h	2011-07-05 16:50:43.000000000 +1000
+--- sys.orig/sys/timepps.h	2011-07-06 10:31:56.000000000 +1000
++++ sys/sys/timepps.h	2011-07-06 10:42:56.000000000 +1000
 @@ -1,29 +1,38 @@
  /*-
   * ----------------------------------------------------------------------------
