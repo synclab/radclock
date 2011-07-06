@@ -7,8 +7,8 @@
 
 Index: sys/conf/files
 ===================================================================
---- sys.orig/conf/files	2011-07-05 16:41:56.000000000 +1000
-+++ sys/conf/files	2011-07-05 16:43:17.000000000 +1000
+--- sys.orig/conf/files	2011-07-06 12:52:01.000000000 +1000
++++ sys/conf/files	2011-07-06 13:27:32.000000000 +1000
 @@ -2298,20 +2298,21 @@ kern/kern_cpu.c			standard
  kern/kern_cpuset.c		standard
  kern/kern_context.c		standard
@@ -34,7 +34,7 @@ Index: sys/conf/files
 Index: sys/kern/kern_ffclock.c
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ sys/kern/kern_ffclock.c	2011-07-05 16:43:17.000000000 +1000
++++ sys/kern/kern_ffclock.c	2011-07-06 13:27:32.000000000 +1000
 @@ -0,0 +1,317 @@
 +/*-
 + * Copyright (C) 2010 University of Melbourne
@@ -355,8 +355,8 @@ Index: sys/kern/kern_ffclock.c
 +}
 Index: sys/sys/time.h
 ===================================================================
---- sys.orig/sys/time.h	2011-07-05 16:41:56.000000000 +1000
-+++ sys/sys/time.h	2011-07-05 16:43:17.000000000 +1000
+--- sys.orig/sys/time.h	2011-07-06 12:52:01.000000000 +1000
++++ sys/sys/time.h	2011-07-06 13:27:32.000000000 +1000
 @@ -270,20 +270,21 @@ struct clockinfo {
  #define CLOCK_MONOTONIC	4
  #define CLOCK_UPTIME	5		/* FreeBSD-specific. */
@@ -381,9 +381,9 @@ Index: sys/sys/time.h
  /*
 Index: sys/sys/timeffc.h
 ===================================================================
---- sys.orig/sys/timeffc.h	2011-07-05 16:43:09.000000000 +1000
-+++ sys/sys/timeffc.h	2011-07-05 16:43:39.000000000 +1000
-@@ -93,13 +93,63 @@ void ffclock_read_counter(ffcounter *ffc
+--- sys.orig/sys/timeffc.h	2011-07-06 13:06:40.000000000 +1000
++++ sys/sys/timeffc.h	2011-07-06 13:27:32.000000000 +1000
+@@ -92,13 +92,63 @@ void ffclock_read_counter(ffcounter *ffc
  void ffclock_last_tick(ffcounter *ffcount, struct bintime *bt, uint32_t flags);
  
  /*

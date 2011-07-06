@@ -5,15 +5,15 @@ guests see the same time and allow live migration.
 
 ---
  i386/xen/clock.c |   35 +++++++++++++++++++++++++++++++++++
- kern/kern_tc.c   |   42 ++++++++++++++++++++++++++++++++++--------
+ kern/kern_tc.c   |   47 +++++++++++++++++++++++++++++++++++++----------
  sys/timetc.h     |   14 ++++++++++++++
  x86/x86/tsc.c    |   27 +++++++++++++++++++++++++++
- 4 files changed, 110 insertions(+), 8 deletions(-)
+ 4 files changed, 113 insertions(+), 10 deletions(-)
 
 Index: sys/i386/xen/clock.c
 ===================================================================
---- sys.orig/i386/xen/clock.c	2011-07-06 10:31:56.000000000 +1000
-+++ sys/i386/xen/clock.c	2011-07-06 10:43:00.000000000 +1000
+--- sys.orig/i386/xen/clock.c	2011-07-06 13:46:20.000000000 +1000
++++ sys/i386/xen/clock.c	2011-07-06 13:47:23.000000000 +1000
 @@ -1,17 +1,23 @@
  /*-
   * Copyright (C) 1990 The Regents of the University of California.
@@ -119,16 +119,16 @@ Index: sys/i386/xen/clock.c
  {
 Index: sys/kern/kern_tc.c
 ===================================================================
---- sys.orig/kern/kern_tc.c	2011-07-06 10:42:56.000000000 +1000
-+++ sys/kern/kern_tc.c	2011-07-06 10:43:00.000000000 +1000
-@@ -822,41 +822,60 @@ ffclock_convert_diff(ffcounter ffdelta, 
- 			bintime_add(bt, &delta);
- 			ffdelta -= delta_max;
- 		}
- 		delta.sec = 0;
- 		delta.frac = ffth->cest.period;
- 		bintime_mul(&delta, ffdelta);
- 		bintime_add(bt, &delta);
+--- sys.orig/kern/kern_tc.c	2011-07-06 13:47:18.000000000 +1000
++++ sys/kern/kern_tc.c	2011-07-06 13:49:29.000000000 +1000
+@@ -741,42 +741,62 @@ ffclock_convert_diff(ffcounter ffdelta, 
+ 	uint8_t gen;
+ 
+ 	/* No locking but check generation has not changed. */
+ 	do {
+ 		ffth = fftimehands;
+ 		gen = ffth->gen;
+ 		ffclock_convert_delta(ffdelta, bt, &(ffth->cest));
  	} while (gen == 0 || gen != ffth->gen);
  }
  
@@ -144,8 +144,9 @@ Index: sys/kern/kern_tc.c
  	struct timehands *th;
  	struct fftimehands *ffth;
  	u_int gen, delta;
+-
 +	struct timecounter *tc;
- 
++ 
 +	if (sysctl_kern_timecounter_passthrough) {
 +		tc = timehands->th_counter;
 +		*ffcount = tc->tc_get_timecount_64(tc);
@@ -161,6 +162,8 @@ Index: sys/kern/kern_tc.c
 -		delta = tc_delta(th);
 -		*ffcount = ffth->tick_ffcount;
 -	} while (gen == 0 || gen != th->th_generation);
+-
+-	*ffcount += delta;
 +	else {
 +		do {
 +			th = timehands;
@@ -172,8 +175,7 @@ Index: sys/kern/kern_tc.c
 +		*ffcount += delta;
 +	}
 +}
- 
--	*ffcount += delta;
++ 
 +static __inline uint64_t
 +tc_get_timecount_fake64(struct timecounter *tc)
 +{
@@ -181,6 +183,7 @@ Index: sys/kern/kern_tc.c
 +	count = tc->tc_get_timecount(tc);
 +	return (uint64_t) count;
  }
++
  #endif /* FFCLOCK */
  
  
@@ -190,7 +193,8 @@ Index: sys/kern/kern_tc.c
  void
  tc_init(struct timecounter *tc)
  {
-@@ -873,20 +892,27 @@ tc_init(struct timecounter *tc)
+ 	u_int u;
+@@ -792,20 +812,27 @@ tc_init(struct timecounter *tc)
  			printf("Timecounter \"%s\" frequency %ju Hz",
  			    tc->tc_name, (uintmax_t)tc->tc_frequency);
  			printf(" -- Insufficient hz, needs at least %u\n", u);
@@ -220,8 +224,8 @@ Index: sys/kern/kern_tc.c
  	    "mask", CTLFLAG_RD, &(tc->tc_counter_mask), 0,
 Index: sys/sys/timetc.h
 ===================================================================
---- sys.orig/sys/timetc.h	2011-07-06 10:31:56.000000000 +1000
-+++ sys/sys/timetc.h	2011-07-06 10:43:00.000000000 +1000
+--- sys.orig/sys/timetc.h	2011-07-06 13:46:20.000000000 +1000
++++ sys/sys/timetc.h	2011-07-06 13:47:23.000000000 +1000
 @@ -1,18 +1,24 @@
  /*-
   * ----------------------------------------------------------------------------
@@ -278,8 +282,8 @@ Index: sys/sys/timetc.h
  void	tc_init(struct timecounter *tc);
 Index: sys/x86/x86/tsc.c
 ===================================================================
---- sys.orig/x86/x86/tsc.c	2011-07-06 10:31:56.000000000 +1000
-+++ sys/x86/x86/tsc.c	2011-07-06 10:43:00.000000000 +1000
+--- sys.orig/x86/x86/tsc.c	2011-07-06 13:46:20.000000000 +1000
++++ sys/x86/x86/tsc.c	2011-07-06 13:47:23.000000000 +1000
 @@ -1,14 +1,20 @@
  /*-
   * Copyright (C) 1998-2003 Poul-Henning Kamp
