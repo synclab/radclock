@@ -169,6 +169,9 @@ struct radclock
 	/* IPC request bound */
 	int ipc_requests;
 
+	/* Description of current counter */
+	char hw_counter[32];
+
 	/* Pcap handler for the RADclock only */
 	pcap_t *pcap_handle;
 

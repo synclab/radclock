@@ -270,7 +270,6 @@ int radclock_init_vcounter(struct radclock *handle)
 {
 	int ret;
 	int	passthrough_counter = 0;
-	char timecounter[32];
 	size_t size_ctl;
 
 	if ( handle->kernel_version < 1 )
@@ -290,14 +289,14 @@ int radclock_init_vcounter(struct radclock *handle)
 		}
 	}
 
-	size_ctl = sizeof(timecounter);
-	ret = sysctlbyname("kern.timecounter.hardware", &timecounter[0], &size_ctl, NULL, 0);
+	size_ctl = sizeof(handle->hw_counter);
+	ret = sysctlbyname("kern.timecounter.hardware", &handle->hw_counter[0], &size_ctl, NULL, 0);
 	if (ret == -1)
 	{
 		logger(RADLOG_ERR, "Cannot find kern.timecounter.hardware in sysctl");
 		return -1;
 	}
-	logger(RADLOG_NOTICE, "Timecounter used is %s", timecounter);
+	logger(RADLOG_NOTICE, "Timecounter used is %s", handle->hw_counter);
 
 	if ( passthrough_counter == 0)
 	{
@@ -306,7 +305,7 @@ int radclock_init_vcounter(struct radclock *handle)
 		return 0;
 	}
 
-	if (strcmp(timecounter, "TSC") == 0)
+	if (strcmp(handle->hw_counter, "TSC") == 0)
 	{
 		handle->get_vcounter = &radclock_get_vcounter_rdtsc;
 		logger(RADLOG_NOTICE, "Initialising radclock_get_vcounter using rdtsc(). "
@@ -321,7 +320,7 @@ int radclock_init_vcounter(struct radclock *handle)
 	/* Last, a warning */
 	if ( passthrough_counter == 1)
 	{
-		if ( (strcmp(timecounter, "TSC") != 0) && (strcmp(timecounter, "ixen") != 0) )
+		if ( (strcmp(handle->hw_counter, "TSC") != 0) && (strcmp(handle->hw_counter, "ixen") != 0) )
 			logger(RADLOG_ERR, "Passthrough mode in ON but the timecounter does not support it!!");
 	}
 
@@ -411,7 +410,8 @@ int descriptor_set_tsmode(struct radclock *handle, pcap_t *p_handle, int kmode)
 				bd_tstamp = BPF_T_MICROTIME;
 				break;
 			case RADCLOCK_TSMODE_RADCLOCK:
-				bd_tstamp = BPF_T_MICROTIME | BPF_T_FFCLOCK;
+//				bd_tstamp = BPF_T_MICROTIME | BPF_T_FFCLOCK;
+				bd_tstamp = BPF_T_MICROTIME | BPF_T_FFCLOCK | BPF_T_MONOTONIC;
 				break;
 			default:
 				logger(LOG_ERR, "descriptor_set_tsmode: Unknown timestamping mode.");

@@ -253,10 +253,6 @@ set_kernel_ffclock(struct radclock *clock)
 	 * multiply for best resolution and loose resolution of 1/2^64.
 	 * Same for phat.
 	 */
-	time = OUTPUT(clock, C);
-	cest.boot_time.sec = (time_t)time;
-	frac = (time - (time_t)time) * (1LLU << 63);
-	cest.boot_time.frac = frac << 1;
 
 	/* Convert vcount to long double time and to bintime */
 	if (radclock_vcount_to_abstime_fp(clock, &vcount, &time))

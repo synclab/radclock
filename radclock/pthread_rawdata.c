@@ -39,6 +39,7 @@
 #include "pthread_mgr.h"
 #include "jdebug.h"
 
+#include <sys/sysctl.h>		// TODO remove when pushing sysctl code within arch specific code
 
 
 #ifdef WITH_RADKERNEL_NONE
@@ -437,6 +438,11 @@ int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 	double error_bound_std 	= 0;
 	int poll_period = 0;	
 	int err;
+	
+	/* Check hardware counter has not changed */
+	// XXX TODO this is freebsd specific, should be put with arch specific code
+	char hw_counter[32];
+	size_t size_ctl;
 
 	/* Generic call for creating the stamps depending on the type of the 
 	 * input source.
@@ -486,6 +492,25 @@ int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 			 */
 			if ( OUTPUT(clock_handle, n_stamps) < NTP_BURST )
 				return 0;
+
+			/* If hardware counter has changed, restart over again */
+			size_ctl = sizeof(hw_counter);
+			err = sysctlbyname("kern.timecounter.hardware", &hw_counter[0], &size_ctl, NULL, 0);
+			if (err == -1) {
+				verbose(LOG_ERR, "Cannot find kern.timecounter.hardware in sysctl");
+				return 1;
+			}
+			
+			if (strcmp(clock_handle->hw_counter, hw_counter) != 0) {
+				verbose(LOG_WARNING, "Hardware counter has changed, reinitialising radclock");
+				OUTPUT(clock_handle, n_stamps) = 0;
+				peer->stamp_i = 0;
+				clock_handle->server_data->burst = NTP_BURST;
+				strcpy(clock_handle->hw_counter, hw_counter);
+// XXX TODO: Reinitialise the stats structure as well?
+
+				return 0;
+			}
 
 			set_kernel_ffclock(clock_handle);
 			verbose(VERB_DEBUG, "Feed-forward kernel clock has been set.");
