@@ -1,20 +1,7 @@
-FFclock core
-
-Core set of changes to support a feed-forward clock within the kernel.
-
----
- conf/NOTES       |    8 
- conf/options     |    1 
- kern/kern_tc.c   |  482 +++++++++++++++++++++++++++++++++++++++++++++++++++++++
- kern/subr_rtc.c  |    8 
- sys/_ffcounter.h |   43 ++++
- sys/timeffc.h    |  104 +++++++++++
- 6 files changed, 646 insertions(+)
-
 Index: sys/conf/NOTES
 ===================================================================
---- sys.orig/conf/NOTES	2011-07-06 10:42:49.000000000 +1000
-+++ sys/conf/NOTES	2011-07-06 10:42:53.000000000 +1000
+--- sys.orig/conf/NOTES	2011-07-07 12:16:52.000000000 +1000
++++ sys/conf/NOTES	2011-07-07 12:17:16.000000000 +1000
 @@ -1178,20 +1178,28 @@ options 	CAPABILITIES
  # actually reducing the accuracy of operation.
  
@@ -46,8 +33,8 @@ Index: sys/conf/NOTES
  # device configuration sections below.
 Index: sys/conf/options
 ===================================================================
---- sys.orig/conf/options	2011-07-06 10:42:49.000000000 +1000
-+++ sys/conf/options	2011-07-06 10:42:53.000000000 +1000
+--- sys.orig/conf/options	2011-07-07 12:16:52.000000000 +1000
++++ sys/conf/options	2011-07-07 12:17:16.000000000 +1000
 @@ -69,20 +69,21 @@ COMPAT_43	opt_compat.h
  COMPAT_43TTY	opt_compat.h
  COMPAT_FREEBSD4	opt_compat.h
@@ -72,8 +59,8 @@ Index: sys/conf/options
  GEOM_GATE	opt_geom.h
 Index: sys/kern/kern_tc.c
 ===================================================================
---- sys.orig/kern/kern_tc.c	2011-07-06 10:42:49.000000000 +1000
-+++ sys/kern/kern_tc.c	2011-07-06 13:42:16.000000000 +1000
+--- sys.orig/kern/kern_tc.c	2011-07-07 12:16:52.000000000 +1000
++++ sys/kern/kern_tc.c	2011-07-07 12:24:56.000000000 +1000
 @@ -1,29 +1,43 @@
  /*-
   * ----------------------------------------------------------------------------
@@ -118,7 +105,7 @@ Index: sys/kern/kern_tc.c
   * in the typical 'missed a couple of seconds' case, but doesn't loop
   * forever when the time step is large.
   */
-@@ -293,20 +307,479 @@ getmicrotime(struct timeval *tvp)
+@@ -293,20 +307,494 @@ getmicrotime(struct timeval *tvp)
  	struct timehands *th;
  	u_int gen;
  
@@ -215,8 +202,7 @@ Index: sys/kern/kern_tc.c
 +	memset(&cest, 0, sizeof(struct ffclock_estimate));
 +
 +	timespec2bintime(ts, &ffclock_monotonic_boot);
-+	timespec2bintime(ts, &(cest.boot_time));
-+	cest.update_time = cest.boot_time;
++	timespec2bintime(ts, &(cest.update_time));
 +	ffclock_read_counter(&cest.update_ffcount);
 +	cest.leapsec_next = 0;
 +	cest.period = ((1LLU << 63) / tc->tc_frequency) << 1;
@@ -370,8 +356,25 @@ Index: sys/kern/kern_tc.c
 +		ffth->sm_gap += ((uint64_t)1000000000 * (uint32_t)(ffth->tick_time.frac >> 32)) >> 32;
 +		ffth->sm_gap -= ((uint64_t)1000000000 * (uint32_t)(ffth->tick_time_smooth.frac >> 32)) >> 32;
 +
++		/*
++		 * It is quite possible the RTC clock is way inaccurate, and bringing
++		 * the gap between smoothed and non-smoothed time to 0 would take for
++		 * ever (especially if RTC time is in the future and the timecounter has
++		 * a very small latency). Here, the smoothed time is set to avoid
++		 * long catching up. The boottime is corrected by the same jump to
++		 * ensure boottime is corrected and uptime does not jump.
++		 */
 +		if ((cest->status & FFCLOCK_STA_WARMUP) == FFCLOCK_STA_WARMUP) {
 +			if ((ffth->sm_gap > 18000000000LL) || (ffth->sm_gap < -18000000000LL)) {
++				if (ffth->sm_gap > 0) {
++					bt = ffth->tick_time;
++					bintime_sub(&bt, &(ffth->tick_time_smooth));
++					bintime_add(&ffclock_monotonic_boot, &bt);
++				} else {
++					bt = ffth->tick_time_smooth;
++					bintime_sub(&bt, &(ffth->tick_time));
++					bintime_sub(&ffclock_monotonic_boot, &bt);
++				}
 +				ffth->tick_time_smooth = ffth->tick_time;
 +				ffth->sm_gap = 0;
 +			}
@@ -444,7 +447,6 @@ Index: sys/kern/kern_tc.c
 +	cest = &(ffth->cest);
 +	bcopy(&(fftimehands->cest), cest, sizeof(struct ffclock_estimate));
 +	cest->period = ((1LLU << 63) / tc->tc_frequency ) << 1;
-+//	cest->period_shortterm = cest->period;
 +	cest->error_bound_abs = 0;
 +	cest->error_bound_rate = 0;
 +	cest->status = FFCLOCK_STA_UNSYNC;
@@ -559,7 +561,7 @@ Index: sys/kern/kern_tc.c
 +	do {
 +		ffth = fftimehands;
 +		gen = ffth->gen;
-+		ffclock_convert_delta(ffdelta, bt, ffth->cest);
++		ffclock_convert_delta(ffdelta, bt, &(ffth->cest));
 +	} while (gen == 0 || gen != ffth->gen);
 +}
 +
@@ -598,7 +600,7 @@ Index: sys/kern/kern_tc.c
  	struct sysctl_oid *tc_root;
  
  	u = tc->tc_frequency / tc->tc_counter_mask;
-@@ -433,20 +906,23 @@ tc_windup(void)
+@@ -433,20 +921,23 @@ tc_windup(void)
  	/*
  	 * Capture a timecounter delta on the current timecounter and if
  	 * changing timecounters, a counter value from the new timecounter.
@@ -622,7 +624,7 @@ Index: sys/kern/kern_tc.c
  	if ((delta > th->th_counter->tc_frequency / 2) &&
  	    (th->th_scale * delta < ((uint64_t)1 << 63))) {
  		/* The product th_scale * delta just barely overflows. */
-@@ -489,20 +965,23 @@ tc_windup(void)
+@@ -489,20 +980,23 @@ tc_windup(void)
  	/* XXX shouldn't do this here.  Should force non-`get' versions. */
  	bintime2timeval(&bt, &th->th_microtime);
  	bintime2timespec(&bt, &th->th_nanotime);
@@ -646,7 +648,7 @@ Index: sys/kern/kern_tc.c
  	 *
  	 * The th_adjustment is nanoseconds per second with 32 bit binary
  	 * fraction and we want 64 bit binary fraction of second:
-@@ -807,20 +1286,23 @@ inittimecounter(void *dummy)
+@@ -807,20 +1301,23 @@ inittimecounter(void *dummy)
  	 * smallest reasonable one.  If they want better timestamps they
  	 * should use the non-"get"* functions.
  	 */
@@ -672,8 +674,8 @@ Index: sys/kern/kern_tc.c
  
 Index: sys/kern/subr_rtc.c
 ===================================================================
---- sys.orig/kern/subr_rtc.c	2011-07-06 10:42:49.000000000 +1000
-+++ sys/kern/subr_rtc.c	2011-07-06 10:42:53.000000000 +1000
+--- sys.orig/kern/subr_rtc.c	2011-07-07 12:16:52.000000000 +1000
++++ sys/kern/subr_rtc.c	2011-07-07 12:17:16.000000000 +1000
 @@ -53,20 +53,25 @@ __FBSDID("$FreeBSD$");
  #include <sys/param.h>
  #include <sys/systm.h>
@@ -727,7 +729,7 @@ Index: sys/kern/subr_rtc.c
 Index: sys/sys/_ffcounter.h
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ sys/sys/_ffcounter.h	2011-07-06 10:42:53.000000000 +1000
++++ sys/sys/_ffcounter.h	2011-07-07 12:17:16.000000000 +1000
 @@ -0,0 +1,43 @@
 +/*-
 + * Copyright (C) 2010 University of Melbourne
@@ -775,8 +777,8 @@ Index: sys/sys/_ffcounter.h
 Index: sys/sys/timeffc.h
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ sys/sys/timeffc.h	2011-07-06 13:27:56.000000000 +1000
-@@ -0,0 +1,104 @@
++++ sys/sys/timeffc.h	2011-07-07 12:24:56.000000000 +1000
+@@ -0,0 +1,103 @@
 +/*-
 + * Copyright (C) 2010 University of Melbourne
 + * All rights reserved.
@@ -819,7 +821,6 @@ Index: sys/sys/timeffc.h
 + * Provides time of last daemon update, clock status and bound on error.
 + */
 +struct ffclock_estimate {
-+	struct bintime	boot_time;		/* Boot time */
 +	struct bintime	update_time;	/* Time of last update */
 +	ffcounter	update_ffcount;		/* Counter value of estimates last update */
 +	ffcounter	leapsec_next;		/* Counter value of next leap second */
