@@ -410,8 +410,8 @@ int descriptor_set_tsmode(struct radclock *handle, pcap_t *p_handle, int kmode)
 				bd_tstamp = BPF_T_MICROTIME;
 				break;
 			case RADCLOCK_TSMODE_RADCLOCK:
-//				bd_tstamp = BPF_T_MICROTIME | BPF_T_FFCLOCK;
-				bd_tstamp = BPF_T_MICROTIME | BPF_T_FFCLOCK | BPF_T_MONOTONIC;
+				bd_tstamp = BPF_T_MICROTIME | BPF_T_FFCLOCK;
+//				bd_tstamp = BPF_T_MICROTIME | BPF_T_FFCLOCK | BPF_T_MONOTONIC;
 				break;
 			default:
 				logger(LOG_ERR, "descriptor_set_tsmode: Unknown timestamping mode.");

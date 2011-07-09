@@ -48,6 +48,7 @@
 #include "rawdata.h"
 #include "verbose.h"
 #include "config_mgr.h"
+#include "proto_ntp.h"
 #include "sync_history.h"
 #include "jdebug.h"
 
@@ -1858,13 +1859,18 @@ int process_bidir_stamp(struct radclock *clock_handle, struct bidir_peer *peer, 
 //	}
 
 
-	/* Arbitrarily, need at least 25 packets to clear UNSYNC status but this should
-	 * be driven by some quality value. Also should make it reflects long gaps
-	 * (outside the algo?). So need to clear once we recover from gaps or data
-	 * starvation. Ideally, should not be right on recovery (i.e. the > test) but
-	 * when quality gets good. This is however a quick working trick
+	/* 
+	 * Clear UNSYNC status once the burst of NTP packets is finished. This
+	 * corresponds to the first update passed to the kernel. Cannot really do
+	 * push an update before this, and not much after either. It should be
+	 * driven by some quality metrick, but implementation is taking priority at
+	 * this stage.
+	 * This status should be put back on duing long gaps (outside the algo
+	 * thread then), and cleared once recover from gaps or data starvation.
+	 * Ideally, should not be right on recovery (i.e. the > test) but when
+	 * quality gets good. 
 	 */
-	if ( peer->stamp_i > 25 )
+	if ( peer->stamp_i == NTP_BURST )
 	{
 		/* Set the status of the clock to STARAD_UNSYNC */
 		DEL_STATUS(clock_handle, STARAD_UNSYNC);

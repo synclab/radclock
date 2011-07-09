@@ -490,7 +490,8 @@ int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 			 * may be better than ours after the very first stamp. Let's make sure we do
 			 * not push something too stupid
 			 */
-			if ( OUTPUT(clock_handle, n_stamps) < NTP_BURST )
+//			if ( OUTPUT(clock_handle, n_stamps) < NTP_BURST )
+			if (HAS_STATUS(clock_handle, STARAD_UNSYNC))
 				return 0;
 
 			/* If hardware counter has changed, restart over again */
