@@ -15,8 +15,8 @@ clock.
 
 Index: sys/compat/freebsd32/syscalls.master
 ===================================================================
---- sys.orig/compat/freebsd32/syscalls.master	2011-07-11 17:02:30.000000000 +1000
-+++ sys/compat/freebsd32/syscalls.master	2011-07-11 17:02:40.000000000 +1000
+--- sys.orig/compat/freebsd32/syscalls.master	2011-07-11 19:13:14.000000000 +1000
++++ sys/compat/freebsd32/syscalls.master	2011-07-11 19:15:29.000000000 +1000
 @@ -440,23 +440,23 @@
  234	AUE_NULL	STD	{ int freebsd32_clock_getres(clockid_t clock_id, \
  				    struct timespec32 *tp); }
@@ -46,8 +46,8 @@ Index: sys/compat/freebsd32/syscalls.master
  251	AUE_RFORK	NOPROTO	{ int rfork(int flags); }
 Index: sys/kern/kern_ffclock.c
 ===================================================================
---- sys.orig/kern/kern_ffclock.c	2011-07-11 17:02:30.000000000 +1000
-+++ sys/kern/kern_ffclock.c	2011-07-11 17:02:55.000000000 +1000
+--- sys.orig/kern/kern_ffclock.c	2011-07-11 19:15:27.000000000 +1000
++++ sys/kern/kern_ffclock.c	2011-07-11 19:15:29.000000000 +1000
 @@ -22,26 +22,36 @@
   * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
   * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
@@ -85,7 +85,7 @@ Index: sys/kern/kern_ffclock.c
  {
  	struct ffclock_estimate cest;
  	ffcounter ffc;
-@@ -341,10 +351,86 @@ ffclock_nanodifftime(ffcounter ffdelta, 
+@@ -351,10 +361,86 @@ ffclock_nanodifftime(ffcounter ffdelta, 
  }
  
  void
@@ -174,8 +174,8 @@ Index: sys/kern/kern_ffclock.c
 +}
 Index: sys/kern/syscalls.master
 ===================================================================
---- sys.orig/kern/syscalls.master	2011-07-11 17:02:30.000000000 +1000
-+++ sys/kern/syscalls.master	2011-07-11 17:02:40.000000000 +1000
+--- sys.orig/kern/syscalls.master	2011-07-11 19:13:14.000000000 +1000
++++ sys/kern/syscalls.master	2011-07-11 19:15:29.000000000 +1000
 @@ -449,23 +449,23 @@
  				    struct sigevent *evp, int *timerid); }
  236	AUE_NULL	STD	{ int ktimer_delete(int timerid); }
@@ -205,8 +205,8 @@ Index: sys/kern/syscalls.master
  251	AUE_RFORK	STD	{ int rfork(int flags); }
 Index: sys/sys/time.h
 ===================================================================
---- sys.orig/sys/time.h	2011-07-11 17:02:30.000000000 +1000
-+++ sys/sys/time.h	2011-07-11 17:02:40.000000000 +1000
+--- sys.orig/sys/time.h	2011-07-11 19:13:14.000000000 +1000
++++ sys/sys/time.h	2011-07-11 19:15:29.000000000 +1000
 @@ -26,20 +26,21 @@
   * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
   * SUCH DAMAGE.
@@ -231,8 +231,8 @@ Index: sys/sys/time.h
  #define	DST_USA		1	/* USA style dst */
 Index: sys/sys/timeffc.h
 ===================================================================
---- sys.orig/sys/timeffc.h	2011-07-11 17:02:30.000000000 +1000
-+++ sys/sys/timeffc.h	2011-07-11 17:02:40.000000000 +1000
+--- sys.orig/sys/timeffc.h	2011-07-11 19:15:27.000000000 +1000
++++ sys/sys/timeffc.h	2011-07-11 19:15:29.000000000 +1000
 @@ -141,13 +141,22 @@ void ffclock_nanouptime(struct timespec 
  void ffclock_microuptime(struct timeval *tvp);
  
