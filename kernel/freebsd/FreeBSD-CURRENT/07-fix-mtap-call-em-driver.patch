@@ -12,8 +12,8 @@ Disable all interrupt throttling. Tune low latency against throughput.
 
 Index: sys/dev/e1000/if_em.c
 ===================================================================
---- sys.orig/dev/e1000/if_em.c	2011-06-27 21:14:03.000000000 +1000
-+++ sys/dev/e1000/if_em.c	2011-06-28 13:50:35.000000000 +1000
+--- sys.orig/dev/e1000/if_em.c	2011-07-11 12:46:46.000000000 +1000
++++ sys/dev/e1000/if_em.c	2011-07-11 12:51:48.000000000 +1000
 @@ -244,21 +244,24 @@ static void	em_transmit_checksum_setup(s
  static void	em_tso_setup(struct tx_ring *, struct mbuf *, int, struct ip *,
  		    struct tcphdr *, u32 *, u32 *);

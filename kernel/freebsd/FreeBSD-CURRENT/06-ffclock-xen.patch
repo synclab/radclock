@@ -5,15 +5,15 @@ guests see the same time and allow live migration.
 
 ---
  i386/xen/clock.c |   35 +++++++++++++++++++++++++++++++++++
- kern/kern_tc.c   |   43 +++++++++++++++++++++++++++++++++++--------
+ kern/kern_tc.c   |   42 ++++++++++++++++++++++++++++++++++--------
  sys/timetc.h     |   14 ++++++++++++++
  x86/x86/tsc.c    |   27 +++++++++++++++++++++++++++
- 4 files changed, 111 insertions(+), 8 deletions(-)
+ 4 files changed, 110 insertions(+), 8 deletions(-)
 
 Index: sys/i386/xen/clock.c
 ===================================================================
---- sys.orig/i386/xen/clock.c	2011-07-07 11:54:52.000000000 +1000
-+++ sys/i386/xen/clock.c	2011-07-07 12:01:16.000000000 +1000
+--- sys.orig/i386/xen/clock.c	2011-07-11 14:12:39.000000000 +1000
++++ sys/i386/xen/clock.c	2011-07-11 16:52:17.000000000 +1000
 @@ -1,17 +1,23 @@
  /*-
   * Copyright (C) 1990 The Regents of the University of California.
@@ -119,16 +119,16 @@ Index: sys/i386/xen/clock.c
  {
 Index: sys/kern/kern_tc.c
 ===================================================================
---- sys.orig/kern/kern_tc.c	2011-07-07 12:01:13.000000000 +1000
-+++ sys/kern/kern_tc.c	2011-07-07 12:01:47.000000000 +1000
-@@ -756,42 +756,62 @@ ffclock_convert_diff(ffcounter ffdelta, 
+--- sys.orig/kern/kern_tc.c	2011-07-11 16:52:07.000000000 +1000
++++ sys/kern/kern_tc.c	2011-07-11 16:55:12.000000000 +1000
+@@ -951,41 +951,60 @@ ffclock_convert_diff(ffcounter ffdelta, 
  	uint8_t gen;
  
  	/* No locking but check generation has not changed. */
  	do {
  		ffth = fftimehands;
  		gen = ffth->gen;
- 		ffclock_convert_delta(ffdelta, bt, &(ffth->cest));
+ 		ffclock_convert_delta(ffdelta, ffth->cest.period, bt);
  	} while (gen == 0 || gen != ffth->gen);
  }
  
@@ -181,18 +181,16 @@ Index: sys/kern/kern_tc.c
 +	count = tc->tc_get_timecount(tc);
 +	return (uint64_t) count;
  }
-+
- #endif /* FFCLOCK */
  
- 
- /*
-  * Initialize a new timecounter and possibly use it.
-  */
  void
- tc_init(struct timecounter *tc)
+ binuptime(struct bintime *bt)
  {
- 	u_int u;
-@@ -807,20 +827,27 @@ tc_init(struct timecounter *tc)
+ 	kclock.binuptime(bt);
+ }
+ 
+ void
+ nanouptime(struct timespec *tsp)
+@@ -1073,20 +1092,27 @@ tc_init(struct timecounter *tc)
  			printf("Timecounter \"%s\" frequency %ju Hz",
  			    tc->tc_name, (uintmax_t)tc->tc_frequency);
  			printf(" -- Insufficient hz, needs at least %u\n", u);
@@ -222,8 +220,8 @@ Index: sys/kern/kern_tc.c
  	    "mask", CTLFLAG_RD, &(tc->tc_counter_mask), 0,
 Index: sys/sys/timetc.h
 ===================================================================
---- sys.orig/sys/timetc.h	2011-07-07 11:54:52.000000000 +1000
-+++ sys/sys/timetc.h	2011-07-07 12:01:16.000000000 +1000
+--- sys.orig/sys/timetc.h	2011-07-11 14:12:39.000000000 +1000
++++ sys/sys/timetc.h	2011-07-11 16:52:17.000000000 +1000
 @@ -1,18 +1,24 @@
  /*-
   * ----------------------------------------------------------------------------
@@ -280,8 +278,8 @@ Index: sys/sys/timetc.h
  void	tc_init(struct timecounter *tc);
 Index: sys/x86/x86/tsc.c
 ===================================================================
---- sys.orig/x86/x86/tsc.c	2011-07-07 11:54:52.000000000 +1000
-+++ sys/x86/x86/tsc.c	2011-07-07 12:01:16.000000000 +1000
+--- sys.orig/x86/x86/tsc.c	2011-07-11 14:12:39.000000000 +1000
++++ sys/x86/x86/tsc.c	2011-07-11 16:52:17.000000000 +1000
 @@ -1,14 +1,20 @@
  /*-
   * Copyright (C) 1998-2003 Poul-Henning Kamp

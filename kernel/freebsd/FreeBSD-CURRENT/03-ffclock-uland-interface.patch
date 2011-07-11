@@ -7,16 +7,16 @@ clock.
 
 ---
  compat/freebsd32/syscalls.master |    6 +-
- kern/kern_ffclock.c              |   97 ++++++++++++++++++++++++++++++++++++++-
+ kern/kern_ffclock.c              |   86 +++++++++++++++++++++++++++++++++++++++
  kern/syscalls.master             |    6 +-
  sys/time.h                       |    1 
- sys/timeffc.h                    |    9 +++
- 5 files changed, 112 insertions(+), 7 deletions(-)
+ sys/timeffc.h                    |    9 ++++
+ 5 files changed, 102 insertions(+), 6 deletions(-)
 
 Index: sys/compat/freebsd32/syscalls.master
 ===================================================================
---- sys.orig/compat/freebsd32/syscalls.master	2011-07-07 11:54:52.000000000 +1000
-+++ sys/compat/freebsd32/syscalls.master	2011-07-07 12:00:30.000000000 +1000
+--- sys.orig/compat/freebsd32/syscalls.master	2011-07-11 17:02:30.000000000 +1000
++++ sys/compat/freebsd32/syscalls.master	2011-07-11 17:02:40.000000000 +1000
 @@ -440,23 +440,23 @@
  234	AUE_NULL	STD	{ int freebsd32_clock_getres(clockid_t clock_id, \
  				    struct timespec32 *tp); }
@@ -46,9 +46,9 @@ Index: sys/compat/freebsd32/syscalls.master
  251	AUE_RFORK	NOPROTO	{ int rfork(int flags); }
 Index: sys/kern/kern_ffclock.c
 ===================================================================
---- sys.orig/kern/kern_ffclock.c	2011-07-07 12:00:10.000000000 +1000
-+++ sys/kern/kern_ffclock.c	2011-07-07 12:00:30.000000000 +1000
-@@ -22,35 +22,45 @@
+--- sys.orig/kern/kern_ffclock.c	2011-07-11 17:02:30.000000000 +1000
++++ sys/kern/kern_ffclock.c	2011-07-11 17:02:55.000000000 +1000
+@@ -22,26 +22,36 @@
   * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
   * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
   * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
@@ -65,7 +65,7 @@ Index: sys/kern/kern_ffclock.c
 +#include <sys/module.h>
 +#include <sys/mutex.h>
 +#include <sys/proc.h>
-+#include <sys/sysctl.h>
+ #include <sys/sysctl.h>
 +#include <sys/sysent.h>
 +#include <sys/sysproto.h>
  #include <sys/systm.h>
@@ -73,7 +73,7 @@ Index: sys/kern/kern_ffclock.c
  
  extern struct ffclock_estimate ffclock_estimate;
  extern struct bintime ffclock_monotonic_boot;
-+extern uint8_t ffclock_fetch_update;
++extern int8_t ffclock_fetch_update;
 +extern struct mtx ffclock_mtx;	/* lock against concurrent updates of the ffclock estimates */
  
  /*
@@ -84,18 +84,8 @@ Index: sys/kern/kern_ffclock.c
  				struct bintime *error_bound)
  {
  	struct ffclock_estimate cest;
--	struct bintime bt2;
  	ffcounter ffc;
- 	ffcounter update_ffcount;
- 	ffcounter ffdelta_error;
- 	uint32_t flags;
- 
- 	flags = 0;
- 	switch (clock_id) {
- 	case CLOCK_MONOTONIC_FAST:
- 	case CLOCK_REALTIME_FAST:
- 	case CLOCK_UPTIME_FAST:
-@@ -300,10 +310,95 @@ ffclock_nanodifftime(ffcounter ffdelta, 
+@@ -341,10 +351,86 @@ ffclock_nanodifftime(ffcounter ffdelta, 
  }
  
  void
@@ -108,17 +98,8 @@ Index: sys/kern/kern_ffclock.c
  }
 +
 +/*
-+ * Sysctl for the Feed-Forward Clock
-+ */
-+
-+static int ffclock_version = 2;
-+SYSCTL_NODE(_kern, OID_AUTO, ffclock, CTLFLAG_RW, 0, "Feed-Forward Clock Support");
-+SYSCTL_INT(_kern_ffclock, OID_AUTO, version, CTLFLAG_RD, &ffclock_version, 0, "Version of Feed-Forward Clock Support");
-+
-+/*
 + * System calls returning Feed-Forward Clock counter to user space
 + */
-+
 +
 +#ifndef _SYS_SYSPROTO_H_
 +struct ffclock_getcounter_args {
@@ -163,7 +144,7 @@ Index: sys/kern/kern_ffclock.c
 +	mtx_lock(&ffclock_mtx);
 +	error = copyin(uap->cest, &(ffclock_estimate), sizeof(struct ffclock_estimate));
 +	if (error == 0)
-+		ffclock_fetch_update = 1;
++		ffclock_fetch_update++;
 +	mtx_unlock(&ffclock_mtx);
 +	return (error);
 +}
@@ -193,8 +174,8 @@ Index: sys/kern/kern_ffclock.c
 +}
 Index: sys/kern/syscalls.master
 ===================================================================
---- sys.orig/kern/syscalls.master	2011-07-07 11:54:52.000000000 +1000
-+++ sys/kern/syscalls.master	2011-07-07 12:00:30.000000000 +1000
+--- sys.orig/kern/syscalls.master	2011-07-11 17:02:30.000000000 +1000
++++ sys/kern/syscalls.master	2011-07-11 17:02:40.000000000 +1000
 @@ -449,23 +449,23 @@
  				    struct sigevent *evp, int *timerid); }
  236	AUE_NULL	STD	{ int ktimer_delete(int timerid); }
@@ -224,8 +205,8 @@ Index: sys/kern/syscalls.master
  251	AUE_RFORK	STD	{ int rfork(int flags); }
 Index: sys/sys/time.h
 ===================================================================
---- sys.orig/sys/time.h	2011-07-07 11:58:17.000000000 +1000
-+++ sys/sys/time.h	2011-07-07 12:00:30.000000000 +1000
+--- sys.orig/sys/time.h	2011-07-11 17:02:30.000000000 +1000
++++ sys/sys/time.h	2011-07-11 17:02:40.000000000 +1000
 @@ -26,20 +26,21 @@
   * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
   * SUCH DAMAGE.
@@ -250,8 +231,8 @@ Index: sys/sys/time.h
  #define	DST_USA		1	/* USA style dst */
 Index: sys/sys/timeffc.h
 ===================================================================
---- sys.orig/sys/timeffc.h	2011-07-07 11:58:17.000000000 +1000
-+++ sys/sys/timeffc.h	2011-07-07 12:00:30.000000000 +1000
+--- sys.orig/sys/timeffc.h	2011-07-11 17:02:30.000000000 +1000
++++ sys/sys/timeffc.h	2011-07-11 17:02:40.000000000 +1000
 @@ -141,13 +141,22 @@ void ffclock_nanouptime(struct timespec 
  void ffclock_microuptime(struct timeval *tvp);
  
