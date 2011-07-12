@@ -62,6 +62,8 @@
 #define VM_XEN_MASTER		0x02
 #define VM_VBOX_SLAVE		0x03
 #define VM_VBOX_MASTER		0x04
+#define VM_MULTICAST_SLAVE	0x05
+#define VM_MULTICAST_MASTER	0x06
 #define VM_SLAVE(val) ((val->conf->virtual_machine & 0x01) == 0x01)
 
 /* 

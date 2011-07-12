@@ -75,31 +75,6 @@ int dummy_client()
 	return 0;
 }
 
-int virtual_client(struct radclock *clock_handle){
-	JDEBUG
-	int err;
-	useconds_t sleep_time;
-	vcounter_t vcount, delta;
-	
-	RAD_VM(clock_handle)->pull_data(clock_handle);
-	err = radclock_get_vcounter(clock_handle, &vcount);
-	
-	if(vcount < RAD_DATA(clock_handle)->valid_till){
-		if(vcount > RAD_DATA(clock_handle)->last_changed){
-		    delta = RAD_DATA(clock_handle)->valid_till - vcount; // Calculate amount of time to sleep untill next valid_till
-			sleep_time = delta * RAD_DATA(clock_handle)->phat * 1000000;
-			usleep(sleep_time);
-		} else {
-			verbose(LOG_ERR, "Virtual store data not suitable for this counter"); 
-		}
-	} else { /* We've gone over the valid till point, just keep checking at every 500000us until we are successful */
-	//	delta = RAD_DATA(clock_handle)->valid_till - RAD_DATA(clock_handle)->last_changed; /* Poll period */
-	//	sleep_time = delta * RAD_DATA(clock_handle)->phat * 1000000 / 100; /* Poll period / 100 */
-		usleep(500000);
-	}
-	return err;
-}
-
 /* 
  * Timer handler
  */
@@ -356,7 +331,7 @@ int trigger_work(struct radclock *clock_handle)
 
 	if (VM_SLAVE(clock_handle))
 	{
-		virtual_client(clock_handle);
+		err = RAD_VM(clock_handle)->pull_data(clock_handle);
 	}
 	else {
 		switch (clock_handle->conf->synchro_type)

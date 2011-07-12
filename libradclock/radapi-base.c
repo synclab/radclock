@@ -243,7 +243,8 @@ int radclock_init(struct radclock *clock_handle)
 	 * This is common to the radclock sync algo and any 3rd party application.
 	 * This feature has been introduced in kernel version 2.
 	 */
-	err = get_kernel_ffclock(clock_handle);
+	printf("Did not get initial ffclock data from kernel");
+	//err = get_kernel_ffclock(clock_handle);
 	if ( err < 0 ) {
 			return -1;
 	}

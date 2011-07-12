@@ -27,6 +27,10 @@
 #include <string.h> 
 #include <syslog.h>
 #include <sys/stat.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
 
 #include "../config.h"
 #include "radclock.h"
@@ -91,26 +95,11 @@ push_data_xen(struct radclock *clock_handle)
 	JDEBUG
 #ifdef WITH_XENSTORE
 	struct xs_handle *xs;
-	xs_transaction_t th;
-#if 1==0
-	vcounter_t vcount;
-	long unsigned gap;
-#endif
 	xs = (struct xs_handle *) RAD_VM(clock_handle)->store_handle;
-	/* xs_transaction_start is no longer needed, as we are only updating 1 entry
-	 * in the xenstore, it is used to make multiple store writes atomic 
-	th = xs_transaction_start(xs); */
 
 	xs_write(xs, XBT_NULL, XENSTORE_PATH,
 			RAD_DATA(clock_handle), 
 			sizeof(*RAD_DATA(clock_handle)));
-#if 1==0
-			radclock_get_vcounter(clock_handle, &vcount);
-			gap = (vcount - RAD_DATA(clock_handle)->last_changed) * RAD_DATA(clock_handle)->phat * 1000000;
-			verbose(LOG_ERR, "Update happened %lu microseconds ago", gap);
-#endif
-	/* 
-	xs_transaction_end(xs, th, false); */
 	return 0;
 #else
 	return 0;
@@ -122,13 +111,12 @@ int pull_data_xen(struct radclock *clock_handle)
 {
 	JDEBUG
 #ifdef WITH_XENSTORE
+	int err;
+	unsigned sleep_time;
+	vcounter_t vcount, delta;
 	struct xs_handle *xs;
 	struct radclock_data *radclock_data_buf;
 	unsigned len_read;
-#if 1==0
-	vcounter_t vcount;
-	long unsigned gap;
-#endif
 	xs = (struct xs_handle *) RAD_VM(clock_handle)->store_handle;
 	radclock_data_buf = xs_read(xs, XBT_NULL, XENSTORE_PATH,&len_read);
 	if(len_read != sizeof(struct radclock_data)){
@@ -136,17 +124,29 @@ int pull_data_xen(struct radclock *clock_handle)
 	} else {
 		if(RAD_DATA(clock_handle)->last_changed != radclock_data_buf->last_changed){
 			verbose(LOG_NOTICE, "Xenstore updated RADclock data");
-#if 1==0
-			radclock_get_vcounter(clock_handle, &vcount);
-			gap = (vcount - RAD_DATA(clock_handle)->last_changed) * RAD_DATA(clock_handle)->phat * 1000000;
-			verbose(LOG_ERR, "Update happened %lu microseconds ago", gap);
-#endif
 	}
 		memcpy(RAD_DATA(clock_handle), radclock_data_buf, sizeof(*RAD_DATA(clock_handle)));
 	}
+	
 	free(radclock_data_buf);
 
-	return 0;
+	err = radclock_get_vcounter(clock_handle, &vcount);
+	
+	if(vcount < RAD_DATA(clock_handle)->valid_till){
+		if(vcount > RAD_DATA(clock_handle)->last_changed){
+		    delta = RAD_DATA(clock_handle)->valid_till - vcount; 
+			// Calculate amount of time to sleep untill next valid_till
+			sleep_time = delta * RAD_DATA(clock_handle)->phat * 1000000;
+			usleep(sleep_time);
+		} else {
+			verbose(LOG_ERR, "Virtual store data not suitable for this counter"); 
+		}
+	} else { 
+// We've gone over the valid till point, just keep checking at every 500000us until we are successful 
+		usleep(500000);
+	}
+
+	return err;
 #else
 	return 0;
 #endif
@@ -162,6 +162,85 @@ int pull_data_none(struct radclock *clock_handle)
 int push_data_none(struct radclock *clock_handle)
 {
 	JDEBUG
+	return 0;
+}
+
+int init_multicast(struct radclock *clock_handle)
+{
+	JDEBUG
+	
+	struct hostent *host;
+
+	if( (RAD_VM(clock_handle)->sock = socket(AF_INET, SOCK_DGRAM, 0)) == -1){
+		verbose(LOG_ERR, "Could not open socket for multicast");
+		return -1;
+	}
+	
+	RAD_VM(clock_handle)->server_addr.sin_family = AF_INET;
+	RAD_VM(clock_handle)->server_addr.sin_port = htons(5001);
+	bzero(&(RAD_VM(clock_handle)->server_addr.sin_zero),8);
+	
+	switch ( clock_handle->conf->virtual_machine ) {
+
+		case VM_MULTICAST_MASTER:
+			host = (struct hostent *) gethostbyname((char *)"10.0.3.134");		
+			RAD_VM(clock_handle)->server_addr.sin_addr = *((struct in_addr *)host->h_addr);
+			break;
+	
+		case VM_MULTICAST_SLAVE:
+			RAD_VM(clock_handle)->server_addr.sin_addr.s_addr = INADDR_ANY;
+			if (bind(RAD_VM(clock_handle)->sock,(struct sockaddr *)&(RAD_VM(clock_handle)->server_addr), sizeof (struct sockaddr)) == -1){
+				verbose(LOG_ERR, "Could not bind socket for multicast");
+				return -1;
+			}
+
+			break;
+	
+		default:
+			verbose(LOG_ERR, "Cannot initialise multicast if not in multicast mode");
+			return -1;
+
+	}
+	return 0;
+}
+
+int pull_data_multicast(struct radclock *clock_handle)
+{
+	JDEBUG
+	
+	int err;
+	unsigned addr_len;
+	int bytes_read;
+	char recv_data[1024];
+	struct sockaddr_in client_addr;
+	struct radclock_data radclock_data_buf;
+	addr_len = sizeof(struct sockaddr);
+	bytes_read = recvfrom(RAD_VM(clock_handle)->sock, recv_data, 1024, 0, (struct sockaddr *)&client_addr, &addr_len);
+
+	if(bytes_read != sizeof(struct radclock_data)){
+	    verbose(LOG_ERR,"Data read from sock not same length as RADclock data");
+	} else {
+		
+		memcpy(&radclock_data_buf, &recv_data, bytes_read);			
+
+	    if(RAD_DATA(clock_handle)->last_changed != radclock_data_buf.last_changed){
+	        verbose(LOG_NOTICE, "Multicast updated RADclock data");
+	}
+	    memcpy(RAD_DATA(clock_handle), &radclock_data_buf, sizeof(*RAD_DATA(clock_handle)));
+	}
+	
+	
+
+	return 0;
+}
+
+
+int push_data_multicast(struct radclock *clock_handle)
+{
+	JDEBUG
+	
+	sendto(RAD_VM(clock_handle)->sock, RAD_DATA(clock_handle), sizeof(*RAD_DATA(clock_handle)),0,(struct sockaddr *)&(RAD_VM(clock_handle)->server_addr), sizeof(struct sockaddr));
+	
 	return 0;
 }
 
@@ -222,6 +301,28 @@ int init_virtual_machine_mode(struct radclock *clock_handle)
 			}
 			RAD_VM(clock_handle)->push_data = &push_data_none;
 			
+			break;
+
+		case VM_MULTICAST_MASTER:
+			if(init_multicast(clock_handle) != 0){
+				verbose(LOG_ERR, "Could not initialise multicast-master, disabling multicast");
+				clock_handle->conf->virtual_machine = VM_NONE;
+				RAD_VM(clock_handle)->push_data =&push_data_none;
+			} else {
+				RAD_VM(clock_handle)->push_data = &push_data_multicast;
+			}
+			RAD_VM(clock_handle)->pull_data = &pull_data_none;
+			break;
+		
+		case VM_MULTICAST_SLAVE:
+			if(init_multicast(clock_handle) != 0){
+				verbose(LOG_ERR, "Could not initialise multicast-slave, disabling multicast");
+				clock_handle->conf->virtual_machine = VM_NONE;
+				RAD_VM(clock_handle)->pull_data = &pull_data_none;
+			} else {
+				RAD_VM(clock_handle)->pull_data = &pull_data_multicast;
+			}
+			RAD_VM(clock_handle)->push_data = &push_data_none;
 			break;
 
 		case VM_VBOX_MASTER:

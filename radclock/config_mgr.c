@@ -88,7 +88,7 @@ static char* labels_bool[] 		= { "off", "on" };
 static char* labels_verb[] 		= { "quiet", "normal", "high" };
 static char* labels_plocal[] 	= { "off", "on", "restart" };
 static char* labels_sync[] 		= { "spy", "piggy", "ntp", "ieee1588", "pps" };
-static char* labels_vm[] 		= { "none", "xen-slave", "xen-master", "vbox-slave", "vbox-master" };
+static char* labels_vm[] 		= { "none", "xen-slave", "xen-master", "vbox-slave", "vbox-master","multicast-slave","multicast-master" };
 
 
 
@@ -346,6 +346,8 @@ void write_config_file(FILE *fd, struct _key *keys, struct radclock_config *conf
 	fprintf(fd, "#\txen-slave   : radclock gets its time from a Xen master\n");
 	fprintf(fd, "#\tvbox-master : radclock creates time for all Virtual Box systems\n");
 	fprintf(fd, "#\tvbox-slave  : radclock gets its time from a Virtual Box master\n");
+	fprintf(fd, "#\tmulticast-master : radclock creates time and sends over network\n");
+	fprintf(fd, "#\tmulticast-slave  : radclock gets its time from the network\n");
 	if (conf == NULL)
 		fprintf(fd, "%s = %s\n\n", find_key_label(keys, CONFIG_VIRTUAL_MACHINE), labels_vm[DEFAULT_VIRTUAL_MACHINE]);
 	else

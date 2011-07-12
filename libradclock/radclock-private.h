@@ -125,6 +125,8 @@ struct radclock_vm
 	int (*pull_data) (struct radclock *clock_handle);
 	int (*push_data) (struct radclock *clock_handle);
 	void *store_handle;
+	int sock;
+	struct sockaddr_in server_addr;
 };
 
 

@@ -495,12 +495,12 @@ int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 				return 0;
 
 			/* If hardware counter has changed, restart over again */
-			size_ctl = sizeof(hw_counter);
-			err = sysctlbyname("kern.timecounter.hardware", &hw_counter[0], &size_ctl, NULL, 0);
-			if (err == -1) {
-				verbose(LOG_ERR, "Cannot find kern.timecounter.hardware in sysctl");
-				return 1;
-			}
+		//	size_ctl = sizeof(hw_counter);
+		//	err = sysctlbyname("kern.timecounter.hardware", &hw_counter[0], &size_ctl, NULL, 0);
+		//	if (err == -1) {
+		//		verbose(LOG_ERR, "Cannot find kern.timecounter.hardware in sysctl");
+		//		return 1;
+		//	}
 			
 			if (strcmp(clock_handle->hw_counter, hw_counter) != 0) {
 				verbose(LOG_WARNING, "Hardware counter has changed, reinitialising radclock");
