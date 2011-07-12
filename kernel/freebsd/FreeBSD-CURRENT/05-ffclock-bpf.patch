@@ -10,8 +10,8 @@ Allow to choose between feedback and feed-forward clock for timestamping.
 
 Index: sys/net/bpf.c
 ===================================================================
---- sys.orig/net/bpf.c	2011-06-30 22:09:29.000000000 +1000
-+++ sys/net/bpf.c	2011-06-30 23:15:24.000000000 +1000
+--- sys.orig/net/bpf.c	2011-07-11 21:14:30.000000000 +1000
++++ sys/net/bpf.c	2011-07-12 18:54:46.000000000 +1000
 @@ -1,19 +1,25 @@
  /*-
   * Copyright (C) 1990, 1991, 1993
@@ -256,15 +256,15 @@ Index: sys/net/bpf.c
 +#ifdef FFCLOCK
 +		} else {
 +			if ((tstype & BPF_T_MONOTONIC) == 0)
-+				ffclock_abstime(CLOCK_REALTIME, ffcount, bt, NULL);
++				ffclock_abstime(ffcount, bt, NULL, (FFCLOCK_LERP | FFCLOCK_LEAPSEC));
 +			else
-+				ffclock_abstime(CLOCK_MONOTONIC, ffcount, bt, NULL);
++				ffclock_abstime(ffcount, bt, NULL, (FFCLOCK_LERP | FFCLOCK_UPTIME));
 +		}
 +#endif
 +	} else {
 +#ifdef FFCLOCK
 +		if ((tstype & BPF_T_FFCLOCK) == BPF_T_FFCLOCK)
-+			ffclock_abstime(CLOCK_REALTIME_FAST, ffcount, bt, NULL);
++			ffclock_abstime(ffcount, bt, NULL, (FFCLOCK_LERP | FFCLOCK_LEAPSEC | FFCLOCK_FAST));
 +		else
 +#endif
 +			getbinuptime(bt);
@@ -603,8 +603,8 @@ Index: sys/net/bpf.c
  	d->bd_slen = curlen + totlen;
 Index: sys/net/bpf.h
 ===================================================================
---- sys.orig/net/bpf.h	2011-06-30 22:09:29.000000000 +1000
-+++ sys/net/bpf.h	2011-06-30 23:07:37.000000000 +1000
+--- sys.orig/net/bpf.h	2011-07-11 21:14:30.000000000 +1000
++++ sys/net/bpf.h	2011-07-12 18:41:55.000000000 +1000
 @@ -1,19 +1,25 @@
  /*-
   * Copyright (C) 1990, 1991, 1993
