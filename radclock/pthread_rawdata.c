@@ -451,6 +451,15 @@ int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 	if (err < 0)
 		// TODO why inverting the error code logic in here !!! XXX FIXME XXX
 		return 1;
+	else
+		/*
+		 * Found a stamp, the trigger thread did not woke us up in vain. Signal
+		 * we grabed something so that it stops signalling us something data is
+		 * there. The caller will call us until we return an error on empty raw
+		 * data buffer
+		 */ 
+		clock_handle->wakeup_data_ready = 0;
+
 
 	/* If the new stamp looks insane just don't pass it for processing, keep
 	 * going and look for the next one. Otherwise, record it.

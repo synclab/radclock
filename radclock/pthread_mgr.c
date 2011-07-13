@@ -94,7 +94,7 @@ void* thread_trigger(void *c_handle)
 		 */
 		if (clock_handle->wakeup_data_ready == 1 && !VM_SLAVE(clock_handle)) {
 			pthread_cond_signal(&clock_handle->wakeup_cond);
-			usleep(10);
+			usleep(50);
 			continue;
 		}
 
@@ -167,9 +167,6 @@ void* thread_data_processing(void *c_handle)
 		}
 
 		pthread_cond_wait(&clock_handle->wakeup_cond, &clock_handle->wakeup_mutex);
-
-		/* Lower data ready first to make trigger thread block */
-		clock_handle->wakeup_data_ready = 0;
 
 		/* Process rawdata until there is something to process */
 		do {

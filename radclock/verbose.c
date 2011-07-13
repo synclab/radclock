@@ -211,9 +211,6 @@ void verbose(int facility, char* format, ...)
 			t = localtime(&currsec);
 			sprintf(ctime_buf, "%s %02d %02d:%02d:%02d", 
 					months[t->tm_mon], t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
-// XXX XXX TODO  I don't understand why so far, but it seems the estimate taken
-// from the kernel is good, but verbose shows wrong values ... strange?
-			fprintf(stdout, "currtime= %.6Lf\n", currtime);
 		}
 	}
 
