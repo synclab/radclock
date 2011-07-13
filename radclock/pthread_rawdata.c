@@ -504,15 +504,17 @@ int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 				return 0;
 
 			/* If hardware counter has changed, restart over again */
-		//	size_ctl = sizeof(hw_counter);
-		//	err = sysctlbyname("kern.timecounter.hardware", &hw_counter[0], &size_ctl, NULL, 0);
-		//	if (err == -1) {
-		//		verbose(LOG_ERR, "Cannot find kern.timecounter.hardware in sysctl");
-		//		return 1;
-		//	}
+			size_ctl = sizeof(hw_counter);
+			err = sysctlbyname("kern.timecounter.hardware", &hw_counter[0], &size_ctl, NULL, 0);
+			if (err == -1) {
+				verbose(LOG_ERR, "Cannot find kern.timecounter.hardware in sysctl");
+				return 1;
+			}
 			
 			if (strcmp(clock_handle->hw_counter, hw_counter) != 0) {
-				verbose(LOG_WARNING, "Hardware counter has changed, reinitialising radclock");
+				verbose(LOG_WARNING, "Hardware counter has changed (%s -> %s)."
+					" Reinitialising radclock.", clock_handle->hw_counter,
+					hw_counter);
 				OUTPUT(clock_handle, n_stamps) = 0;
 				peer->stamp_i = 0;
 				clock_handle->server_data->burst = NTP_BURST;
@@ -539,7 +541,7 @@ int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
   	if ( (clock_handle->run_mode == RADCLOCK_SYNC_LIVE) && (clock_handle->conf->adjust_sysclock == BOOL_ON) )
 	{
 		// TODO: catch errors
-		update_system_clock(clock_handle);	
+		update_system_clock(clock_handle);
 	}
 
 
