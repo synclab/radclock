@@ -6,5 +6,6 @@
 06-ffclock-ppsapi.patch
 07-ffclock-xen.patch
 08-fix-mtap-call-em-driver.patch
+test-perfs.patch
 DEBUG
 08-counter-latency.patch

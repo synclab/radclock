@@ -1,13 +1,13 @@
 ---
  conf/files          |    1 
- kern/kern_ffclock.c |  118 ++++++++++++++++++++++++++++++++++++++++++++++++++++
+ kern/kern_ffclock.c |  117 ++++++++++++++++++++++++++++++++++++++++++++++++++++
  sys/timeffc.h       |   19 ++++++++
- 3 files changed, 138 insertions(+)
+ 3 files changed, 137 insertions(+)
 
 Index: sys/conf/files
 ===================================================================
---- sys.orig/conf/files	2011-07-11 22:05:33.000000000 +1000
-+++ sys/conf/files	2011-07-12 16:41:03.000000000 +1000
+--- sys.orig/conf/files	2011-07-13 21:27:33.000000000 +1000
++++ sys/conf/files	2011-07-13 21:31:09.000000000 +1000
 @@ -2298,20 +2298,21 @@ kern/kern_cpu.c			standard
  kern/kern_cpuset.c		standard
  kern/kern_context.c		standard
@@ -33,8 +33,8 @@ Index: sys/conf/files
 Index: sys/kern/kern_ffclock.c
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ sys/kern/kern_ffclock.c	2011-07-12 17:26:34.000000000 +1000
-@@ -0,0 +1,118 @@
++++ sys/kern/kern_ffclock.c	2011-07-13 21:32:51.000000000 +1000
+@@ -0,0 +1,117 @@
 +/*-
 + * Copyright (C) 2010 University of Melbourne
 + * All rights reserved.
@@ -139,7 +139,6 @@ Index: sys/kern/kern_ffclock.c
 +	ffcounter update_ffcount;
 +	uint32_t err_rate;
 +
-+// TODO: Check options, bit mask
 +	ffclock_convert_diff(ffdelta, bt);
 +
 +	if (error_bound) {
@@ -155,8 +154,8 @@ Index: sys/kern/kern_ffclock.c
 +}
 Index: sys/sys/timeffc.h
 ===================================================================
---- sys.orig/sys/timeffc.h	2011-07-12 16:40:23.000000000 +1000
-+++ sys/sys/timeffc.h	2011-07-12 17:27:50.000000000 +1000
+--- sys.orig/sys/timeffc.h	2011-07-13 21:28:01.000000000 +1000
++++ sys/sys/timeffc.h	2011-07-13 21:31:48.000000000 +1000
 @@ -96,13 +96,32 @@ void ffclock_read_counter(ffcounter *ffc
  void ffclock_last_tick(ffcounter *ffcount, struct bintime *bt, uint32_t flags);
  
@@ -189,4 +188,4 @@ Index: sys/sys/timeffc.h
 +
  #endif /* _KERNEL */
  #endif /* __BSD_VISIBLE */
- #endif /* _SYS_TIMEFF_H */
+ #endif /* _SYS_TIMEFF_H_ */

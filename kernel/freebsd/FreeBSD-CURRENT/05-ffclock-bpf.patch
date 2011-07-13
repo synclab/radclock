@@ -4,14 +4,14 @@ Add ffcounter timestamps to the BPF header for export via libpcap.
 Allow to choose between feedback and feed-forward clock for timestamping.
 
 ---
- net/bpf.c |  143 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++---
- net/bpf.h |   25 ++++++++++
- 2 files changed, 163 insertions(+), 5 deletions(-)
+ net/bpf.c |  138 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++---
+ net/bpf.h |   22 +++++++++
+ 2 files changed, 155 insertions(+), 5 deletions(-)
 
 Index: sys/net/bpf.c
 ===================================================================
---- sys.orig/net/bpf.c	2011-07-11 21:14:30.000000000 +1000
-+++ sys/net/bpf.c	2011-07-12 18:54:46.000000000 +1000
+--- sys.orig/net/bpf.c	2011-07-13 22:15:08.000000000 +1000
++++ sys/net/bpf.c	2011-07-13 22:15:47.000000000 +1000
 @@ -1,19 +1,25 @@
  /*-
   * Copyright (C) 1990, 1991, 1993
@@ -524,20 +524,13 @@ Index: sys/net/bpf.c
  #endif
  	int caplen, curlen, hdrlen, totlen;
  	int do_wakeup = 0;
-@@ -2111,60 +2228,76 @@ catchpacket(struct bpf_d *d, u_char *pkt
- 		 * reader should be woken up.
- 		 */
- 		do_wakeup = 1;
- 	caplen = totlen - hdrlen;
- 	tstype = d->bd_tstamp;
+@@ -2116,52 +2233,63 @@ catchpacket(struct bpf_d *d, u_char *pkt
  	do_timestamp = tstype != BPF_T_NONE;
  #ifndef BURN_BRIDGES
  	if (tstype == BPF_T_NONE || BPF_T_FORMAT(tstype) == BPF_T_MICROTIME) {
  		struct bpf_ts ts;
  		if (do_timestamp)
-+		{
  			bpf_bintime2ts(bt, &ts, tstype);
-+		}
  #ifdef COMPAT_FREEBSD32
  		if (d->bd_compat32) {
  			bzero(&hdr32_old, sizeof(hdr32_old));
@@ -551,7 +544,6 @@ Index: sys/net/bpf.c
  			hdr32_old.bh_datalen = pktlen;
  			hdr32_old.bh_hdrlen = hdrlen;
  			hdr32_old.bh_caplen = caplen;
-+
  			bpf_append_bytes(d, d->bd_sbuf, curlen, &hdr32_old,
  			    sizeof(hdr32_old));
  			goto copy;
@@ -568,7 +560,6 @@ Index: sys/net/bpf.c
  		hdr_old.bh_datalen = pktlen;
  		hdr_old.bh_hdrlen = hdrlen;
  		hdr_old.bh_caplen = caplen;
-+
  		bpf_append_bytes(d, d->bd_sbuf, curlen, &hdr_old,
  		    sizeof(hdr_old));
  		goto copy;
@@ -590,7 +581,6 @@ Index: sys/net/bpf.c
  	hdr.bh_datalen = pktlen;
  	hdr.bh_hdrlen = hdrlen;
  	hdr.bh_caplen = caplen;
-+
  	bpf_append_bytes(d, d->bd_sbuf, curlen, &hdr, sizeof(hdr));
  
  	/*
@@ -598,13 +588,10 @@ Index: sys/net/bpf.c
  	 */
  #ifndef BURN_BRIDGES
  copy:
- #endif
- 	(*cpfn)(d, d->bd_sbuf, curlen + hdrlen, pkt, caplen);
- 	d->bd_slen = curlen + totlen;
 Index: sys/net/bpf.h
 ===================================================================
---- sys.orig/net/bpf.h	2011-07-11 21:14:30.000000000 +1000
-+++ sys/net/bpf.h	2011-07-12 18:41:55.000000000 +1000
+--- sys.orig/net/bpf.h	2011-07-13 22:15:08.000000000 +1000
++++ sys/net/bpf.h	2011-07-13 22:17:10.000000000 +1000
 @@ -1,19 +1,25 @@
  /*-
   * Copyright (C) 1990, 1991, 1993
@@ -631,7 +618,7 @@ Index: sys/net/bpf.h
   *    documentation and/or other materials provided with the distribution.
   * 4. Neither the name of the University nor the names of its contributors
   *    may be used to endorse or promote products derived from this software
-@@ -163,58 +169,77 @@ enum bpf_direction {
+@@ -163,25 +169,35 @@ enum bpf_direction {
  #define	BPF_T_MICROTIME		0x0000
  #define	BPF_T_NANOTIME		0x0001
  #define	BPF_T_BINTIME		0x0002
@@ -667,15 +654,11 @@ Index: sys/net/bpf.h
  #define	BPF_T_MICROTIME_MONOTONIC_FAST	(BPF_T_MICROTIME | BPF_T_MONOTONIC_FAST)
  #define	BPF_T_NANOTIME_MONOTONIC_FAST	(BPF_T_NANOTIME | BPF_T_MONOTONIC_FAST)
  #define	BPF_T_BINTIME_MONOTONIC_FAST	(BPF_T_BINTIME | BPF_T_MONOTONIC_FAST)
- 
- /*
-  * Structure prepended to each packet.
-  */
+@@ -192,28 +208,34 @@ enum bpf_direction {
  struct bpf_ts {
  	bpf_int64	bt_sec;		/* seconds */
  	bpf_u_int64	bt_frac;	/* fraction */
  };
-+
  struct bpf_xhdr {
  	struct bpf_ts	bh_tstamp;	/* time stamp */
  	bpf_u_int32	bh_caplen;	/* length of captured portion */
@@ -686,7 +669,6 @@ Index: sys/net/bpf.h
 +	ffcounter	ffcount_stamp;	/* feed-forward counter timestamp */
 +#endif
  };
-+
  /* Obsolete */
  struct bpf_hdr {
  	struct timeval	bh_tstamp;	/* time stamp */
@@ -698,7 +680,6 @@ Index: sys/net/bpf.h
 +	ffcounter	ffcount_stamp;	/* feed-forward counter timestamp */
 +#endif
  };
-+
  #ifdef _KERNEL
  #define	MTAG_BPF		0x627066
  #define	MTAG_BPF_TIMESTAMP	0
@@ -708,4 +689,3 @@ Index: sys/net/bpf.h
   * When using zero-copy BPF buffers, a shared memory header is present
   * allowing the kernel BPF implementation and user process to synchronize
   * without using system calls.  This structure defines that header.  When
-  * accessing these fields, appropriate atomic operation and memory barriers

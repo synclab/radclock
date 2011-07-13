@@ -1,13 +1,13 @@
 ---
- kern/kern_ffclock.c |  181 ++++++++++++++++++++++++++++++++
- kern/kern_tc.c      |  287 ++++++++++++++++++++++++++++++++++++++++++++++++++++
- sys/timeffc.h       |   25 ++++
- 3 files changed, 493 insertions(+)
+ kern/kern_ffclock.c |  181 ++++++++++++++++++++++++++++++
+ kern/kern_tc.c      |  307 +++++++++++++++++++++++++++++++++++++++++++++++++++-
+ sys/timeffc.h       |   31 +++++
+ 3 files changed, 517 insertions(+), 2 deletions(-)
 
 Index: sys/kern/kern_ffclock.c
 ===================================================================
---- sys.orig/kern/kern_ffclock.c	2011-07-12 17:26:34.000000000 +1000
-+++ sys/kern/kern_ffclock.c	2011-07-12 18:23:10.000000000 +1000
+--- sys.orig/kern/kern_ffclock.c	2011-07-13 21:32:51.000000000 +1000
++++ sys/kern/kern_ffclock.c	2011-07-13 21:50:05.000000000 +1000
 @@ -22,20 +22,21 @@
   * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
   * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
@@ -30,7 +30,7 @@ Index: sys/kern/kern_ffclock.c
   * Feed-Forward Clock time functions
   */
  void
-@@ -109,10 +110,190 @@ ffclock_difftime(ffcounter ffdelta, stru
+@@ -108,10 +109,190 @@ ffclock_difftime(ffcounter ffdelta, stru
  		do {
  			update_ffcount = ffclock_estimate.update_ffcount;
  			err_rate = ffclock_estimate.error_bound_rate;
@@ -57,8 +57,8 @@ Index: sys/kern/kern_ffclock.c
 + */
 +
 +SYSCTL_STRING(_kern_ffclock, OID_AUTO, choice, CTLFLAG_RD,
-+    "ntpd-clock, ffclock", 0,
-+    "Clocks available to the kernel");
++    "feedback feed-forward", 0,
++    "Clock paradigms available in the kernel");
 +
 +extern int sysclock_active;
 +
@@ -70,20 +70,20 @@ Index: sys/kern/kern_ffclock.c
 +
 +	switch (sysclock_active) {
 +	case 1:
-+		strlcpy(newclock, "ntpd-clock", sizeof(newclock));
++		strlcpy(newclock, "feedback", sizeof(newclock));
 +		break;
 +	case 2:
-+		strlcpy(newclock, "ffclock", sizeof(newclock));
++		strlcpy(newclock, "feed-forward", sizeof(newclock));
 +		break;
 +	}
 +
 +	error = sysctl_handle_string(oidp, &newclock[0], sizeof(newclock), req);
 +	if (error != 0 || req->newptr == NULL)
 +		return (error);
-+	if (strcmp(&newclock[0], "ntpd-clock") == 0)
-+		sysclock_active = 1;
-+	else if (strcmp(&newclock[0], "ffclock") == 0)
-+		sysclock_active = 2;
++	if (strncmp(&newclock[0], "feedback", 8) == 0)
++		sysclock_active = SYSCLOCK_FBCK;
++	else if (strncmp(&newclock[0], "feed-forward", 12) == 0)
++		sysclock_active = SYSCLOCK_FFWD;
 +	else
 +		return (EINVAL);
 +
@@ -223,8 +223,8 @@ Index: sys/kern/kern_ffclock.c
 +}
 Index: sys/kern/kern_tc.c
 ===================================================================
---- sys.orig/kern/kern_tc.c	2011-07-12 16:40:52.000000000 +1000
-+++ sys/kern/kern_tc.c	2011-07-12 18:18:34.000000000 +1000
+--- sys.orig/kern/kern_tc.c	2011-07-13 21:27:32.000000000 +1000
++++ sys/kern/kern_tc.c	2011-07-13 21:51:34.000000000 +1000
 @@ -170,20 +170,158 @@ tc_delta(struct timehands *th)
  	return ((tc->tc_get_timecount(tc) - th->th_offset_count) &
  	    tc->tc_counter_mask);
@@ -384,7 +384,7 @@ Index: sys/kern/kern_tc.c
  		th = timehands;
  		gen = th->th_generation;
  		*bt = th->th_offset;
-@@ -306,35 +444,69 @@ getmicrotime(struct timeval *tvp)
+@@ -306,36 +444,71 @@ getmicrotime(struct timeval *tvp)
  {
  	struct timehands *th;
  	u_int gen;
@@ -405,14 +405,15 @@ Index: sys/kern/kern_tc.c
   * timecounter hardware more than necessary.
   */
  
++int sysclock_active = SYSCLOCK_FBCK;
++
  /* Feed-Forward Clock estimates kept updated by the synchronization daemon. */
  struct ffclock_estimate ffclock_estimate;
  struct bintime ffclock_boottime;
  uint32_t ffclock_status;
  int8_t ffclock_updated;
  struct mtx ffclock_mtx;
-+int sysclock_active = 1;
-+
+ 
 +struct sysclock_ops {
 +	int active;
 +	void (*binuptime) (struct bintime *bt);
@@ -430,7 +431,7 @@ Index: sys/kern/kern_tc.c
 +};
 +
 +static struct sysclock_ops sysclock = {
-+	.active = 1,
++	.active = SYSCLOCK_FBCK,
 +	.binuptime = ntp_binuptime,
 +	.nanouptime = ntp_nanouptime,
 +	.microuptime = ntp_microuptime,
@@ -444,7 +445,7 @@ Index: sys/kern/kern_tc.c
 +	.getnanotime = ntp_getnanotime,
 +	.getmicrotime = ntp_getmicrotime
 +};
- 
++
  struct fftimehands {
  	struct ffclock_estimate cest;
  	struct bintime	tick_time;
@@ -454,7 +455,8 @@ Index: sys/kern/kern_tc.c
  	volatile uint8_t gen;
  	struct fftimehands *next;
  };
-@@ -612,20 +784,57 @@ ffclock_change_tc(struct timehands *th, 
+ 
+@@ -612,20 +785,59 @@ ffclock_change_tc(struct timehands *th, 
  
  	/* Do not lock but ignore next update from synchronization daemon */
  	ffclock_updated--;
@@ -471,7 +473,7 @@ Index: sys/kern/kern_tc.c
 +	sysclock.active = new_sysclock;
 +
 +	switch (sysclock.active) {
-+	case 1:
++	case SYSCLOCK_FBCK:
 +		sysclock.binuptime = ntp_binuptime;
 +		sysclock.nanouptime = ntp_nanouptime;
 +		sysclock.microuptime = ntp_microuptime;
@@ -485,7 +487,7 @@ Index: sys/kern/kern_tc.c
 +		sysclock.getnanotime = ntp_getnanotime;
 +		sysclock.getmicrotime = ntp_getmicrotime;
 +		break;
-+	case 2:
++	case SYSCLOCK_FFWD:
 +		sysclock.binuptime = ffclock_binuptime;
 +		sysclock.nanouptime = ffclock_nanouptime;
 +		sysclock.microuptime = ffclock_microuptime;
@@ -498,6 +500,8 @@ Index: sys/kern/kern_tc.c
 +		sysclock.getbintime = ffclock_getbintime;
 +		sysclock.getnanotime = ffclock_getnanotime;
 +		sysclock.getmicrotime = ffclock_getmicrotime;
++		break;
++	default:
 +		break;
 +	}
 +}
@@ -512,7 +516,7 @@ Index: sys/kern/kern_tc.c
  	uint8_t gen;
  
  	/*
-@@ -723,20 +932,92 @@ ffclock_read_counter(ffcounter *ffcount)
+@@ -723,20 +935,92 @@ ffclock_read_counter(ffcounter *ffcount)
  	do {
  		th = timehands;
  		gen = th->th_generation;
@@ -605,7 +609,7 @@ Index: sys/kern/kern_tc.c
  {
  	u_int u;
  	struct sysctl_oid *tc_root;
-@@ -957,20 +1238,25 @@ tc_windup(void)
+@@ -957,31 +1241,49 @@ tc_windup(void)
   	 *
  	 * We happily sacrifice the lowest of the 64 bits of our result
  	 * to the goddess of code clarity.
@@ -630,8 +634,34 @@ Index: sys/kern/kern_tc.c
  	th->th_generation = ogen;
  
  	/* Go live with the new struct timehands. */
- 	time_second = th->th_microtime.tv_sec;
-@@ -1247,20 +1533,21 @@ inittimecounter(void *dummy)
+-	time_second = th->th_microtime.tv_sec;
+-	time_uptime = th->th_offset.sec;
++#ifdef FFCLOCK
++	switch (sysclock_active) {
++	case SYSCLOCK_FBCK:
++#endif
++		time_second = th->th_microtime.tv_sec;
++		time_uptime = th->th_offset.sec;
++#ifdef FFCLOCK
++		break;
++	case SYSCLOCK_FFWD:
++		time_second = fftimehands->tick_time_lerp.sec;
++		time_uptime = fftimehands->tick_time_lerp.sec - ffclock_boottime.sec;
++		break;
++	}
++#endif
++
+ 	timehands = th;
+ }
+ 
+ /* Report or change the active timecounter hardware. */
+ static int
+ sysctl_kern_timecounter_hardware(SYSCTL_HANDLER_ARGS)
+ {
+ 	char newname[32];
+ 	struct timecounter *newtc, *tc;
+ 	int error;
+@@ -1247,20 +1549,21 @@ inittimecounter(void *dummy)
  	 */
  	if (hz > 1000)
  		tc_tick = (hz + 500) / 1000;
@@ -655,9 +685,36 @@ Index: sys/kern/kern_tc.c
  /* Cpu tick handling -------------------------------------------------*/
 Index: sys/sys/timeffc.h
 ===================================================================
---- sys.orig/sys/timeffc.h	2011-07-12 17:27:50.000000000 +1000
-+++ sys/sys/timeffc.h	2011-07-12 18:12:06.000000000 +1000
-@@ -115,13 +115,38 @@ void ffclock_convert_diff(ffcounter ffde
+--- sys.orig/sys/timeffc.h	2011-07-13 21:31:48.000000000 +1000
++++ sys/sys/timeffc.h	2011-07-13 21:50:37.000000000 +1000
+@@ -48,20 +48,26 @@ struct ffclock_estimate {
+ 	uint32_t	error_bound_rate;	/* Bound on counter rate error [ps/s] */
+ 	uint32_t	status;				/* Clock status */
+ 	int16_t		leapsec_total;		/* All leap seconds seen so far */
+ 	int8_t		leapsec;			/* Next leap second, usually in {-1,0,1} */
+ };
+ 
+ #if __BSD_VISIBLE
+ #ifdef _KERNEL
+ 
+ /*
++ * Selecting feedback or feed-forard clock to answer time requests.
++ */
++#define SYSCLOCK_FBCK	1
++#define SYSCLOCK_FFWD	2
++
++/*
+  * Universal parameters for feed-forward algorithms
+  */
+ #define FFCLOCK_SKM_SCALE	1024
+ 
+ /*
+  * Feed-Forward Clock status
+  */
+ #define FFCLOCK_STA_UNSYNC	1
+ #define FFCLOCK_STA_WARMUP	2
+ 
+@@ -115,13 +121,38 @@ void ffclock_convert_diff(ffcounter ffde
   * 		conversion in seconds. The value of the time in seconds depends on the
   *		flags passed: for a unique counter value, different conversions in
   * 		second are possible.
@@ -695,4 +752,4 @@ Index: sys/sys/timeffc.h
 +
  #endif /* _KERNEL */
  #endif /* __BSD_VISIBLE */
- #endif /* _SYS_TIMEFF_H */
+ #endif /* _SYS_TIMEFF_H_ */

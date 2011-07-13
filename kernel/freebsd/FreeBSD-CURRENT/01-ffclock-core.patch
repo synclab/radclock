@@ -69,7 +69,7 @@ Index: sys/conf/options
 Index: sys/kern/kern_tc.c
 ===================================================================
 --- sys.orig/kern/kern_tc.c	2011-07-11 19:16:07.000000000 +1000
-+++ sys/kern/kern_tc.c	2011-07-12 16:40:52.000000000 +1000
++++ sys/kern/kern_tc.c	2011-07-13 21:27:32.000000000 +1000
 @@ -1,29 +1,43 @@
  /*-
   * ----------------------------------------------------------------------------
@@ -730,7 +730,7 @@ Index: sys/sys/_ffcounter.h
 Index: sys/sys/timeffc.h
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ sys/sys/timeffc.h	2011-07-12 16:40:23.000000000 +1000
++++ sys/sys/timeffc.h	2011-07-13 21:28:01.000000000 +1000
 @@ -0,0 +1,108 @@
 +/*-
 + * Copyright (C) 2010 University of Melbourne
@@ -839,4 +839,4 @@ Index: sys/sys/timeffc.h
 +
 +#endif /* _KERNEL */
 +#endif /* __BSD_VISIBLE */
-+#endif /* _SYS_TIMEFF_H */
++#endif /* _SYS_TIMEFF_H_ */
