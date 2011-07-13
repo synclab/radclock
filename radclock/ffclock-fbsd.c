@@ -280,15 +280,6 @@ set_kernel_ffclock(struct radclock *clock)
 	cest.leapsec_total = 0;
 	cest.leapsec = 0;
 
-	struct timespec ts; 
-	bintime2timespec(&(cest.update_time), &ts);
-	fprintf(stdout, "\n");
-	fprintf(stdout, "Kernel update\n");
-	fprintf(stdout, "  count=%llu, period= %llu\n", (long long unsigned)cest.update_ffcount, (long long unsigned)cest.period);
-
-	fprintf(stdout, "  time=%.09Lf, = %ld.%lu\n", time, ts.tv_sec, ts.tv_nsec);
-	
-
 	/* Push */
 	switch (clock->kernel_version)
 	{
