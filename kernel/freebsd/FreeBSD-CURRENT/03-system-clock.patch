@@ -1,13 +1,13 @@
 ---
- kern/kern_ffclock.c |  181 ++++++++++++++++++++++++++++++
+ kern/kern_ffclock.c |  189 ++++++++++++++++++++++++++++++++
  kern/kern_tc.c      |  307 +++++++++++++++++++++++++++++++++++++++++++++++++++-
- sys/timeffc.h       |   31 +++++
- 3 files changed, 517 insertions(+), 2 deletions(-)
+ sys/timeffc.h       |   35 +++++
+ 3 files changed, 529 insertions(+), 2 deletions(-)
 
 Index: sys/kern/kern_ffclock.c
 ===================================================================
---- sys.orig/kern/kern_ffclock.c	2011-07-14 10:16:32.000000000 +1000
-+++ sys/kern/kern_ffclock.c	2011-07-14 10:19:29.000000000 +1000
+--- sys.orig/kern/kern_ffclock.c	2011-07-14 13:32:32.000000000 +1000
++++ sys/kern/kern_ffclock.c	2011-07-14 13:34:12.000000000 +1000
 @@ -22,20 +22,21 @@
   * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
   * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
@@ -27,17 +27,17 @@ Index: sys/kern/kern_ffclock.c
  extern struct bintime ffclock_boottime;
  
  /*
-  * Feed-forward clock time functions
-  */
- void
-@@ -108,10 +109,190 @@ ffclock_difftime(ffcounter ffdelta, stru
+  * Feed-forward clock absolute time. This should be the prefered way to read the
+  * feed-forward clock for "wall-clock" type time. The flags allow to compose
+  * various flavours of absolute time (e.g. with or without leap seconds taken
+@@ -118,10 +119,198 @@ ffclock_difftime(ffcounter ffdelta, stru
  		do {
  			update_ffcount = ffclock_estimate.update_ffcount;
  			err_rate = ffclock_estimate.error_bound_rate;
  		} while (update_ffcount != ffclock_estimate.update_ffcount);
  
  		ffclock_convert_diff(ffdelta, error_bound);
- 		/* 18446744073709 = int(2^64 / 1e12), err_bound_rate in [ps/s] */
+ 		/* 18446744073709 = int(2^64/1e12), err_bound_rate in [ps/s] */
  		bintime_mul(error_bound, err_rate * (uint64_t)18446744073709LL);
  	}
  }
@@ -47,8 +47,10 @@ Index: sys/kern/kern_ffclock.c
 + */
 +
 +static int ffclock_version = 2;
-+SYSCTL_NODE(_kern, OID_AUTO, ffclock, CTLFLAG_RW, 0, "Feed-Forward Clock Support");
-+SYSCTL_INT(_kern_ffclock, OID_AUTO, version, CTLFLAG_RD, &ffclock_version, 0, "Version of Feed-Forward Clock Support");
++SYSCTL_NODE(_kern, OID_AUTO, ffclock, CTLFLAG_RW, 0,
++    "Feed-Forward Clock Support");
++SYSCTL_INT(_kern_ffclock, OID_AUTO, version, CTLFLAG_RD, &ffclock_version, 0,
++    "Version of Feed-Forward Clock Support");
 +
 +
 +/*
@@ -126,7 +128,8 @@ Index: sys/kern/kern_ffclock.c
 +ffclock_getbintime(struct bintime *bt)
 +{
 +
-+	ffclock_abstime(NULL, bt, NULL, (FFCLOCK_LERP | FFCLOCK_LEAPSEC | FFCLOCK_FAST));
++	ffclock_abstime(NULL, bt, NULL,
++	    (FFCLOCK_LERP | FFCLOCK_LEAPSEC | FFCLOCK_FAST));
 +}
 +
 +void
@@ -134,7 +137,8 @@ Index: sys/kern/kern_ffclock.c
 +{
 +	struct bintime bt;
 +
-+	ffclock_abstime(NULL, &bt, NULL, (FFCLOCK_LERP | FFCLOCK_LEAPSEC | FFCLOCK_FAST));
++	ffclock_abstime(NULL, &bt, NULL,
++	    (FFCLOCK_LERP | FFCLOCK_LEAPSEC | FFCLOCK_FAST));
 +	bintime2timespec(&bt, tsp);
 +}
 +
@@ -143,7 +147,8 @@ Index: sys/kern/kern_ffclock.c
 +{
 +	struct bintime bt;
 +
-+	ffclock_abstime(NULL, &bt, NULL, (FFCLOCK_LERP | FFCLOCK_LEAPSEC | FFCLOCK_FAST));
++	ffclock_abstime(NULL, &bt, NULL,
++	    (FFCLOCK_LERP | FFCLOCK_LEAPSEC | FFCLOCK_FAST));
 +	bintime2timeval(&bt, tvp);
 +}
 +
@@ -176,7 +181,8 @@ Index: sys/kern/kern_ffclock.c
 +ffclock_getbinuptime(struct bintime *bt)
 +{
 +
-+	ffclock_abstime(NULL, bt, NULL, (FFCLOCK_LERP | FFCLOCK_UPTIME | FFCLOCK_FAST));
++	ffclock_abstime(NULL, bt, NULL,
++	    (FFCLOCK_LERP | FFCLOCK_UPTIME | FFCLOCK_FAST));
 +}
 +
 +void
@@ -184,7 +190,8 @@ Index: sys/kern/kern_ffclock.c
 +{
 +	struct bintime bt;
 +
-+	ffclock_abstime(NULL, &bt, NULL, (FFCLOCK_LERP | FFCLOCK_UPTIME | FFCLOCK_FAST));
++	ffclock_abstime(NULL, &bt, NULL,
++	    (FFCLOCK_LERP | FFCLOCK_UPTIME | FFCLOCK_FAST));
 +	bintime2timespec(&bt, tsp);
 +}
 +
@@ -193,7 +200,8 @@ Index: sys/kern/kern_ffclock.c
 +{
 +	struct bintime bt;
 +
-+	ffclock_abstime(NULL, &bt, NULL, (FFCLOCK_LERP | FFCLOCK_UPTIME | FFCLOCK_FAST));
++	ffclock_abstime(NULL, &bt, NULL,
++	    (FFCLOCK_LERP | FFCLOCK_UPTIME | FFCLOCK_FAST));
 +	bintime2timeval(&bt, tvp);
 +}
 +
@@ -223,8 +231,8 @@ Index: sys/kern/kern_ffclock.c
 +}
 Index: sys/kern/kern_tc.c
 ===================================================================
---- sys.orig/kern/kern_tc.c	2011-07-14 10:16:27.000000000 +1000
-+++ sys/kern/kern_tc.c	2011-07-14 10:18:54.000000000 +1000
+--- sys.orig/kern/kern_tc.c	2011-07-14 13:32:32.000000000 +1000
++++ sys/kern/kern_tc.c	2011-07-14 13:33:01.000000000 +1000
 @@ -170,20 +170,158 @@ tc_delta(struct timehands *th)
  	return ((tc->tc_get_timecount(tc) - th->th_offset_count) &
  	    tc->tc_counter_mask);
@@ -399,20 +407,20 @@ Index: sys/kern/kern_tc.c
  
  #ifdef FFCLOCK
  /*
-  * Support for feed-forward synchronization algorithms.
-  * This is heavily inspired by the timehands mechanism but kept independent from
-  * it. *_windup() functions have some connection to avoid accessing the
-  * timecounter hardware more than necessary.
+  * Support for feed-forward synchronization algorithms. This is heavily inspired
+  * by the timehands mechanism but kept independent from it. *_windup() functions
+  * have some connection to avoid accessing the timecounter hardware more than
+  * necessary.
   */
  
 +int sysclock_active = SYSCLOCK_FBCK;
 +
  /* Feed-forward clock estimates kept updated by the synchronization daemon. */
  struct ffclock_estimate ffclock_estimate;
- struct bintime ffclock_boottime;
- uint32_t ffclock_status;
- int8_t ffclock_updated;
- struct mtx ffclock_mtx;
+ struct bintime ffclock_boottime;	/* Feed-forward boot time estimate. */
+ uint32_t ffclock_status;	/* Feed-forward clock status. */
+ int8_t ffclock_updated;		/* Signals new estimates are available. */
+ struct mtx ffclock_mtx;		/* Mutex on ffclock_estimate. */
  
 +struct sysclock_ops {
 +	int active;
@@ -456,7 +464,7 @@ Index: sys/kern/kern_tc.c
  	struct fftimehands *next;
  };
  
-@@ -612,20 +785,59 @@ ffclock_change_tc(struct timehands *th, 
+@@ -615,20 +788,59 @@ ffclock_change_tc(struct timehands *th)
  
  	/* Do not lock but ignore next update from synchronization daemon */
  	ffclock_updated--;
@@ -516,7 +524,7 @@ Index: sys/kern/kern_tc.c
  	uint8_t gen;
  
  	/*
-@@ -723,20 +935,92 @@ ffclock_read_counter(ffcounter *ffcount)
+@@ -725,20 +937,92 @@ ffclock_read_counter(ffcounter *ffcount)
  	do {
  		th = timehands;
  		gen = th->th_generation;
@@ -609,7 +617,7 @@ Index: sys/kern/kern_tc.c
  {
  	u_int u;
  	struct sysctl_oid *tc_root;
-@@ -957,31 +1241,49 @@ tc_windup(void)
+@@ -959,31 +1243,49 @@ tc_windup(void)
   	 *
  	 * We happily sacrifice the lowest of the 64 bits of our result
  	 * to the goddess of code clarity.
@@ -661,7 +669,7 @@ Index: sys/kern/kern_tc.c
  	char newname[32];
  	struct timecounter *newtc, *tc;
  	int error;
-@@ -1247,20 +1549,21 @@ inittimecounter(void *dummy)
+@@ -1249,20 +1551,21 @@ inittimecounter(void *dummy)
  	 */
  	if (hz > 1000)
  		tc_tick = (hz + 500) / 1000;
@@ -685,13 +693,13 @@ Index: sys/kern/kern_tc.c
  /* Cpu tick handling -------------------------------------------------*/
 Index: sys/sys/timeffc.h
 ===================================================================
---- sys.orig/sys/timeffc.h	2011-07-14 10:17:02.000000000 +1000
-+++ sys/sys/timeffc.h	2011-07-14 10:20:32.000000000 +1000
+--- sys.orig/sys/timeffc.h	2011-07-14 13:32:32.000000000 +1000
++++ sys/sys/timeffc.h	2011-07-14 13:33:01.000000000 +1000
 @@ -48,20 +48,26 @@ struct ffclock_estimate {
- 	uint32_t	error_bound_rate;	/* Bound on counter rate error [ps/s] */
- 	uint32_t	status;				/* Clock status */
- 	int16_t		leapsec_total;		/* All leap seconds seen so far */
- 	int8_t		leapsec;			/* Next leap second, usually in {-1,0,1} */
+ 	uint32_t	error_bound_rate;	/* Bound on counter rate error [ps/s]. */
+ 	uint32_t	status;		/* Clock status. */
+ 	int16_t		leapsec_total;	/* All leap seconds seen so far. */
+ 	int8_t		leapsec;	/* Next leap second (in {-1,0,1}). */
  };
  
  #if __BSD_VISIBLE
@@ -714,20 +722,20 @@ Index: sys/sys/timeffc.h
  #define FFCLOCK_STA_UNSYNC	1
  #define FFCLOCK_STA_WARMUP	2
  
-@@ -115,13 +121,38 @@ void ffclock_convert_diff(ffcounter ffde
-  * 		conversion in seconds. The value of the time in seconds depends on the
-  *		flags passed: for a unique counter value, different conversions in
-  * 		second are possible.
+@@ -116,13 +122,42 @@ void ffclock_convert_diff(ffcounter ffde
+  *     conversion in seconds. The value of the time in seconds depends on the
+  *     flags passed: for a unique counter value, different conversions in second
+  *     are possible.
   * ffclock_difftime(): computes a time interval in seconds based on an interval
-  * 		measured in counter value. This should be the preferred way to measure
-  * 		 very accurately small time intervals.
+  *     measured in counter value. This should be the preferred way to measure
+  *     very accurately small time intervals.
   */
  void ffclock_abstime(ffcounter *ffcount, struct bintime *bt, struct bintime *error_bound, uint32_t flags);
  void ffclock_difftime(ffcounter ffdelta, struct bintime *bt, struct bintime *error_bound);
  
 +/*
-+ * Wrapper routines to return current absolute time using the Feed-Forward
-+ * Clock. These functions are named after those defined in <sys/time.h>, which
++ * Wrapper routines to return current absolute time using the feed-forward
++ * clock. These functions are named after those defined in <sys/time.h>, which
 + * contains a description of the original ones.
 + */
 +void ffclock_bintime(struct bintime *bt);
@@ -746,6 +754,10 @@ Index: sys/sys/timeffc.h
 +void ffclock_getnanouptime(struct timespec *tsp);
 +void ffclock_getmicrouptime(struct timeval *tvp);
 +
++/*
++ * Wrapper routines to convert a time interval defined by ffcounter values into
++ * a time interval in secounds using the current feed-forward clock estimates.
++ */
 +void ffclock_bindifftime(ffcounter ffdelta, struct bintime *bt);
 +void ffclock_nanodifftime(ffcounter ffdelta, struct timespec *tsp);
 +void ffclock_microdifftime(ffcounter ffdelta, struct timeval *tvp);
