@@ -1,3 +1,14 @@
+Feed-forward clock core support.
+
+Core structure and functions to support a feed-forward clock within the kernel.
+Implement ffcounter, a monotonically increasing cumulative counter on top of the
+active timecounter.
+Provide low-level functions to read the ffcounter and convert it to absolute
+time or time interval in seconds using the current ffclock estimates, which
+track the drift of the oscillator. 
+Add a ring of fftimehands to track passing of time on each kernel tick and
+pick updates of ffclock estimates. 
+
 ---
  conf/NOTES       |    8 
  conf/options     |    1 

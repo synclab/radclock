@@ -1,3 +1,13 @@
+Selecting feedback of feed-forward clock as the system clock.
+
+Provide sysctl interface to change the active system clock at runtime.
+Wrap [get]{bin,nano,micro}[up]time() functions of sys/time.h to allow requesting
+time from the feedback/ntpd clock or the feed-forward clock. If a feedback (e.g.
+ntpd) and feed-forward (e.g. radclock) daemons are both running on the system,
+both kernel clocks are updated but only one serves time.
+
+Add similar wrappers for the feed-forward difference clock.
+
 ---
  kern/kern_ffclock.c |  189 ++++++++++++++++++++++++++++++++
  kern/kern_tc.c      |  307 +++++++++++++++++++++++++++++++++++++++++++++++++++-

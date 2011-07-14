@@ -1,4 +1,8 @@
-Modification to the PPS-API to support ffcounter timestamps
+Feed-forward clock and PPS-API.
+
+Add timestamping of Pulse-Per-Second using raw ffcounter and corresponding
+ffclock time in second.
+Add IOCTL to retrieve ffclock timestamps from userland.
 
 ---
  kern/kern_tc.c |   42 ++++++++++++++++++++++++++++++++++++++++++

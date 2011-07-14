@@ -1,3 +1,10 @@
+Feed-forward clock time functions 
+
+Provide high-level functions to access the feed-forward absolute and difference
+clock. Each routine can output an upper bound on the absolute time or time
+interval requested. Different flavours of absolute time can be requested, for
+example with or without leap seconds, monotonic or not, etc.
+
 ---
  conf/files          |    1 
  kern/kern_ffclock.c |  127 ++++++++++++++++++++++++++++++++++++++++++++++++++++

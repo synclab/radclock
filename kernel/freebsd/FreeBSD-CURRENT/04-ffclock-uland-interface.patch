@@ -1,9 +1,9 @@
-Feed-forward clock interface.
+Feed-forward clock userland interface.
 
-Provides ffclock kernel module.
-Return a feed-forward RAW timestamp to userland.
-Allows feed-forward synchronisation daemon to update the kernel feed-forward
-clock.
+Provide 3 system calls to userland processes.
+ffclock_getcounter(): returns the current value of the ffcounter to userland.
+ffclock_getestimate(): returns current ffclock estimates to userland.
+ffclock_setestimate(): update the kernel ffclock estimate from userland.
 
 ---
  compat/freebsd32/syscalls.master |    8 ++-
