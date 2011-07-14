@@ -6,8 +6,8 @@
 
 Index: sys/kern/kern_ffclock.c
 ===================================================================
---- sys.orig/kern/kern_ffclock.c	2011-07-13 21:32:51.000000000 +1000
-+++ sys/kern/kern_ffclock.c	2011-07-13 21:50:05.000000000 +1000
+--- sys.orig/kern/kern_ffclock.c	2011-07-14 10:16:32.000000000 +1000
++++ sys/kern/kern_ffclock.c	2011-07-14 10:19:29.000000000 +1000
 @@ -22,20 +22,21 @@
   * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
   * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
@@ -27,7 +27,7 @@ Index: sys/kern/kern_ffclock.c
  extern struct bintime ffclock_boottime;
  
  /*
-  * Feed-Forward Clock time functions
+  * Feed-forward clock time functions
   */
  void
 @@ -108,10 +109,190 @@ ffclock_difftime(ffcounter ffdelta, stru
@@ -223,8 +223,8 @@ Index: sys/kern/kern_ffclock.c
 +}
 Index: sys/kern/kern_tc.c
 ===================================================================
---- sys.orig/kern/kern_tc.c	2011-07-13 21:27:32.000000000 +1000
-+++ sys/kern/kern_tc.c	2011-07-13 21:51:34.000000000 +1000
+--- sys.orig/kern/kern_tc.c	2011-07-14 10:16:27.000000000 +1000
++++ sys/kern/kern_tc.c	2011-07-14 10:18:54.000000000 +1000
 @@ -170,20 +170,158 @@ tc_delta(struct timehands *th)
  	return ((tc->tc_get_timecount(tc) - th->th_offset_count) &
  	    tc->tc_counter_mask);
@@ -407,7 +407,7 @@ Index: sys/kern/kern_tc.c
  
 +int sysclock_active = SYSCLOCK_FBCK;
 +
- /* Feed-Forward Clock estimates kept updated by the synchronization daemon. */
+ /* Feed-forward clock estimates kept updated by the synchronization daemon. */
  struct ffclock_estimate ffclock_estimate;
  struct bintime ffclock_boottime;
  uint32_t ffclock_status;
@@ -685,8 +685,8 @@ Index: sys/kern/kern_tc.c
  /* Cpu tick handling -------------------------------------------------*/
 Index: sys/sys/timeffc.h
 ===================================================================
---- sys.orig/sys/timeffc.h	2011-07-13 21:31:48.000000000 +1000
-+++ sys/sys/timeffc.h	2011-07-13 21:50:37.000000000 +1000
+--- sys.orig/sys/timeffc.h	2011-07-14 10:17:02.000000000 +1000
++++ sys/sys/timeffc.h	2011-07-14 10:20:32.000000000 +1000
 @@ -48,20 +48,26 @@ struct ffclock_estimate {
  	uint32_t	error_bound_rate;	/* Bound on counter rate error [ps/s] */
  	uint32_t	status;				/* Clock status */
@@ -704,12 +704,12 @@ Index: sys/sys/timeffc.h
 +#define SYSCLOCK_FFWD	2
 +
 +/*
-  * Universal parameters for feed-forward algorithms
+  * Parameters of counter characterisation required by feed-forward algorithms.
   */
  #define FFCLOCK_SKM_SCALE	1024
  
  /*
-  * Feed-Forward Clock status
+  * Feed-forward clock status
   */
  #define FFCLOCK_STA_UNSYNC	1
  #define FFCLOCK_STA_WARMUP	2

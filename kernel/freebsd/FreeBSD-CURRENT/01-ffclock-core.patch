@@ -22,7 +22,7 @@ Index: sys/conf/NOTES
  
  options 	PPS_SYNC
  
-+# Enable support for generic Feed-Forward clocks in the kernel.
++# Enable support for generic feed-forward clocks in the kernel.
 +# The feed-forward clock support is an alternative to the feedback oriented
 +# ntpd/system clock approach, and is to be used with a feed-forward
 +# synchronization algorithm such as the RADclock:
@@ -133,7 +133,7 @@ Index: sys/kern/kern_tc.c
 + * timecounter hardware more than necessary.
 + */
 +
-+/* Feed-Forward Clock estimates kept updated by the synchronization daemon. */
++/* Feed-forward clock estimates kept updated by the synchronization daemon. */
 +struct ffclock_estimate ffclock_estimate;
 +struct bintime ffclock_boottime;
 +uint32_t ffclock_status;
@@ -295,7 +295,7 @@ Index: sys/kern/kern_tc.c
 +
 +	/*
 +	 * If available, grab updated clock estimates and make them current.
-+	 * Recompute tick_time based on the updated estimates and update smoothing
++	 * Recompute tick_time based on the updated estimates and update LERP
 +	 * correction.
 +	 */
 +	if (ffclock_updated > 0) {
@@ -312,7 +312,7 @@ Index: sys/kern/kern_tc.c
 +		/*
 +		 * The clock estimates passed the feed-forward synchronisation daemon
 +		 * may result in time conversion that is not monotonically increasing
-+		 * (just after the update). time_lerp is a linear interpolation over the
++		 * (just after the update). time_lerp is a particular linear interpolation over the
 +		 * synchronisation algo polling period that ensures monotonicity for the
 +		 * clock ids requesting it.
 +		 */
@@ -331,9 +331,9 @@ Index: sys/kern/kern_tc.c
 +		}
 +
 +		/*
-+		 * The reset from the  RTC clock may be far from accurate, and bringing
++		 * The reset from the  RTC clock may be far from accurate, and reducing
 +		 * the gap between real time and interpolated time could take a very
-+		 * long time. The following sets the interpolated time to the real time
++		 * long time if the interpolated clock insists on strict monotonicity. The following sets the interpolated time to the real time
 +		 * to speed things up. ffclock_boottime absorbs the jump to ensure boot
 +		 * time is correct and uptime functions stay consistent. This allowed
 +		 * only if the kernel time is known to be wrong and the synchronisation
@@ -353,7 +353,7 @@ Index: sys/kern/kern_tc.c
 +		ffclock_status = cest->status;
 +		ffth->period_lerp = cest->period;
 +
-+		/* Compute rate of linear interpolation (capped to 5000PPM (5ms/s) */
++		/* Compute rate of linear interpolation (capped to 5000PPM (5ms/s)) */
 +		if (bintime_isset(&gap_lerp)) {
 +			ffdelta = cest->update_ffcount - fftimehands->cest.update_ffcount;
 +			ffclock_convert_delta(ffdelta, cest->period, &bt);
@@ -459,7 +459,7 @@ Index: sys/kern/kern_tc.c
 + * Low level function to convert ffcounter to bintime. The ffcounter is
 + * converted using the current ffclock period estimate or the "interpolated
 + * period" to ensure monotonicity.
-+ * NOTE: this conversion may have been differed, and the clock updated since the
++ * NOTE: this conversion may have been deffered, and the clock updated since the
 + * hardware counter has been read.
 + */
 +void
@@ -719,7 +719,7 @@ Index: sys/sys/_ffcounter.h
 +#include <sys/types.h>
 +
 +/*
-+ * Feed-forward Clock counter
++ * Feed-forward clock counter
 + * The fundamental element of a feed-forward clock is a wide monotonically
 + * increasing counter that accumulates at the same rate as the selected
 + * timecounter.
@@ -768,7 +768,7 @@ Index: sys/sys/timeffc.h
 +#include <sys/time.h>
 +
 +/*
-+ * Feed-Forward Clock estimate
++ * Feed-forward clock estimate
 + * Holds time mark as a ffcounter and conversion to bintime based on current
 + * timecounter period and offset estimate passed by the synchronization daemon.
 + * Provides time of last daemon update, clock status and bound on error.
@@ -789,21 +789,21 @@ Index: sys/sys/timeffc.h
 +#ifdef _KERNEL
 +
 +/*
-+ * Universal parameters for feed-forward algorithms
++ * Parameters of counter characterisation required by feed-forward algorithms.
 + */
 +#define FFCLOCK_SKM_SCALE	1024
 +
 +/*
-+ * Feed-Forward Clock status
++ * Feed-forward clock status
 + */
 +#define FFCLOCK_STA_UNSYNC	1
 +#define FFCLOCK_STA_WARMUP	2
 +
 +/*
-+ * Clock flags to select how the Feed-Forward counter is converted to absolute
++ * Clock flags to select how the feed-forward counter is converted to absolute
 + * time.
-+ * FAST:	do not read the hardware counter, returns time of last tick. The
-+ * 			time returned as the resolution of the kernel tick (1/hz [s]).
++ * FAST:	do not read the hardware counter, return feed-forward clock time at last tick. The
++ * 			time returned has the resolution of the kernel tick (1/hz [s]).
 + * LERP:	linear interpolation of ffclock time to guarantee monotonic time.
 + * LEAPSEC:	include leap seconds.
 + * UPTIME:	removes time of boot.
@@ -813,11 +813,11 @@ Index: sys/sys/timeffc.h
 +#define FFCLOCK_LEAPSEC		4
 +#define FFCLOCK_UPTIME		8
 +
-+/* Resets Feed-Forward clock from RTC */
++/* Resets feed-forward clock from RTC */
 +void ffclock_reset_clock(struct timespec *ts);
 +
 +/*
-+ * Return the current value of the Feed-Forward Clock counter. Essential to
++ * Return the current value of the feed-forward clock counter. Essential to
 + * measure time interval in counter units. If a fast timecounter is used by the
 + * system, may also allow fast but accurate timestamping.
 + */
@@ -831,7 +831,7 @@ Index: sys/sys/timeffc.h
 +
 +/*
 + * Low level routines to convert a counter timestamp into absolute time and a
-+ * counter timestamp interval into interval in seconds. The absolute time
++ * counter timestamp interval into an interval in seconds. The absolute time
 + * conversion accepts the FFCLOCK_LERP flag.
 + */
 +void ffclock_convert_abs(ffcounter ffcount, struct bintime *bt, uint32_t flags);

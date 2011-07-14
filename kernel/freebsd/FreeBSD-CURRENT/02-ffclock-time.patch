@@ -6,8 +6,8 @@
 
 Index: sys/conf/files
 ===================================================================
---- sys.orig/conf/files	2011-07-13 21:27:33.000000000 +1000
-+++ sys/conf/files	2011-07-13 21:31:09.000000000 +1000
+--- sys.orig/conf/files	2011-07-14 10:12:44.000000000 +1000
++++ sys/conf/files	2011-07-14 10:16:32.000000000 +1000
 @@ -2298,20 +2298,21 @@ kern/kern_cpu.c			standard
  kern/kern_cpuset.c		standard
  kern/kern_context.c		standard
@@ -33,7 +33,7 @@ Index: sys/conf/files
 Index: sys/kern/kern_ffclock.c
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ sys/kern/kern_ffclock.c	2011-07-13 21:32:51.000000000 +1000
++++ sys/kern/kern_ffclock.c	2011-07-14 10:16:32.000000000 +1000
 @@ -0,0 +1,117 @@
 +/*-
 + * Copyright (C) 2010 University of Melbourne
@@ -73,7 +73,7 @@ Index: sys/kern/kern_ffclock.c
 +extern struct bintime ffclock_boottime;
 +
 +/*
-+ * Feed-Forward Clock time functions
++ * Feed-forward clock time functions
 + */
 +void
 +ffclock_abstime(ffcounter *ffcount, struct bintime *bt,
@@ -154,21 +154,21 @@ Index: sys/kern/kern_ffclock.c
 +}
 Index: sys/sys/timeffc.h
 ===================================================================
---- sys.orig/sys/timeffc.h	2011-07-13 21:28:01.000000000 +1000
-+++ sys/sys/timeffc.h	2011-07-13 21:31:48.000000000 +1000
+--- sys.orig/sys/timeffc.h	2011-07-14 10:16:27.000000000 +1000
++++ sys/sys/timeffc.h	2011-07-14 10:17:02.000000000 +1000
 @@ -96,13 +96,32 @@ void ffclock_read_counter(ffcounter *ffc
  void ffclock_last_tick(ffcounter *ffcount, struct bintime *bt, uint32_t flags);
  
  /*
   * Low level routines to convert a counter timestamp into absolute time and a
-  * counter timestamp interval into interval in seconds. The absolute time
+  * counter timestamp interval into an interval in seconds. The absolute time
   * conversion accepts the FFCLOCK_LERP flag.
   */
  void ffclock_convert_abs(ffcounter ffcount, struct bintime *bt, uint32_t flags);
  void ffclock_convert_diff(ffcounter ffdelta, struct bintime *bt);
  
 +/*
-+ * Feed-Forward clock routines.
++ * Feed-forward clock routines.
 + *
 + * These functions rely on the timecounters and ffclock_estimates stored in
 + * fftimehands. Note that the error_bound parameter is not the error of the
