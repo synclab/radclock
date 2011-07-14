@@ -1,14 +1,14 @@
 Modification to the PPS-API to support ffcounter timestamps
 
 ---
- kern/kern_tc.c |   41 +++++++++++++++++++++++++++++++++++
- sys/timepps.h  |   66 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++
- 2 files changed, 107 insertions(+)
+ kern/kern_tc.c |   42 ++++++++++++++++++++++++++++++++++++++++++
+ sys/timepps.h  |   45 +++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 87 insertions(+)
 
 Index: sys/kern/kern_tc.c
 ===================================================================
 --- sys.orig/kern/kern_tc.c	2011-07-14 13:33:01.000000000 +1000
-+++ sys/kern/kern_tc.c	2011-07-14 14:24:30.000000000 +1000
++++ sys/kern/kern_tc.c	2011-07-14 15:37:10.000000000 +1000
 @@ -1340,20 +1340,23 @@ SYSCTL_PROC(_kern_timecounter, OID_AUTO,
  
  /*
@@ -33,7 +33,7 @@ Index: sys/kern/kern_tc.c
  		return (0);
  	case PPS_IOC_DESTROY:
  		return (0);
-@@ -1373,20 +1376,31 @@ pps_ioctl(u_long cmd, caddr_t data, stru
+@@ -1373,20 +1376,32 @@ pps_ioctl(u_long cmd, caddr_t data, stru
  		return (0);
  	case PPS_IOC_FETCH:
  		fapi = (struct pps_fetch_args *)data;
@@ -45,16 +45,17 @@ Index: sys/kern/kern_tc.c
  		fapi->pps_info_buf = pps->ppsinfo;
  		return (0);
 +#ifdef FFCLOCK
-+	case FFCLOCK_PPS_IOC_FETCH:
++	case PPS_IOC_FETCH_FFCLOCK:
 +		ffclock_fapi = (struct ffclock_pps_fetch_args *)data;
-+		if (ffclock_fapi->tsformat && ffclock_fapi->tsformat != PPS_TSFMT_TSPEC)
++		if ((ffclock_fapi->tsformat && ffclock_fapi->tsformat) !=
++		    PPS_TSFMT_TSPEC)
 +			return (EINVAL);
 +		if (ffclock_fapi->timeout.tv_sec || ffclock_fapi->timeout.tv_nsec)
 +			return (EOPNOTSUPP);
 +		pps->ppsinfo.current_mode = pps->ppsparam.mode;
 +		ffclock_fapi->pps_info_buf = pps->ffclock_ppsinfo;
 +		return (0);
-+#endif 	/* FFCLOCK */
++#endif /* FFCLOCK */
  	case PPS_IOC_KCBIND:
  #ifdef PPS_SYNC
  		kapi = (struct pps_kcbind_args *)data;
@@ -65,7 +66,9 @@ Index: sys/kern/kern_tc.c
  			return (EINVAL);
  		if (kapi->edge & ~pps->ppscap)
  			return (EINVAL);
-@@ -1412,82 +1426,109 @@ pps_init(struct pps_state *pps)
+@@ -1410,56 +1425,74 @@ pps_init(struct pps_state *pps)
+ 		pps->ppscap |= PPS_OFFSETCLEAR;
+ }
  
  void
  pps_capture(struct pps_state *pps)
@@ -74,11 +77,11 @@ Index: sys/kern/kern_tc.c
  
  	KASSERT(pps != NULL, ("NULL pps pointer in pps_capture"));
  	th = timehands;
- 	pps->capgen = th->th_generation;
- 	pps->capth = th;
 +#ifdef FFCLOCK
 +	pps->capffth = fftimehands;
 +#endif
+ 	pps->capgen = th->th_generation;
+ 	pps->capth = th;
  	pps->capcount = th->th_counter->tc_get_timecount(th->th_counter);
  	if (pps->capgen != th->th_generation)
  		pps->capgen = 0;
@@ -96,7 +99,6 @@ Index: sys/kern/kern_tc.c
 +	struct timespec *ffclock_tsp;
 +	pps_seq_t *ffclock_pseq;
 +	ffcounter *ffcount;
-+	ffcounter tick_ffcount;
 +#endif
  
  	KASSERT(pps != NULL, ("NULL pps pointer in pps_event"));
@@ -139,17 +141,7 @@ Index: sys/kern/kern_tc.c
  		pps->ppstc = pps->capth->th_counter;
  		*pcount = pps->capcount;
  		pps->ppscount[2] = pps->capcount;
- 		return;
- 	}
- 
- 	/* Convert the count to a timespec. */
- 	tcount = pps->capcount - pps->capth->th_offset_count;
- 	tcount &= pps->capth->th_counter->tc_counter_mask;
-+#ifdef FFCLOCK
-+	tick_ffcount = pps->capffth->tick_ffcount;
-+#endif
- 	bt = pps->capth->th_offset;
- 	bintime_addx(&bt, pps->capth->th_scale * tcount);
+@@ -1474,20 +1507,29 @@ pps_event(struct pps_state *pps, int eve
  	bintime_add(&bt, &boottimebin);
  	bintime2timespec(&bt, &ts);
  
@@ -161,9 +153,13 @@ Index: sys/kern/kern_tc.c
  	(*pseq)++;
  	*tsp = ts;
 +#ifdef FFCLOCK
-+	(*ffclock_pseq)++;
++	*ffcount = (pps->capffth->tick_ffcount + tcount);
++	bt = pps->capffth->tick_time;
++	ffclock_convert_delta(tcount, pps->capffth->cest.period, &bt);
++	bintime_add(&bt, &(pps->capffth->tick_time));
++	bintime2timespec(&bt, &ts);
 +	*ffclock_tsp = ts;
-+	*ffcount = (tick_ffcount + tcount);
++	(*ffclock_pseq)++;
 +#endif
  
  	if (foff) {
@@ -178,8 +174,8 @@ Index: sys/kern/kern_tc.c
 Index: sys/sys/timepps.h
 ===================================================================
 --- sys.orig/sys/timepps.h	2011-07-14 10:49:19.000000000 +1000
-+++ sys/sys/timepps.h	2011-07-14 14:24:30.000000000 +1000
-@@ -1,29 +1,38 @@
++++ sys/sys/timepps.h	2011-07-14 14:47:40.000000000 +1000
+@@ -1,18 +1,24 @@
  /*-
   * ----------------------------------------------------------------------------
   * "THE BEER-WARE LICENSE" (Revision 42):
@@ -204,60 +200,27 @@ Index: sys/sys/timepps.h
  #define _SYS_TIMEPPS_H_
  
  #include <sys/ioccom.h>
- #include <sys/time.h>
-+#ifdef FFCLOCK
-+#include <sys/timeffc.h>
-+#endif
- 
- #define PPS_API_VERS_1	1
- 
- typedef int pps_handle_t;	
- 
- typedef unsigned pps_seq_t;
- 
- typedef struct ntp_fp {
- 	unsigned int	integral;
- 	unsigned int	fractional;
-@@ -36,26 +45,48 @@ typedef union pps_timeu {
- } pps_timeu_t;
- 
- typedef struct {
- 	pps_seq_t	assert_sequence;	/* assert event seq # */
- 	pps_seq_t	clear_sequence;		/* clear event seq # */
- 	pps_timeu_t	assert_tu;
- 	pps_timeu_t	clear_tu;
+@@ -43,20 +49,30 @@ typedef struct {
  	int		current_mode;		/* current mode bits */
  } pps_info_t;
  
-+
-+#ifdef FFCLOCK
-+typedef union pps_ffcounteru {
-+	ffcounter ffcount;
-+} pps_ffcounteru_t;
-+
-+typedef struct {
-+	pps_seq_t	assert_sequence;	/* assert event seq # */
-+	pps_seq_t	clear_sequence;		/* clear event seq # */
-+	pps_timeu_t	assert_tu;
-+	pps_timeu_t	clear_tu;
-+	int		current_mode;		/* current mode bits */
-+	pps_ffcounteru_t  assert_vcu;
-+	pps_ffcounteru_t  clear_vcu;
-+} ffclock_pps_info_t;
-+#endif	/* FFCLOCK */
-+
  #define assert_timestamp        assert_tu.tspec
  #define clear_timestamp         clear_tu.tspec
  
  #define assert_timestamp_ntpfp  assert_tu.ntpfp
  #define clear_timestamp_ntpfp   clear_tu.ntpfp
  
-+#ifdef FFCLOCK
-+#define assert_ffcount	assert_vcu.ffcount
-+#define clear_ffcount	clear_vcu.ffcount
-+#endif 	/* FFCLOCK */
-+
  typedef struct {
++	pps_seq_t	assert_sequence;	/* assert event seq # */
++	pps_seq_t	clear_sequence;		/* clear event seq # */
++	pps_timeu_t	assert_tu;
++	pps_timeu_t	clear_tu;
++	int		current_mode;		/* current mode bits */
++	ffcounter	assert_ffcount;		/* ffcounter on assert event */
++	ffcounter	clear_ffcount;		/* ffcounter on clear event */
++} ffclock_pps_info_t;
++
++typedef struct {
  	int api_version;			/* API version # */
  	int mode;				/* mode bits */
  	pps_timeu_t assert_off_tu;
@@ -267,7 +230,8 @@ Index: sys/sys/timepps.h
  #define assert_offset   assert_off_tu.tspec
  #define clear_offset    clear_off_tu.tspec
  
-@@ -82,49 +113,64 @@ typedef struct {
+ #define assert_offset_ntpfp     assert_off_tu.ntpfp
+@@ -82,49 +98,60 @@ typedef struct {
  #define PPS_KC_HARDPPS		0
  #define PPS_KC_HARDPPS_PLL	1
  #define PPS_KC_HARDPPS_FLL	2
@@ -278,13 +242,11 @@ Index: sys/sys/timepps.h
  	struct timespec	timeout;
  };
  
-+#ifdef FFCLOCK
 +struct ffclock_pps_fetch_args {
 +	int tsformat;
 +	ffclock_pps_info_t	pps_info_buf;
-+	struct timespec	timeout;
++	struct timespec		timeout;
 +};
-+#endif	/* FFCLOCK */
 +
  struct pps_kcbind_args {
  	int kernel_consumer;
@@ -299,9 +261,7 @@ Index: sys/sys/timepps.h
  #define PPS_IOC_GETCAP		_IOR('1', 5, int)
  #define PPS_IOC_FETCH		_IOWR('1', 6, struct pps_fetch_args)
  #define PPS_IOC_KCBIND		_IOW('1', 7, struct pps_kcbind_args)
-+#ifdef FFCLOCK
-+#define FFCLOCK_PPS_IOC_FETCH		_IOWR('1', 8, struct ffclock_pps_fetch_args)
-+#endif 	/* FFCLOCK */
++#define PPS_IOC_FETCH_FFCLOCK	_IOWR('1', 8, struct ffclock_pps_fetch_args)
  
  #ifdef _KERNEL
  
@@ -319,9 +279,9 @@ Index: sys/sys/timepps.h
  	struct timecounter *ppstc;
  	unsigned	ppscount[3];
 +#ifdef FFCLOCK
-+	ffclock_pps_info_t	ffclock_ppsinfo;
++	ffclock_pps_info_t ffclock_ppsinfo;
 +	struct fftimehands *capffth;
-+#endif 	/* FFCLOCK */
++#endif
  };
  
  void pps_capture(struct pps_state *pps);
@@ -332,8 +292,7 @@ Index: sys/sys/timepps.h
  
  #else /* !_KERNEL */
  
-@@ -176,20 +222,40 @@ time_pps_fetch(pps_handle_t handle, cons
- 	if (timeout == NULL) {
+@@ -177,20 +204,38 @@ time_pps_fetch(pps_handle_t handle, cons
  		arg.timeout.tv_sec = -1;
  		arg.timeout.tv_nsec = -1;
  	} else
@@ -343,9 +302,8 @@ Index: sys/sys/timepps.h
  	return (error);
  }
  
-+#ifdef FFCLOCK
-+static __inline int
-+ffclock_pps_fetch(pps_handle_t handle, const int tsformat,
+ static __inline int
++pps_fetch_ffclock(pps_handle_t handle, const int tsformat,
 +	ffclock_pps_info_t *ppsinfobuf, const struct timespec *timeout)
 +{
 +	int error;
@@ -357,13 +315,12 @@ Index: sys/sys/timepps.h
 +		arg.timeout.tv_nsec = -1;
 +	} else
 +		arg.timeout = *timeout;
-+	error = ioctl(handle, FFCLOCK_PPS_IOC_FETCH, &arg);
++	error = ioctl(handle, PPS_IOC_FETCH_FFCLOCK, &arg);
 +	*ppsinfobuf = arg.pps_info_buf;
 +	return (error);
 +}
-+#endif 	/* FFCLOCK */
 +
- static __inline int
++static __inline int
  time_pps_kcbind(pps_handle_t handle, const int kernel_consumer,
  	const int edge, const int tsformat)
  {
@@ -373,3 +330,4 @@ Index: sys/sys/timepps.h
  	arg.edge = edge;
  	arg.tsformat = tsformat;
  	return (ioctl(handle, PPS_IOC_KCBIND, &arg));
+ }
