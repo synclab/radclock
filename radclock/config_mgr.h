@@ -167,6 +167,7 @@
 #define UPDMASK_SYNC_OUT_ASCII	0x020800
 #define UPDMASK_CLOCK_OUT_ASCII	0x040000
 #define UPDMASK_VIRTUAL_MACHINE	0x080000
+#define UPDMASK_PID_FILE	0x100000
 
 
 #define HAS_UPDATE(val,mask)	((val & mask) == mask)	
