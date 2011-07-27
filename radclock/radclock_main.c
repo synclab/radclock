@@ -67,7 +67,7 @@
 #include "jdebug.h"
 
 
-/* Defines specific to the main program */
+/* Default PID lockfile (-P overrides this) */
 #define DAEMON_LOCK_FILE ( RADCLOCK_RUN_DIRECTORY "/radclock.pid" )
 
 
@@ -110,6 +110,7 @@ void usage(char *argv) {
 		"\t-w <filename> write sync output to file (modified pcap format)\n"
 		"\t-a <filename> write sync output to file (ascii)\n"
 		"\t-o <filename> write clock data output to file (ascii)\n"
+                "\t-P <filename> write pid lockfile to file\n"
 		"\t-v -vv verbose\n"
 		"\t-h this help mesage\n"
 		);
@@ -341,7 +342,7 @@ void signal_handler(int sig)
 
 
 /** Function that fork the process and creates the running daemon */
-int daemonize(char* lockfile, int *daemon_pid_fd) 
+int daemonize(const char* lockfile, int *daemon_pid_fd) 
 {
 	/* Scheduler */
 	struct sched_param sched;
@@ -382,17 +383,10 @@ int daemonize(char* lockfile, int *daemon_pid_fd)
 		exit(EXIT_FAILURE);
 	}
 	
-	/* Change the current working directory */
-	if ((chdir("/")) < 0) {
-		/* Log the failure */
-		syslog (LOG_ERR, "chdir error");
-		exit(EXIT_FAILURE);
-	}
-	
 	/* Mutual exclusion of concurrent daemons */
 	*daemon_pid_fd = open(lockfile, O_RDWR|O_CREAT, 0640);
 
-	if (*daemon_pid_fd < 0) {
+	if (*daemon_pid_fd <= 0) {
 		verbose(LOG_ERR, "Cannot open lock file");
 		exit(EXIT_FAILURE);
 	}
@@ -406,12 +400,18 @@ int daemonize(char* lockfile, int *daemon_pid_fd)
    	/* Record pid to lockfile (write is a no buffering function) */
 	sprintf(str, "%d\n", getpid());
 	write(*daemon_pid_fd, str, strlen(str));
+    
+    /* Change the current working directory */
+	if ((chdir("/")) < 0) {
+		/* Log the failure */
+		syslog (LOG_ERR, "chdir error");
+		exit(EXIT_FAILURE);
+	}
 
 	/* Close out the standard file descriptors */
 	close(STDIN_FILENO);
 	close(STDOUT_FILENO);
 	close(STDERR_FILENO);
-
 
 	/* Boost our scheduler priority. Here I assume we have access to the 
 	 * Posix scheduling API ... and if not?
@@ -515,6 +515,9 @@ int main(int argc, char *argv[])
 	/* Threads */
 	void* thread_status;
 
+	/* Initialize PID lockfile to a default value */
+	const char *pid_lockfile = DAEMON_LOCK_FILE;
+
 	/* Misc */
 	int err;
 	int have_fixed_point_thread = 0;
@@ -605,7 +608,7 @@ int main(int argc, char *argv[])
 	param_mask = UPDMASK_NOUPD;
 
 	/* Reading the command line arguments */     
-	while ((ch = getopt(argc, argv, "dxvhLc:i:l:n:t:r:w:s:a:o:p:")) != -1)
+	while ((ch = getopt(argc, argv, "dxvhLc:i:l:n:t:r:w:s:a:o:p:P:")) != -1)
 		switch (ch) {
 			case 'x':
 				SET_UPDATE(param_mask, UPDMASK_SERVER_IPC);
@@ -705,6 +708,13 @@ int main(int argc, char *argv[])
 				SET_UPDATE(param_mask, UPDMASK_CLOCK_OUT_ASCII);
 				strcpy(clock_handle->conf->clock_out_ascii, optarg);
 				break;
+                        case 'P':
+                                if (strlen(optarg) > MAXLINE) {
+					fprintf(stdout, "ERROR: parameter too long\n");
+					exit (1);
+                                }
+                                SET_UPDATE(param_mask, UPDMASK_PID_FILE);
+                                pid_lockfile = optarg;
 			case 'v':
 				SET_UPDATE(param_mask, UPDMASK_VERBOSE);
 				clock_handle->conf->verbose_level++;
@@ -745,7 +755,7 @@ int main(int argc, char *argv[])
 		/* Check this everytime in case something happened */
 		chmod(RADCLOCK_RUN_DIRECTORY, 00755);
 
-		if ( !(daemonize(DAEMON_LOCK_FILE, &daemon_pid_fd)) ) {
+		if ( !(daemonize(pid_lockfile, &daemon_pid_fd)) ) {
 			fprintf(stderr, "Error: did not manage to create the daemon\n");
 			exit(EXIT_FAILURE);
 		}
