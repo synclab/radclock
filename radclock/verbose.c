@@ -101,10 +101,10 @@ static void verbose_open()
 	}
 }
 
-char *months[12] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+static const char *months[12] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
 
 
-void verbose(int facility, char* format, ...) 
+void verbose(int facility, const char* format, ...) 
 {
 	JDEBUG
 	// Rebuild the entire string from the variable arguments 

@@ -94,7 +94,7 @@ struct rusage jdbg_rusage;
 /*************************** Helper Routines ******************************/
 
 /*** Guide to input parameters of radclock ***/
-void usage(char *argv) {
+static void usage(void) {
 	fprintf(stderr, "usage: radclock [options] \n"
 		"\t-x do not serve radclock time/data (IOCTL / Netlink socket to kernel, IPC to processes)\n"
 		"\t-d run as a daemon\n"
@@ -133,8 +133,8 @@ void usage(char *argv) {
  * Reparse the configuration file when receiving SIGHUP 
  * Reason for most of the global variables
  */
-int rehash_daemon(struct radclock *clock_handle, 
-				  u_int32_t param_mask) 
+static int rehash_daemon(struct radclock *clock_handle, 
+				         u_int32_t param_mask) 
 {
 	/* The update of the following parameters either requires no action, 
 	 * or it has to be handled by the algo only: 
@@ -272,7 +272,7 @@ int rehash_daemon(struct radclock *clock_handle,
 
 
 
-void logger_verbose_bridge(int level, char *msg)
+static void logger_verbose_bridge(int level, char *msg)
 {
 	switch (level)
 	{
@@ -292,7 +292,7 @@ void logger_verbose_bridge(int level, char *msg)
 /** 
  * Signal handler function 
  */
-void signal_handler(int sig) 
+static void signal_handler(int sig) 
 {
 	switch(sig){
 		case SIGHUP:
@@ -342,7 +342,7 @@ void signal_handler(int sig)
 
 
 /** Function that fork the process and creates the running daemon */
-int daemonize(const char* lockfile, int *daemon_pid_fd) 
+static int daemonize(const char* lockfile, int *daemon_pid_fd) 
 {
 	/* Scheduler */
 	struct sched_param sched;
@@ -431,7 +431,7 @@ int daemonize(const char* lockfile, int *daemon_pid_fd)
 /*
  * radclock process specific init of the clock_handle
  */
-int radclock_init_specific (struct radclock *clock_handle) 
+static int radclock_init_specific (struct radclock *clock_handle)
 {
 	/* Input source */
 	struct stampsource *stamp_source;
@@ -722,7 +722,7 @@ int main(int argc, char *argv[])
 			case 'h':
 			case '?':
 			default:
-				usage(argv[0]);
+				usage();
 		}
 
 	argc -= optind;

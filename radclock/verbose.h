@@ -61,11 +61,11 @@ struct verbose_data_t {
 
 extern struct verbose_data_t verbose_data;
 
-void verbose(int facility, char* format, ...); 
+extern void verbose(int facility, const char* format, ...); 
 
-void set_verbose(struct radclock *clock, int verbose_level, int initialized);
-void unset_verbose();
-int get_verbose_level();
+extern void set_verbose(struct radclock *clock, int verbose_level, int initialized);
+extern void unset_verbose();
+extern int get_verbose_level();
 /* Short cut */
 #define VERB_LEVEL get_verbose_level()
 
