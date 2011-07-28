@@ -69,6 +69,14 @@
 #endif
 
 
+#ifndef HAVE_SYS_TIMEFFC_H
+int ffclock_getcounter(vcounter_t *vcount)
+{
+	*vcount = 0;
+	return EINVAL;
+}
+#endif
+
 
 /* Kernel patches version 2 set the timestamping mode with new IOCTL calls.
  * This is based on CURRENT, but should be standard soon for standard header
@@ -327,7 +335,7 @@ int radclock_init_vcounter(struct radclock *handle)
 	return 0;
 }
 
-
+#ifdef HAVE_SYS_TIMEFFC_H
 int get_kernel_ffclock(struct radclock *handle)
 {
 	/*
@@ -379,6 +387,12 @@ int get_kernel_ffclock(struct radclock *handle)
 			
 	return 0;
 }
+#else
+int get_kernel_ffclock(struct radclock *handle)
+{
+	return 0;
+}
+#endif
 
 
 

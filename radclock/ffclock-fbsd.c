@@ -28,7 +28,9 @@
 #include <sys/module.h>
 #include <sys/sysctl.h>
 #include <sys/syscall.h>
+#ifdef HAVE_SYS_TIMEFFC_H
 #include <sys/timeffc.h>	// All this should go in the library, set/get ffclock estimates
+#endif
 #include <syslog.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -222,7 +224,7 @@ set_kernel_fixedpoint(struct radclock *handle, struct radclock_fixedpoint *fpdat
  * With this, no need to read the current time, rely on last_changed only.
  * XXX: is the comment above accurate and true? 
  */
-
+#ifdef HAVE_SYS_TIMEFFC_H
 int
 set_kernel_ffclock(struct radclock *clock)
 {
@@ -302,7 +304,13 @@ set_kernel_ffclock(struct radclock *clock)
 
 	return 0;
 }
-
+#else
+int
+set_kernel_ffclock(struct radclock *clock)
+{
+	return 0;
+}
+#endif
 
 
 #endif /* WITH_RADKERNEL_FBSD */
