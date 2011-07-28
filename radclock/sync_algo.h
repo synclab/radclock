@@ -289,6 +289,7 @@ struct bidir_peer
 	/* Statistic string buffers */
 	#define STAT_SZ 250 
 	char *stats;
+	int stats_sd[3];			// Stats on server delay (good, avg, bad)
 };
 
 

@@ -385,6 +385,9 @@ void init_peer( struct radclock *clock_handle, struct radclock_phyparam *phypara
 	peer->stats = (char *) malloc(STAT_SZ * sizeof(char));
 	JDEBUG_MEMORY(JDBG_MALLOC, peer->stats);
 
+	peer->stats_sd[0] = 0;
+	peer->stats_sd[1] = 0;
+	peer->stats_sd[2] = 0;
 }
 
 
@@ -707,6 +710,39 @@ void parameters_calibration( struct bidir_peer *peer)
 			peer->stamp_i, 1000*peer->Eoffset_qual, 1000*peer->Eoffset);
 }
 
+
+void collect_stats_peer(struct bidir_peer *peer, struct bidir_stamp *stamp)
+{
+	long double SD;	
+	SD = stamp->Te - stamp->Tb;
+
+	/*
+	 * Fairly ad-hoc values based on observed servers. Good if less than 
+	 * 100 us, avg if less than 300 us, bad otherwise.
+	 */
+	if (SD < 100e-6)
+		peer->stats_sd[0]++;
+	else if (SD < 300e-6)
+		peer->stats_sd[1]++;
+	else 
+		peer->stats_sd[2]++;
+}
+
+
+void print_stats_peer(struct bidir_peer *peer)
+{
+	int total_sd;
+
+	if (peer->stamp_i % (int)(6 * 3600 / peer->poll_period))
+		return;
+	
+	total_sd = peer->stats_sd[0] + peer->stats_sd[1] + peer->stats_sd[2];
+
+	verbose(VERB_SYNC, "Server delay stats: %f%% good, %2f%% average, %2f%% bad",
+		peer->stats_sd[0]/total_sd,
+		peer->stats_sd[1]/total_sd,
+		peer->stats_sd[2]/total_sd);
+}
 
 
 /* =============================================================================
@@ -1575,8 +1611,6 @@ void process_thetahat_full (struct bidir_peer* peer, struct radclock* clock_hand
 		/* Don't reassess pt errors (shifts already accounted for)
 		 * then add SD quality measure (large SD at small RTT=> delayed Te, distorting th_naive)
 		 * then add aging with pessimistic rate (safer to trust recent)
-		 * XXX Tuning: SD quality measure may be problematic with kernel
-		 * timestamping on the server side (DAG, 1588) and punish good packets
 		 */
 		RTT_tmp = history_find(&peer->RTT_hist, j);
 		RTThat_tmp = history_find(&peer->RTThat_hist, j);
@@ -1587,8 +1621,13 @@ void process_thetahat_full (struct bidir_peer* peer, struct radclock* clock_hand
 		/* Per point bound error is ET without the SD penalty */
 		Ebound  = ET;
 
-		/* Add SD penalty to ET */
-		ET += stamp_tmp->Te - stamp_tmp->Tb;
+		/* Add SD penalty to ET
+		 * XXX: SD quality measure has been problematic in different cases:
+		 * - kernel timestamping with hardware based servers(DAG, 1588), punish good packets
+		 * - with bad NTP servers that have SD > Eoffset_qual all the time (cf CAIDA example).
+		 * removed it definitively on 28/07/2011
+		 */
+		//ET += stamp_tmp->Te - stamp_tmp->Tb;
 
 
 		/* Record best in window, smaller the better. When i<offset_win, bound
@@ -2010,6 +2049,7 @@ int process_bidir_stamp(struct radclock *clock_handle, struct bidir_peer *peer, 
 	* =============================================================================
 	*/
 
+	collect_stats_peer(peer, stamp);
 	if (peer->stamp_i < peer->warmup_win )
 	{
 		process_RTT_warmup(peer, RTT);
@@ -2065,7 +2105,7 @@ int process_bidir_stamp(struct radclock *clock_handle, struct bidir_peer *peer, 
 	}
 
 
-
+	print_stats_peer(peer);
 
 
 
