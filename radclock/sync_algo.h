@@ -286,9 +286,7 @@ struct bidir_peer
 	int offset_quality_count;		// Offset quality events counter
 	int offset_sanity_count;		// Offset sanity events counter
 
-	/* Statistic string buffers */
-	#define STAT_SZ 250 
-	char *stats;
+	/* Statistics */
 	int stats_sd[3];			// Stats on server delay (good, avg, bad)
 };
 

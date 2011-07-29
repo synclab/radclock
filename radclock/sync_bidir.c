@@ -379,12 +379,7 @@ void init_peer( struct radclock *clock_handle, struct radclock_phyparam *phypara
 	peer->thetahat = th_naive;
 	history_add(&peer->thnaive_hist, peer->stamp_i, &th_naive);
 
-	/* Allocate memory for statistic strings */
-	// XXX TODO XXX should have a cleaon peer create / destroy mechanism
-	// XXX TODO XXX this chunk of memory is never freed ...
-	peer->stats = (char *) malloc(STAT_SZ * sizeof(char));
-	JDEBUG_MEMORY(JDBG_MALLOC, peer->stats);
-
+	/* Peer statistics */
 	peer->stats_sd[0] = 0;
 	peer->stats_sd[1] = 0;
 	peer->stats_sd[2] = 0;
@@ -720,9 +715,9 @@ void collect_stats_peer(struct bidir_peer *peer, struct bidir_stamp *stamp)
 	 * Fairly ad-hoc values based on observed servers. Good if less than 
 	 * 100 us, avg if less than 300 us, bad otherwise.
 	 */
-	if (SD < 100e-6)
+	if (SD < 50e-6)
 		peer->stats_sd[0]++;
-	else if (SD < 300e-6)
+	else if (SD < 200e-6)
 		peer->stats_sd[1]++;
 	else 
 		peer->stats_sd[2]++;
@@ -733,15 +728,53 @@ void print_stats_peer(struct bidir_peer *peer)
 {
 	int total_sd;
 
+	/* 
+	 * Most of the variables needed for these stats are not used during warmup
+	 */
+	if (peer->stamp_i < peer->warmup_win) {
+		peer->stats_sd[0] = 0;
+		peer->stats_sd[1] = 0;
+		peer->stats_sd[2] = 0;
+		return;
+	}
+
 	if (peer->stamp_i % (int)(6 * 3600 / peer->poll_period))
 		return;
 	
 	total_sd = peer->stats_sd[0] + peer->stats_sd[1] + peer->stats_sd[2];
 
-	verbose(VERB_SYNC, "Server delay stats: %f%% good, %2f%% average, %2f%% bad",
-		peer->stats_sd[0]/total_sd,
-		peer->stats_sd[1]/total_sd,
-		peer->stats_sd[2]/total_sd);
+	verbose(VERB_CONTROL, "i=%lu: Server recent statistics:", peer->stamp_i);
+	verbose(VERB_CONTROL, "i=%lu:   Internal delay: %d%% < 50us, %d%% < 200us, %d%% > 200us",
+		peer->stamp_i,
+		100 * peer->stats_sd[0]/total_sd,
+		100 * peer->stats_sd[1]/total_sd,
+		100 * peer->stats_sd[2]/total_sd);
+
+	verbose(VERB_CONTROL, "i=%lu:   Last stamp check: %llu %22.10Lf %22.10Lf %llu",
+		peer->stamp_i,
+		peer->stamp.Ta, peer->stamp.Tb, peer->stamp.Te, peer->stamp.Tf);
+
+	verbose(VERB_SYNC, "i=%lu: Timekeeping summary:",
+		peer->stamp_i); 
+	verbose(VERB_SYNC, "i=%lu:   Period = %.10g, Period errorr = %.10g",
+		peer->stamp_i, peer->phat, peer->perr); 
+	verbose(VERB_SYNC, "i=%lu:   Tstamp pair = (%lu,%lu), base err = %.10g, "
+		"DelTb = %.3Lg [hrs]",
+		peer->stamp_i, 
+		peer->phat * labs(peer->RTThat - peer->pstamp_RTThat),
+		peer->stamp.Tb - peer->pstamp.Tb);
+
+	verbose(VERB_SYNC, "i=%lu:   Thetahat = %5.3lf [ms], minET = %.3lf [ms], "
+		"RTThat = %.3lf [ms]", 
+		peer->stamp_i,
+		1000 * peer->thetahat,
+		1000 * peer->minET,
+		1000 * peer->phat * peer->RTThat);
+
+	/* Reset stats for this period */
+	peer->stats_sd[0] = 0;
+	peer->stats_sd[1] = 0;
+	peer->stats_sd[2] = 0;
 }
 
 
@@ -1040,13 +1073,7 @@ int process_phat_full (struct bidir_peer* peer, struct radclock* clock_handle,
 	perr_i = peer->phat * (double)(RTT - peer->RTThat);
 
 	if ( perr_i >= peer->Ep )
-	{
-		/* Regular statistics print out every 6 hours */
-		if ( !(peer->stamp_i % (int)(6 * 3600 / peer->poll_period)) ) {
-			verbose(VERB_SYNC, "i=%lu: %s", peer->stamp_i, peer->stats);
-		}
 		return 0;
-	}
 
 	/*
 	 * Point errors (local)
@@ -1062,10 +1089,6 @@ int process_phat_full (struct bidir_peer* peer, struct radclock* clock_handle,
 
 	if ( (perr_ij >= peer->perr) && (perr_ij >= peer->Ep_qual) ) 
 	{
-		/* Regular statistics print out */
-		if ( !(peer->stamp_i % (int)(6 * 3600 / peer->poll_period)) ) {
-			verbose(VERB_SYNC, "i=%lu: %s", peer->stamp_i, peer->stats); 
-		}
 		/* Note: STARAD_PERIOD_QUAL is not set on every point that fails.
 		 * Quality is a plocal issue only. Arguable?
 		 */
@@ -1085,19 +1108,14 @@ int process_phat_full (struct bidir_peer* peer, struct radclock* clock_handle,
 	 */
 	peer->perr	= perr_ij;
 
-	/* Create statistic string, values reflect last time there has been
-	 * a candidate found but may not pass sanity check
-	*/
-	snprintf(peer->stats, STAT_SZ, "phat stats: (j,i)=(%lu,%lu), "
-			"rel diff = %.10g, perr = %.10g, baseerr = %.10g, "
-			"DelTb = %5.3Lg [hrs], perr_ij = %5.3lg",
-			peer->pstamp_i, peer->stamp_i, (phat - peer->phat)/phat, 
-			peer->perr, baseerr, DelTb/3600, perr_ij); 
-
 	if ( fabs((phat - peer->phat)/phat) > phyparam->RateErrBOUND/3 ) {
-		verbose(VERB_SYNC, "i=%lu: Jump in phat update", peer->stamp_i);
-		verbose(VERB_SYNC, "i=%lu: phat candidate found, %s", peer->stamp_i,
-			   	peer->stats);
+		verbose(VERB_SYNC, "i=%lu: Jump in phat update, "
+			"phat stats: (j,i)=(%lu,%lu), "
+			"rel diff = %.10g, perr = %.3g, baseerr = %.10g, "
+			"DelTb = %5.3Lg [hrs]",
+			peer->pstamp_i,
+		   	peer->stamp_i, (phat - peer->phat)/phat, 
+			peer->perr, baseerr, DelTb/3600);
 	}
 
 	/* Clock correction and phat update.
@@ -1108,8 +1126,15 @@ int process_phat_full (struct bidir_peer* peer, struct radclock* clock_handle,
 		if (qual_warning)
 			verbose(VERB_QUALITY, "i=%lu: qual_warning received, following "
 					"sanity check for phat", peer->stamp_i);
-		verbose(VERB_SANITY, "i=%lu: phat update fails sanity check: %s",
-				peer->stamp_i, peer->stats);
+
+		verbose(VERB_SANITY, "i=%lu: phat update fails sanity check. "
+			"phat stats: (j,i)=(%lu,%lu), "
+			"rel diff = %.10g, perr = %.3g, baseerr = %.10g, "
+			"DelTb = %5.3Lg [hrs]",
+			peer->pstamp_i,
+		   	peer->stamp_i, (phat - peer->phat)/phat, 
+			peer->perr, baseerr, DelTb/3600);
+
 		peer->phat_sanity_count++;
 		ADD_STATUS(clock_handle, STARAD_PERIOD_SANITY);
 		ret = STARAD_PERIOD_SANITY;
@@ -1118,11 +1143,6 @@ int process_phat_full (struct bidir_peer* peer, struct radclock* clock_handle,
 		peer->C += peer->stamp.Ta * (long double) (peer->phat - phat);
 		peer->phat = phat;
 		DEL_STATUS(clock_handle, STARAD_PERIOD_SANITY);
-	}
-
-	/* Regular statistics print out */
-	if ( !(peer->stamp_i % (int)(6 * 3600 / peer->poll_period)) ) {
-		verbose(VERB_SYNC, "i=%lu: %s", peer->stamp_i, peer->stats);
 	}
 
 	return ret;
@@ -2105,18 +2125,19 @@ int process_bidir_stamp(struct radclock *clock_handle, struct bidir_peer *peer, 
 	}
 
 
-	print_stats_peer(peer);
-
-
 
 /* =============================================================================
- * RECORD LASTSTAMP AND PREPARE NEXT STAMP 
+ * RECORD LASTSTAMP
  * =============================================================================
  */
 	copystamp(stamp, &peer->stamp);
 
-	/* Prepare for next stamp. Not great for printing things out (need to
-	 * subtract 1
+	print_stats_peer(peer);
+
+	/* 
+	 * Prepare for next stamp.
+	 * XXX Not great for printing things out of the algo (need to
+	 * subtract 1)
 	 */
 	peer->stamp_i++;
 
