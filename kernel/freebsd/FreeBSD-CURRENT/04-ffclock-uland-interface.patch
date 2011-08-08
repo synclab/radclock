@@ -7,16 +7,16 @@ ffclock_setestimate(): update the kernel ffclock estimate from userland.
 
 ---
  compat/freebsd32/syscalls.master |    8 ++-
- kern/kern_ffclock.c              |   84 +++++++++++++++++++++++++++++++++++++++
+ kern/kern_ffclock.c              |   89 +++++++++++++++++++++++++++++++++++++++
  kern/syscalls.master             |    8 ++-
  sys/time.h                       |    1 
- sys/timeffc.h                    |    9 ++++
- 5 files changed, 104 insertions(+), 6 deletions(-)
+ sys/timeffc.h                    |    9 +++
+ 5 files changed, 109 insertions(+), 6 deletions(-)
 
 Index: sys/compat/freebsd32/syscalls.master
 ===================================================================
---- sys.orig/compat/freebsd32/syscalls.master	2011-07-14 10:49:19.000000000 +1000
-+++ sys/compat/freebsd32/syscalls.master	2011-07-14 13:49:45.000000000 +1000
+--- sys.orig/compat/freebsd32/syscalls.master	2011-08-08 10:58:22.000000000 +1000
++++ sys/compat/freebsd32/syscalls.master	2011-08-08 11:14:38.000000000 +1000
 @@ -440,23 +440,25 @@
  234	AUE_NULL	STD	{ int freebsd32_clock_getres(clockid_t clock_id, \
  				    struct timespec32 *tp); }
@@ -48,9 +48,9 @@ Index: sys/compat/freebsd32/syscalls.master
  251	AUE_RFORK	NOPROTO	{ int rfork(int flags); }
 Index: sys/kern/kern_ffclock.c
 ===================================================================
---- sys.orig/kern/kern_ffclock.c	2011-07-14 13:34:12.000000000 +1000
-+++ sys/kern/kern_ffclock.c	2011-07-14 13:46:31.000000000 +1000
-@@ -22,26 +22,36 @@
+--- sys.orig/kern/kern_ffclock.c	2011-08-08 11:13:25.000000000 +1000
++++ sys/kern/kern_ffclock.c	2011-08-08 11:28:34.000000000 +1000
+@@ -22,26 +22,37 @@
   * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
   * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
   * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
@@ -66,6 +66,7 @@ Index: sys/kern/kern_ffclock.c
 +#include <sys/lock.h>
 +#include <sys/module.h>
 +#include <sys/mutex.h>
++#include <sys/priv.h>
 +#include <sys/proc.h>
  #include <sys/sysctl.h>
 +#include <sys/sysent.h>
@@ -87,7 +88,7 @@ Index: sys/kern/kern_ffclock.c
   * NOTE: use ffclock_convert_abs() to differ the conversion of a ffcounter value
   * read earlier.
   */
-@@ -307,10 +317,84 @@ ffclock_nanodifftime(ffcounter ffdelta, 
+@@ -307,10 +318,88 @@ ffclock_nanodifftime(ffcounter ffdelta, 
  }
  
  void
@@ -142,6 +143,10 @@ Index: sys/kern/kern_ffclock.c
 +{
 +	int error;
 +
++	/* Reuse of PRIV_CLOCK_SETTIME */
++	if ((error = priv_check(td, PRIV_CLOCK_SETTIME)) != 0)
++		return (error);
++
 +	mtx_lock(&ffclock_mtx);
 +	error = copyin(uap->cest, &(ffclock_estimate),
 +	    sizeof(struct ffclock_estimate));
@@ -174,8 +179,8 @@ Index: sys/kern/kern_ffclock.c
 +}
 Index: sys/kern/syscalls.master
 ===================================================================
---- sys.orig/kern/syscalls.master	2011-07-14 10:49:19.000000000 +1000
-+++ sys/kern/syscalls.master	2011-07-14 13:49:03.000000000 +1000
+--- sys.orig/kern/syscalls.master	2011-08-08 10:58:22.000000000 +1000
++++ sys/kern/syscalls.master	2011-08-08 11:14:38.000000000 +1000
 @@ -449,23 +449,25 @@
  				    struct sigevent *evp, int *timerid); }
  236	AUE_NULL	STD	{ int ktimer_delete(int timerid); }
@@ -207,8 +212,8 @@ Index: sys/kern/syscalls.master
  251	AUE_RFORK	STD	{ int rfork(int flags); }
 Index: sys/sys/time.h
 ===================================================================
---- sys.orig/sys/time.h	2011-07-14 10:49:19.000000000 +1000
-+++ sys/sys/time.h	2011-07-14 13:36:04.000000000 +1000
+--- sys.orig/sys/time.h	2011-08-08 10:58:22.000000000 +1000
++++ sys/sys/time.h	2011-08-08 11:14:38.000000000 +1000
 @@ -26,20 +26,21 @@
   * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
   * SUCH DAMAGE.
@@ -233,8 +238,8 @@ Index: sys/sys/time.h
  #define	DST_USA		1	/* USA style dst */
 Index: sys/sys/timeffc.h
 ===================================================================
---- sys.orig/sys/timeffc.h	2011-07-14 13:33:01.000000000 +1000
-+++ sys/sys/timeffc.h	2011-07-14 13:47:13.000000000 +1000
+--- sys.orig/sys/timeffc.h	2011-08-08 11:13:25.000000000 +1000
++++ sys/sys/timeffc.h	2011-08-08 11:14:38.000000000 +1000
 @@ -151,13 +151,22 @@ void ffclock_getnanouptime(struct timesp
  void ffclock_getmicrouptime(struct timeval *tvp);
  

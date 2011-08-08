@@ -206,8 +206,8 @@ Index: sys/kern/kern_tc.c
 +	ffclock_read_counter(&cest.update_ffcount);
 +	cest.leapsec_next = 0;
 +	cest.period = ((1LLU << 63) / tc->tc_frequency) << 1;
-+	cest.error_bound_abs = 0;
-+	cest.error_bound_rate = 0;
++	cest.errb_abs = 0;
++	cest.errb_rate = 0;
 +	cest.status = FFCLOCK_STA_UNSYNC;
 +	cest.leapsec_total = 0;
 +	cest.leapsec = 0;
@@ -426,8 +426,8 @@ Index: sys/kern/kern_tc.c
 +	cest = &(ffth->cest);
 +	bcopy(&(fftimehands->cest), cest, sizeof(struct ffclock_estimate));
 +	cest->period = ((1LLU << 63) / tc->tc_frequency ) << 1;
-+	cest->error_bound_abs = 0;
-+	cest->error_bound_rate = 0;
++	cest->errb_abs = 0;
++	cest->errb_rate = 0;
 +	cest->status |= FFCLOCK_STA_UNSYNC;
 +
 +	ffth->tick_ffcount = fftimehands->tick_ffcount;
@@ -790,8 +790,8 @@ Index: sys/sys/timeffc.h
 +	ffcounter	update_ffcount;	/* Counter value at last update. */
 +	ffcounter	leapsec_next;	/* Counter value of next leap second. */
 +	uint64_t	period;		/* Estimate of counter period. */
-+	uint32_t	error_bound_abs;	/* Bound on absolute clock error [ns]. */
-+	uint32_t	error_bound_rate;	/* Bound on counter rate error [ps/s]. */
++	uint32_t	errb_abs;	/* Bound on absolute clock error [ns]. */
++	uint32_t	errb_rate;	/* Bound on counter rate error [ps/s]. */
 +	uint32_t	status;		/* Clock status. */
 +	int16_t		leapsec_total;	/* All leap seconds seen so far. */
 +	int8_t		leapsec;	/* Next leap second (in {-1,0,1}). */

@@ -43,7 +43,7 @@ Index: sys/kern/kern_ffclock.c
 @@ -118,10 +119,198 @@ ffclock_difftime(ffcounter ffdelta, stru
  		do {
  			update_ffcount = ffclock_estimate.update_ffcount;
- 			err_rate = ffclock_estimate.error_bound_rate;
+ 			err_rate = ffclock_estimate.errb_rate;
  		} while (update_ffcount != ffclock_estimate.update_ffcount);
  
  		ffclock_convert_diff(ffdelta, error_bound);
@@ -706,7 +706,7 @@ Index: sys/sys/timeffc.h
 --- sys.orig/sys/timeffc.h	2011-07-14 13:32:32.000000000 +1000
 +++ sys/sys/timeffc.h	2011-07-14 13:33:01.000000000 +1000
 @@ -48,20 +48,26 @@ struct ffclock_estimate {
- 	uint32_t	error_bound_rate;	/* Bound on counter rate error [ps/s]. */
+ 	uint32_t	errb_rate;	/* Bound on counter rate error [ps/s]. */
  	uint32_t	status;		/* Clock status. */
  	int16_t		leapsec_total;	/* All leap seconds seen so far. */
  	int8_t		leapsec;	/* Next leap second (in {-1,0,1}). */

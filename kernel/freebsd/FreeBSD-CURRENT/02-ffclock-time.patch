@@ -132,10 +132,10 @@ Index: sys/kern/kern_ffclock.c
 +		ffdelta_error = ffc - cest.update_ffcount;
 +		ffclock_convert_diff(ffdelta_error, error_bound);
 +		/* 18446744073709 = int(2^64/1e12), err_bound_rate in [ps/s] */
-+		bintime_mul(error_bound, cest.error_bound_rate *
++		bintime_mul(error_bound, cest.errb_rate *
 +		    (uint64_t)18446744073709LL);
 +		/* 18446744073 = int(2^64 / 1e9), since err_abs in [ns] */
-+		bintime_addx(error_bound, cest.error_bound_abs *
++		bintime_addx(error_bound, cest.errb_abs *
 +		    (uint64_t)18446744073LL);
 +	}
 +
@@ -161,7 +161,7 @@ Index: sys/kern/kern_ffclock.c
 +	if (error_bound) {
 +		do {
 +			update_ffcount = ffclock_estimate.update_ffcount;
-+			err_rate = ffclock_estimate.error_bound_rate;
++			err_rate = ffclock_estimate.errb_rate;
 +		} while (update_ffcount != ffclock_estimate.update_ffcount);
 +
 +		ffclock_convert_diff(ffdelta, error_bound);
