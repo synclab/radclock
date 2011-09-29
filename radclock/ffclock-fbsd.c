@@ -28,6 +28,7 @@
 #include <sys/module.h>
 #include <sys/sysctl.h>
 #include <sys/syscall.h>
+#include <sys/time.h>
 #ifdef HAVE_SYS_TIMEFFC_H
 #include <sys/timeffc.h>	// All this should go in the library, set/get ffclock estimates
 #endif
@@ -273,8 +274,8 @@ set_kernel_ffclock(struct radclock *clock)
 	/*  TODO XXX: this should be made an average value of some kind !! and not the
 	 * 'instantaneous' one
 	 */
-	cest.error_bound_abs = (uint32_t) RAD_ERROR(clock)->error_bound_avg * 1e9;
-	cest.error_bound_rate = (uint32_t) RAD_DATA(clock)->phat_local_err * 1e9;
+	cest.errb_abs = (uint32_t) RAD_ERROR(clock)->error_bound_avg * 1e9;
+	cest.errb_rate = (uint32_t) RAD_DATA(clock)->phat_local_err * 1e9;
 	cest.status = RAD_DATA(clock)->status;
 
 	/* Next leapsec in counter units, and side infos */
