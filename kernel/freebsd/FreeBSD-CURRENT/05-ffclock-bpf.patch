@@ -4,14 +4,14 @@ Add ffcounter timestamps to the BPF header for export via libpcap.
 Allow to choose between feedback and feed-forward clock for timestamping.
 
 ---
- net/bpf.c |  143 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++---
- net/bpf.h |   22 +++++++++
+ sys/net/bpf.c |  143 +++++++++++++++++++++++++++++++++++++++++++++++++++++++---
+ sys/net/bpf.h |   22 ++++++++
  2 files changed, 160 insertions(+), 5 deletions(-)
 
-Index: sys/net/bpf.c
+Index: head/sys/net/bpf.c
 ===================================================================
---- sys.orig/net/bpf.c	2011-07-14 10:49:19.000000000 +1000
-+++ sys/net/bpf.c	2011-07-14 14:04:15.000000000 +1000
+--- head.orig/sys/net/bpf.c	2011-09-27 15:03:07.000000000 +1000
++++ head/sys/net/bpf.c	2011-09-30 17:32:26.000000000 +1000
 @@ -1,19 +1,25 @@
  /*-
   * Copyright (C) 1990, 1991, 1993
@@ -22,11 +22,11 @@ Index: sys/net/bpf.c
   * to Berkeley by Steven McCanne and Van Jacobson both of Lawrence
   * Berkeley Laboratory.
   *
-+ * Copyright (C) 2010 The University of Melbourne
++ * Copyright (C) 2011 The University of Melbourne.
 + * All rights reserved.
 + *
-+ * Portions of this software were developed by the University of Melbourne
-+ * under sponsorship from the FreeBSD Foundation.
++ * Portions of this software were developed by Julien Ridoux at the University
++ * of Melbourne under sponsorship from the FreeBSD Foundation.
 + *
   * Redistribution and use in source and binary forms, with or without
   * modification, are permitted provided that the following conditions
@@ -593,10 +593,10 @@ Index: sys/net/bpf.c
  	 */
  #ifndef BURN_BRIDGES
  copy:
-Index: sys/net/bpf.h
+Index: head/sys/net/bpf.h
 ===================================================================
---- sys.orig/net/bpf.h	2011-07-14 10:49:19.000000000 +1000
-+++ sys/net/bpf.h	2011-07-14 13:56:27.000000000 +1000
+--- head.orig/sys/net/bpf.h	2011-09-27 15:03:07.000000000 +1000
++++ head/sys/net/bpf.h	2011-09-30 17:33:10.000000000 +1000
 @@ -1,19 +1,25 @@
  /*-
   * Copyright (C) 1990, 1991, 1993
@@ -607,11 +607,11 @@ Index: sys/net/bpf.h
   * to Berkeley by Steven McCanne and Van Jacobson both of Lawrence
   * Berkeley Laboratory.
   *
-+ * Copyright (C) 2010 The University of Melbourne
++ * Copyright (C) 2011 The University of Melbourne.
 + * All rights reserved.
 + *
-+ * Portions of this software were developed by the University of Melbourne
-+ * under sponsorship from the FreeBSD Foundation.
++ * Portions of this software were developed by Julien Ridoux at the University
++ * of Melbourne under sponsorship from the FreeBSD Foundation.
 + *
   * Redistribution and use in source and binary forms, with or without
   * modification, are permitted provided that the following conditions

@@ -10,19 +10,19 @@ Add a ring of fftimehands to track passing of time on each kernel tick and
 pick updates of ffclock estimates. 
 
 ---
- conf/NOTES       |    8 
- conf/options     |    1 
- kern/kern_tc.c   |  443 +++++++++++++++++++++++++++++++++++++++++++++++++++++++
- kern/subr_rtc.c  |    8 
- sys/_ffcounter.h |   42 +++++
- sys/timeffc.h    |  109 +++++++++++++
- 6 files changed, 611 insertions(+)
+ sys/conf/NOTES       |    8 
+ sys/conf/options     |    1 
+ sys/kern/kern_tc.c   |  442 +++++++++++++++++++++++++++++++++++++++++++++++++++
+ sys/kern/subr_rtc.c  |    8 
+ sys/sys/_ffcounter.h |   40 ++++
+ sys/sys/timeffc.h    |  108 ++++++++++++
+ 6 files changed, 607 insertions(+)
 
-Index: sys/conf/NOTES
+Index: head/sys/conf/NOTES
 ===================================================================
---- sys.orig/conf/NOTES	2011-07-14 10:49:19.000000000 +1000
-+++ sys/conf/NOTES	2011-07-14 10:49:23.000000000 +1000
-@@ -1178,20 +1178,28 @@ options 	CAPABILITIES
+--- head.orig/sys/conf/NOTES	2011-09-27 18:38:41.000000000 +1000
++++ head/sys/conf/NOTES	2011-09-27 18:39:35.000000000 +1000
+@@ -1176,20 +1176,28 @@ options		PROCDESC
  # actually reducing the accuracy of operation.
  
  options 	HZ=100
@@ -51,11 +51,11 @@ Index: sys/conf/NOTES
  # high-level SCSI device `type' drivers, and the low-level host-adapter
  # device drivers.  The host adapters are listed in the ISA and PCI
  # device configuration sections below.
-Index: sys/conf/options
+Index: head/sys/conf/options
 ===================================================================
---- sys.orig/conf/options	2011-07-14 10:49:19.000000000 +1000
-+++ sys/conf/options	2011-07-14 10:49:23.000000000 +1000
-@@ -69,20 +69,21 @@ COMPAT_43	opt_compat.h
+--- head.orig/sys/conf/options	2011-09-27 18:38:41.000000000 +1000
++++ head/sys/conf/options	2011-09-27 18:39:35.000000000 +1000
+@@ -72,20 +72,21 @@ COMPAT_43	opt_compat.h
  COMPAT_43TTY	opt_compat.h
  COMPAT_FREEBSD4	opt_compat.h
  COMPAT_FREEBSD5	opt_compat.h
@@ -77,10 +77,10 @@ Index: sys/conf/options
  GEOM_ELI	opt_geom.h
  GEOM_FOX	opt_geom.h
  GEOM_GATE	opt_geom.h
-Index: sys/kern/kern_tc.c
+Index: head/sys/kern/kern_tc.c
 ===================================================================
---- sys.orig/kern/kern_tc.c	2011-07-14 10:49:19.000000000 +1000
-+++ sys/kern/kern_tc.c	2011-07-14 16:02:15.000000000 +1000
+--- head.orig/sys/kern/kern_tc.c	2011-09-27 18:38:41.000000000 +1000
++++ head/sys/kern/kern_tc.c	2011-09-30 17:42:02.000000000 +1000
 @@ -1,29 +1,43 @@
  /*-
   * ----------------------------------------------------------------------------
@@ -90,11 +90,11 @@ Index: sys/kern/kern_tc.c
   * this stuff is worth it, you can buy me a beer in return.   Poul-Henning Kamp
   * ----------------------------------------------------------------------------
 + *
-+ * Copyright (C) 2010 The University of Melbourne
++ * Copyright (C) 2011 The University of Melbourne.
 + * All rights reserved.
 + *
-+ * Portions of this software were developed by the University of Melbourne
-+ * under sponsorship from the FreeBSD Foundation.
++ * Portions of this software were developed by Julien Ridoux at the University
++ * of Melbourne under sponsorship from the FreeBSD Foundation.
   */
  
  #include <sys/cdefs.h>
@@ -125,7 +125,7 @@ Index: sys/kern/kern_tc.c
   * in the typical 'missed a couple of seconds' case, but doesn't loop
   * forever when the time step is large.
   */
-@@ -293,20 +307,440 @@ getmicrotime(struct timeval *tvp)
+@@ -293,20 +307,439 @@ getmicrotime(struct timeval *tvp)
  	struct timehands *th;
  	u_int gen;
  
@@ -161,7 +161,7 @@ Index: sys/kern/kern_tc.c
 +	struct fftimehands *next;
 +};
 +
-+#define NUM_ELEMENTS(x) (sizeof(x)/sizeof(*x))
++#define	NUM_ELEMENTS(x) (sizeof(x)/sizeof(*x))
 +
 +static struct fftimehands ffth[10];
 +static struct fftimehands *volatile fftimehands = ffth;
@@ -183,7 +183,6 @@ Index: sys/kern/kern_tc.c
 +	ffclock_status = FFCLOCK_STA_UNSYNC;
 +	mtx_init(&ffclock_mtx, "ffclock lock", NULL, MTX_DEF);
 +}
-+
 +
 +/*
 + * Reset the feed-forward clock estimates. Called from inittodr() to get things
@@ -566,7 +565,7 @@ Index: sys/kern/kern_tc.c
  	struct sysctl_oid *tc_root;
  
  	u = tc->tc_frequency / tc->tc_counter_mask;
-@@ -433,20 +867,23 @@ tc_windup(void)
+@@ -433,20 +866,23 @@ tc_windup(void)
  	/*
  	 * Capture a timecounter delta on the current timecounter and if
  	 * changing timecounters, a counter value from the new timecounter.
@@ -590,13 +589,13 @@ Index: sys/kern/kern_tc.c
  	if ((delta > th->th_counter->tc_frequency / 2) &&
  	    (th->th_scale * delta < ((uint64_t)1 << 63))) {
  		/* The product th_scale * delta just barely overflows. */
-@@ -489,20 +926,23 @@ tc_windup(void)
- 	/* XXX shouldn't do this here.  Should force non-`get' versions. */
- 	bintime2timeval(&bt, &th->th_microtime);
- 	bintime2timespec(&bt, &th->th_nanotime);
- 
- 	/* Now is a good time to change timecounters. */
- 	if (th->th_counter != timecounter) {
+@@ -495,20 +931,23 @@ tc_windup(void)
+ #ifndef __arm__
+ 		if ((timecounter->tc_flags & TC_FLAGS_C3STOP) != 0)
+ 			cpu_disable_deep_sleep++;
+ 		if ((th->th_counter->tc_flags & TC_FLAGS_C3STOP) != 0)
+ 			cpu_disable_deep_sleep--;
+ #endif
  		th->th_counter = timecounter;
  		th->th_offset_count = ncount;
  		tc_min_ticktock_freq = max(1, timecounter->tc_frequency /
@@ -614,7 +613,7 @@ Index: sys/kern/kern_tc.c
  	 *
  	 * The th_adjustment is nanoseconds per second with 32 bit binary
  	 * fraction and we want 64 bit binary fraction of second:
-@@ -807,20 +1247,23 @@ inittimecounter(void *dummy)
+@@ -813,20 +1252,23 @@ inittimecounter(void *dummy)
  	 * smallest reasonable one.  If they want better timestamps they
  	 * should use the non-"get"* functions.
  	 */
@@ -638,10 +637,10 @@ Index: sys/kern/kern_tc.c
  
  /* Cpu tick handling -------------------------------------------------*/
  
-Index: sys/kern/subr_rtc.c
+Index: head/sys/kern/subr_rtc.c
 ===================================================================
---- sys.orig/kern/subr_rtc.c	2011-07-14 10:49:19.000000000 +1000
-+++ sys/kern/subr_rtc.c	2011-07-14 10:49:23.000000000 +1000
+--- head.orig/sys/kern/subr_rtc.c	2011-09-27 18:38:41.000000000 +1000
++++ head/sys/kern/subr_rtc.c	2011-09-27 18:39:35.000000000 +1000
 @@ -53,20 +53,25 @@ __FBSDID("$FreeBSD$");
  #include <sys/param.h>
  #include <sys/systm.h>
@@ -692,17 +691,17 @@ Index: sys/kern/subr_rtc.c
  	}
  }
  
-Index: sys/sys/_ffcounter.h
+Index: head/sys/sys/_ffcounter.h
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ sys/sys/_ffcounter.h	2011-07-14 11:22:58.000000000 +1000
-@@ -0,0 +1,42 @@
++++ head/sys/sys/_ffcounter.h	2011-09-30 17:42:27.000000000 +1000
+@@ -0,0 +1,40 @@
 +/*-
-+ * Copyright (C) 2010 University of Melbourne
++ * Copyright (C) 2011 The University of Melbourne.
 + * All rights reserved.
 + *
-+ * This software was developed by the University of Melbourne under sponsorship
-+ * from the FreeBSD Foundation.
++ * This software was developed by Julien Ridoux at the University of Melbourne
++ * under sponsorship from the FreeBSD Foundation.
 + *
 + * Redistribution and use in source and binary forms, with or without
 + * modification, are permitted provided that the following conditions
@@ -729,8 +728,6 @@ Index: sys/sys/_ffcounter.h
 +#ifndef _SYS__FFCOUNTER_H_
 +#define _SYS__FFCOUNTER_H_
 +
-+#include <sys/types.h>
-+
 +/*
 + * The feed-forward clock counter. The fundamental element of a feed-forward
 + * clock is a wide monotonically increasing counter that accumulates at the same
@@ -739,17 +736,17 @@ Index: sys/sys/_ffcounter.h
 +typedef uint64_t ffcounter;
 +
 +#endif /* _SYS__FFCOUNTER_H_ */
-Index: sys/sys/timeffc.h
+Index: head/sys/sys/timeffc.h
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ sys/sys/timeffc.h	2011-07-14 16:01:23.000000000 +1000
-@@ -0,0 +1,109 @@
++++ head/sys/sys/timeffc.h	2011-09-30 17:43:17.000000000 +1000
+@@ -0,0 +1,108 @@
 +/*-
-+ * Copyright (C) 2010 University of Melbourne
++ * Copyright (C) 2010 The University of Melbourne.
 + * All rights reserved.
 + *
-+ * This software was developed by the University of Melbourne under sponsorship
-+ * from the FreeBSD Foundation.
++ * This software was developed by Julien Ridoux at the University of Melbourne
++ * under sponsorship from the FreeBSD Foundation.
 + *
 + * Redistribution and use in source and binary forms, with or without
 + * modification, are permitted provided that the following conditions
@@ -777,7 +774,6 @@ Index: sys/sys/timeffc.h
 +#define _SYS_TIMEFF_H_
 +
 +#include <sys/_ffcounter.h>
-+#include <sys/time.h>
 +
 +/*
 + * Feed-forward clock estimate
@@ -803,13 +799,13 @@ Index: sys/sys/timeffc.h
 +/*
 + * Parameters of counter characterisation required by feed-forward algorithms.
 + */
-+#define FFCLOCK_SKM_SCALE	1024
++#define	FFCLOCK_SKM_SCALE	1024
 +
 +/*
 + * Feed-forward clock status
 + */
-+#define FFCLOCK_STA_UNSYNC	1
-+#define FFCLOCK_STA_WARMUP	2
++#define	FFCLOCK_STA_UNSYNC	1
++#define	FFCLOCK_STA_WARMUP	2
 +
 +/*
 + * Clock flags to select how the feed-forward counter is converted to absolute
@@ -821,10 +817,10 @@ Index: sys/sys/timeffc.h
 + * LEAPSEC: include leap seconds.
 + * UPTIME:  removes time of boot.
 + */
-+#define FFCLOCK_FAST		1
-+#define FFCLOCK_LERP		2
-+#define FFCLOCK_LEAPSEC		4
-+#define FFCLOCK_UPTIME		8
++#define	FFCLOCK_FAST		1
++#define	FFCLOCK_LERP		2
++#define	FFCLOCK_LEAPSEC		4
++#define	FFCLOCK_UPTIME		8
 +
 +/* Resets feed-forward clock from RTC */
 +void ffclock_reset_clock(struct timespec *ts);

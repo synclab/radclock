@@ -6,16 +6,16 @@ interval requested. Different flavours of absolute time can be requested, for
 example with or without leap seconds, monotonic or not, etc.
 
 ---
- conf/files          |    1 
- kern/kern_ffclock.c |  127 ++++++++++++++++++++++++++++++++++++++++++++++++++++
- sys/timeffc.h       |   19 +++++++
- 3 files changed, 147 insertions(+)
+ sys/conf/files          |    1 
+ sys/kern/kern_ffclock.c |  127 ++++++++++++++++++++++++++++++++++++++++++++++++
+ sys/sys/timeffc.h       |   21 +++++++
+ 3 files changed, 149 insertions(+)
 
-Index: sys/conf/files
+Index: head/sys/conf/files
 ===================================================================
---- sys.orig/conf/files	2011-07-14 10:49:19.000000000 +1000
-+++ sys/conf/files	2011-07-14 12:05:30.000000000 +1000
-@@ -2298,20 +2298,21 @@ kern/kern_cpu.c			standard
+--- head.orig/sys/conf/files	2011-09-27 18:38:32.000000000 +1000
++++ head/sys/conf/files	2011-09-27 18:40:21.000000000 +1000
+@@ -2299,20 +2299,21 @@ kern/kern_cpu.c			standard
  kern/kern_cpuset.c		standard
  kern/kern_context.c		standard
  kern/kern_descrip.c		standard
@@ -37,17 +37,17 @@ Index: sys/conf/files
  kern/kern_kthread.c		standard
  kern/kern_ktr.c			optional ktr
  kern/kern_ktrace.c		standard
-Index: sys/kern/kern_ffclock.c
+Index: head/sys/kern/kern_ffclock.c
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ sys/kern/kern_ffclock.c	2011-07-14 12:22:17.000000000 +1000
++++ head/sys/kern/kern_ffclock.c	2011-09-30 17:39:43.000000000 +1000
 @@ -0,0 +1,127 @@
 +/*-
-+ * Copyright (C) 2010 University of Melbourne
++ * Copyright (C) 2011 The University of Melbourne.
 + * All rights reserved.
 + *
-+ * This software was developed by the University of Melbourne under sponsorship
-+ * from the FreeBSD Foundation.
++ * This software was developed by Julien Ridoux at the University of Melbourne
++ * under sponsorship from the FreeBSD Foundation.
 + *
 + * Redistribution and use in source and binary forms, with or without
 + * modification, are permitted provided that the following conditions
@@ -169,11 +169,11 @@ Index: sys/kern/kern_ffclock.c
 +		bintime_mul(error_bound, err_rate * (uint64_t)18446744073709LL);
 +	}
 +}
-Index: sys/sys/timeffc.h
+Index: head/sys/sys/timeffc.h
 ===================================================================
---- sys.orig/sys/timeffc.h	2011-07-14 11:20:06.000000000 +1000
-+++ sys/sys/timeffc.h	2011-07-14 12:25:04.000000000 +1000
-@@ -97,13 +97,32 @@ void ffclock_read_counter(ffcounter *ffc
+--- head.orig/sys/sys/timeffc.h	2011-09-27 18:39:35.000000000 +1000
++++ head/sys/sys/timeffc.h	2011-09-30 17:37:59.000000000 +1000
+@@ -96,13 +96,34 @@ void ffclock_read_counter(ffcounter *ffc
  void ffclock_last_tick(ffcounter *ffcount, struct bintime *bt, uint32_t flags);
  
  /*
@@ -200,8 +200,10 @@ Index: sys/sys/timeffc.h
 + *     measured in counter value. This should be the preferred way to measure
 + *     very accurately small time intervals.
 + */
-+void ffclock_abstime(ffcounter *ffcount, struct bintime *bt, struct bintime *error_bound, uint32_t flags);
-+void ffclock_difftime(ffcounter ffdelta, struct bintime *bt, struct bintime *error_bound);
++void ffclock_abstime(ffcounter *ffcount, struct bintime *bt,
++    struct bintime *error_bound, uint32_t flags);
++void ffclock_difftime(ffcounter ffdelta, struct bintime *bt,
++    struct bintime *error_bound);
 +
  #endif /* _KERNEL */
  #endif /* __BSD_VISIBLE */

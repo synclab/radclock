@@ -1,19 +1,17 @@
-MTAP call in em driver.
+Counter latency.
 
-Make sure the timestamp created by the BPF is called from section of code that
-will not fail. Otherwise, the timestamp of a packet sent on the interface may be
-created after the packet has reached the destination!
+Research only patch.
+Useful to measure the in-kernel latency of a given counter. Very dirty.
 
-Disable all interrupt throttling. Tune low latency against throughput.
 
 ---
- dev/e1000/if_em.c |   36 +++++++++++++++++++++++++++++-------
+ sys/dev/e1000/if_em.c |   36 +++++++++++++++++++++++++++++-------
  1 file changed, 29 insertions(+), 7 deletions(-)
 
-Index: sys/dev/e1000/if_em.c
+Index: head/sys/dev/e1000/if_em.c
 ===================================================================
---- sys.orig/dev/e1000/if_em.c	2011-07-11 12:46:46.000000000 +1000
-+++ sys/dev/e1000/if_em.c	2011-07-11 12:51:48.000000000 +1000
+--- head.orig/sys/dev/e1000/if_em.c	2011-09-22 11:46:35.000000000 +1000
++++ head/sys/dev/e1000/if_em.c	2011-09-22 12:36:11.000000000 +1000
 @@ -244,21 +244,24 @@ static void	em_transmit_checksum_setup(s
  static void	em_tso_setup(struct tx_ring *, struct mbuf *, int, struct ip *,
  		    struct tcphdr *, u32 *, u32 *);
@@ -40,7 +38,7 @@ Index: sys/dev/e1000/if_em.c
  static int 	em_is_valid_ether_addr(u8 *);
  static int	em_sysctl_int_delay(SYSCTL_HANDLER_ARGS);
  static void	em_add_int_delay_sysctl(struct adapter *, const char *,
-@@ -850,28 +853,31 @@ em_mq_start_locked(struct ifnet *ifp, st
+@@ -879,28 +882,31 @@ em_mq_start_locked(struct ifnet *ifp, st
  		next = drbr_dequeue(ifp, txr->br);
  	} else if (drbr_needs_enqueue(ifp, txr->br)) {
  		if ((err = drbr_enqueue(ifp, txr->br, m)) != 0)
@@ -74,7 +72,7 @@ Index: sys/dev/e1000/if_em.c
  	}
  
  	if (enq > 0) {
-@@ -945,30 +951,37 @@ em_start_locked(struct ifnet *ifp, struc
+@@ -974,30 +980,37 @@ em_start_locked(struct ifnet *ifp, struc
  			ifp->if_drv_flags |= IFF_DRV_OACTIVE;
  			break;
  		}
@@ -114,7 +112,7 @@ Index: sys/dev/e1000/if_em.c
  }
  
  static void
-@@ -1739,22 +1752,25 @@ em_media_change(struct ifnet *ifp)
+@@ -1768,22 +1781,25 @@ em_media_change(struct ifnet *ifp)
  	return (0);
  }
  
@@ -141,7 +139,7 @@ Index: sys/dev/e1000/if_em.c
  	struct ether_header	*eh;
  	struct ip		*ip = NULL;
  	struct tcphdr		*tp = NULL;
-@@ -2034,20 +2050,23 @@ retry:
+@@ -2063,20 +2079,23 @@ retry:
  	    htole32(E1000_TXD_CMD_EOP | E1000_TXD_CMD_RS);
  	/*
  	 * Keep track in the first buffer which
@@ -165,7 +163,7 @@ Index: sys/dev/e1000/if_em.c
  
  	return (0);
  }
-@@ -4094,21 +4113,24 @@ em_initialize_receive_unit(struct adapte
+@@ -4123,21 +4142,24 @@ em_initialize_receive_unit(struct adapte
  	 */
  	rctl = E1000_READ_REG(hw, E1000_RCTL);
  	E1000_WRITE_REG(hw, E1000_RCTL, rctl & ~E1000_RCTL_EN);
