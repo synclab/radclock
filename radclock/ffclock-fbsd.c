@@ -116,18 +116,34 @@ int init_kernel_support(struct radclock *handle)
 /* Need to check that the passthrough mode is enabled and that the counter can
  * do the job. The latter is a bit "hard coded"
  */
-int has_vm_vcounter(void)
+int has_vm_vcounter(struct radclock *handle)
 {
 	int ret;
 	int	passthrough_counter = 0;
 	char timecounter[32];
 	size_t size_ctl;
 
-	size_ctl = sizeof(passthrough_counter);
-	ret = sysctlbyname("kern.timecounter.passthrough", &passthrough_counter, &size_ctl, NULL, 0);
-	if (ret == -1)
-	{
-		verbose(LOG_ERR, "Cannot find kern.timecounter.passthrough in sysctl");
+	switch (handle->kernel_version) {
+	case 2:
+		size_ctl = sizeof(passthrough_counter);
+		ret = sysctlbyname("kern.ffclock.ffcounter_bypass", &passthrough_counter, &size_ctl, NULL, 0);
+		if (ret == -1) {
+			verbose(LOG_ERR, "Cannot find kern.ffclock.ffcounter_bypass in sysctl");
+			return 0;
+		}
+		break;
+
+	case 1:
+		size_ctl = sizeof(passthrough_counter);
+		ret = sysctlbyname("kern.timecounter.passthrough", &passthrough_counter, &size_ctl, NULL, 0);
+		if (ret == -1) {
+			verbose(LOG_ERR, "Cannot find kern.timecounter.passthrough in sysctl");
+			return 0;
+		}
+		break;
+
+	case 0:
+	default:
 		return 0;
 	}
 

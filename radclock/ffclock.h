@@ -78,6 +78,6 @@ int init_kernel_support(struct radclock *clock_handle);
 
 int set_kernel_ffclock(struct radclock *clock_handle);
 
-int has_vm_vcounter(void);
+int has_vm_vcounter(struct radclock *clock_handle);
 
 #endif 	/* _FFCLOCK_H */

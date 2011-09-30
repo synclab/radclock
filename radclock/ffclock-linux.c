@@ -407,7 +407,7 @@ int init_kernel_support(struct radclock *handle)
 /* Need to check that the passthrough mode is enabled and that the counter can
  * do the job. The latter is a bit "hard coded"
  */
-int has_vm_vcounter(void)
+int has_vm_vcounter(struct radclock *handle)
 {
 	int passthrough_counter = 0;
 	char clocksource[32];

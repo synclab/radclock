@@ -32,7 +32,7 @@
 #include "fixedpoint.h"
 
 
-int has_vm_vcounter(void)
+int has_vm_vcounter(struct radclock *handle)
 {
 	return -ENOENT;
 }

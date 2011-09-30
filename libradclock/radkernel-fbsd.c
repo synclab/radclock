@@ -280,18 +280,28 @@ int radclock_init_vcounter(struct radclock *handle)
 	int	passthrough_counter = 0;
 	size_t size_ctl;
 
-	if ( handle->kernel_version < 1 )
+	switch (handle->kernel_version) {
+	case 0:
 		passthrough_counter = 0;
-	else
-	{
+		break;
+	case 1:
 		size_ctl = sizeof(passthrough_counter);
 		ret = sysctlbyname("kern.timecounter.passthrough", &passthrough_counter, &size_ctl, NULL, 0);
 		if (ret == -1)
 		{
 			logger(RADLOG_ERR, "Cannot find kern.timecounter.passthrough in sysctl");
+			return -1;
+		}
+		break;
+	case 2:
+		size_ctl = sizeof(passthrough_counter);
+		ret = sysctlbyname("kern.ffclock.ffcounter_bypass", &passthrough_counter, &size_ctl, NULL, 0);
+		if (ret == -1)
+		{
+			logger(RADLOG_ERR, "Cannot find kern.ffclock.ffcounter_bypass in sysctl");
 			// XXX TODO XXX
 			// Used to return error here, but easier for kernel dev.
-			// May need to reenable it later on
+			// Need to reenable it, once kernel support v2 is released 
 			passthrough_counter = 0;
 			// return -1;
 		}

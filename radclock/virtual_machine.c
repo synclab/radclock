@@ -269,7 +269,7 @@ int init_virtual_machine_mode(struct radclock *clock_handle)
 	/* Do some checks on kernel / counters available.
 	 * We need reliable counter, wide, and common to virtual master and slave
 	 */
-	if ( !has_vm_vcounter() )
+	if (!has_vm_vcounter(clock_handle))
 		return 1;
 
 	switch ( clock_handle->conf->virtual_machine )
