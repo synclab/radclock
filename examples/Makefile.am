@@ -18,9 +18,12 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
 # 02110-1301, USA.
 
-noinst_PROGRAMS = radclock_get_time radclock_capture_packet 
+noinst_PROGRAMS = radclock_pps radclock_get_time radclock_capture_packet 
 
 INCLUDES = -I$(top_srcdir)/radclock -I$(top_srcdir)/libradclock
+
+radclock_pps_SOURCES = radclock_pps.c
+radclock_pps_LDADD = -lm @LIBRADCLOCK_LIBS@
 
 radclock_get_time_SOURCES = radclock_get_time.c
 radclock_get_time_LDADD = -lm @LIBRADCLOCK_LIBS@
