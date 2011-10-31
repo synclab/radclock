@@ -4,27 +4,27 @@ Add ffcounter timestamps to the BPF header for export via libpcap.
 Allow to choose between feedback and feed-forward clock for timestamping.
 
 ---
- sys/net/bpf.c |  143 +++++++++++++++++++++++++++++++++++++++++++++++++++++++---
- sys/net/bpf.h |   22 ++++++++
- 2 files changed, 160 insertions(+), 5 deletions(-)
+ sys/net/bpf.c |  153 +++++++++++++++++++++++++++++++++++++++++++++++++++++-----
+ sys/net/bpf.h |   23 ++++++++
+ 2 files changed, 164 insertions(+), 12 deletions(-)
 
 Index: head/sys/net/bpf.c
 ===================================================================
---- head.orig/sys/net/bpf.c	2011-09-27 15:03:07.000000000 +1000
-+++ head/sys/net/bpf.c	2011-09-30 17:32:26.000000000 +1000
-@@ -1,19 +1,25 @@
+--- head.orig/sys/net/bpf.c	2011-10-31 14:27:17.000000000 +1100
++++ head/sys/net/bpf.c	2011-10-31 14:33:03.000000000 +1100
+@@ -1,19 +1,24 @@
  /*-
   * Copyright (C) 1990, 1991, 1993
-  *	The Regents of the University of California.  All rights reserved.
+- *	The Regents of the University of California.  All rights reserved.
++ *	The Regents of the University of California.
++ * Copyright (C) 2011 The FreeBSD Foundation.
++ * All rights reserved.
   *
   * This code is derived from the Stanford/CMU enet packet filter,
   * (net/enet.c) distributed as part of 4.3BSD, and code contributed
   * to Berkeley by Steven McCanne and Van Jacobson both of Lawrence
   * Berkeley Laboratory.
   *
-+ * Copyright (C) 2011 The University of Melbourne.
-+ * All rights reserved.
-+ *
 + * Portions of this software were developed by Julien Ridoux at the University
 + * of Melbourne under sponsorship from the FreeBSD Foundation.
 + *
@@ -38,7 +38,7 @@ Index: head/sys/net/bpf.c
   *    documentation and/or other materials provided with the distribution.
   * 4. Neither the name of the University nor the names of its contributors
   *    may be used to endorse or promote products derived from this software
-@@ -32,31 +38,35 @@
+@@ -32,36 +37,40 @@
   * SUCH DAMAGE.
   *
   *      @(#)bpf.c	8.4 (Berkeley) 1/9/95
@@ -61,20 +61,25 @@ Index: head/sys/net/bpf.c
  #include <sys/malloc.h>
  #include <sys/mbuf.h>
  #include <sys/time.h>
-+#ifdef FFCLOCK
-+#include <sys/timeffc.h>
-+#endif
  #include <sys/priv.h>
  #include <sys/proc.h>
  #include <sys/signalvar.h>
  #include <sys/filio.h>
  #include <sys/sockio.h>
++#ifdef FFCLOCK
++#include <sys/timeffc.h>
++#endif
  #include <sys/ttycom.h>
  #include <sys/uio.h>
  
  #include <sys/event.h>
  #include <sys/file.h>
-@@ -83,41 +93,49 @@ __FBSDID("$FreeBSD$");
+ #include <sys/poll.h>
+ #include <sys/proc.h>
+ 
+ #include <sys/socket.h>
+ 
+@@ -83,41 +92,49 @@ __FBSDID("$FreeBSD$");
  #include <net80211/ieee80211_freebsd.h>
  
  #include <security/mac/mac_framework.h>
@@ -124,7 +129,7 @@ Index: head/sys/net/bpf.c
  
  struct bpf_dltlist32 {
  	u_int	bfl_len;
-@@ -144,41 +162,53 @@ static int		bpf_bpfd_cnt;
+@@ -144,41 +161,53 @@ static int		bpf_bpfd_cnt;
  
  static void	bpf_attachd(struct bpf_d *, struct bpf_if *);
  static void	bpf_detachd(struct bpf_d *);
@@ -178,7 +183,7 @@ Index: head/sys/net/bpf.c
  
  static struct cdevsw bpf_cdevsw = {
  	.d_version =	D_VERSION,
-@@ -691,20 +721,29 @@ bpfopen(struct cdev *dev, int flags, int
+@@ -691,20 +720,29 @@ bpfopen(struct cdev *dev, int flags, int
  	d->bd_direction = BPF_D_INOUT;
  	d->bd_pid = td->td_proc->p_pid;
  #ifdef MAC
@@ -208,7 +213,7 @@ Index: head/sys/net/bpf.c
  bpfread(struct cdev *dev, struct uio *uio, int ioflag)
  {
  	struct bpf_d *d;
-@@ -1769,61 +1808,89 @@ bpf_ts_quality(int tstype)
+@@ -1769,61 +1807,89 @@ bpf_ts_quality(int tstype)
  {
  
  	if (tstype == BPF_T_NONE)
@@ -303,7 +308,8 @@ Index: head/sys/net/bpf.c
  		 * NB: We dont call BPF_CHECK_DIRECTION() here since there is no
  		 * way for the caller to indiciate to us whether this packet
  		 * is inbound or outbound.  In the bpf_mtap() routines, we use
-@@ -1832,26 +1899,38 @@ bpf_tap(struct bpf_if *bp, u_char *pkt, 
+@@ -1831,27 +1897,38 @@ bpf_tap(struct bpf_if *bp, u_char *pkt, 
+ 		 */
  #ifdef BPF_JITTER
  		bf = bpf_jitter_enable != 0 ? d->bd_bfilter : NULL;
  		if (bf != NULL)
@@ -313,8 +319,8 @@ Index: head/sys/net/bpf.c
  		slen = bpf_filter(d->bd_rfilter, pkt, pktlen, pktlen);
  		if (slen != 0) {
  			d->bd_fcount++;
- 			if (gottime < bpf_ts_quality(d->bd_tstamp))
-+			{
+-			if (gottime < bpf_ts_quality(d->bd_tstamp))
++			if (gottime < bpf_ts_quality(d->bd_tstamp)) {
 +#ifdef FFCLOCK
 +				gottime = bpf_gettime(&bt, &ffcount,
 +				    d->bd_tstamp, NULL);
@@ -342,7 +348,7 @@ Index: head/sys/net/bpf.c
  	    (((d)->bd_direction == BPF_D_IN && (r) != (i)) ||	\
  	    ((d)->bd_direction == BPF_D_OUT && (r) == (i)))
  
-@@ -1861,20 +1940,23 @@ bpf_tap(struct bpf_if *bp, u_char *pkt, 
+@@ -1861,20 +1938,23 @@ bpf_tap(struct bpf_if *bp, u_char *pkt, 
  void
  bpf_mtap(struct bpf_if *bp, struct mbuf *m)
  {
@@ -366,7 +372,7 @@ Index: head/sys/net/bpf.c
  	pktlen = m_length(m, NULL);
  
  	gottime = BPF_TSTAMP_NONE;
-@@ -1888,44 +1970,59 @@ bpf_mtap(struct bpf_if *bp, struct mbuf 
+@@ -1888,44 +1968,59 @@ bpf_mtap(struct bpf_if *bp, struct mbuf 
  		bf = bpf_jitter_enable != 0 ? d->bd_bfilter : NULL;
  		/* XXX We cannot handle multiple mbufs. */
  		if (bf != NULL && m->m_next == NULL)
@@ -426,7 +432,7 @@ Index: head/sys/net/bpf.c
  	pktlen = m_length(m, NULL);
  	/*
  	 * Craft on-stack mbuf suitable for passing to bpf_filter.
-@@ -1941,26 +2038,38 @@ bpf_mtap2(struct bpf_if *bp, void *data,
+@@ -1941,26 +2036,38 @@ bpf_mtap2(struct bpf_if *bp, void *data,
  	BPFIF_LOCK(bp);
  	LIST_FOREACH(d, &bp->bif_dlist, bd_next) {
  		if (BPF_CHECK_DIRECTION(d, m->m_pkthdr.rcvif, bp->bif_ifp))
@@ -465,7 +471,7 @@ Index: head/sys/net/bpf.c
  
  #undef	BPF_TSTAMP_NONE
  #undef	BPF_TSTAMP_FAST
-@@ -1995,25 +2104,31 @@ bpf_hdrlen(struct bpf_d *d)
+@@ -1995,25 +2102,31 @@ bpf_hdrlen(struct bpf_d *d)
  	return (hdrlen - d->bd_bif->bif_hdrlen);
  }
  
@@ -476,16 +482,20 @@ Index: head/sys/net/bpf.c
  	struct timeval tsm;
  	struct timespec tsn;
  
+-	if ((tstype & BPF_T_MONOTONIC) == 0) {
+-		bt2 = *bt;
+-		bintime_add(&bt2, &boottimebin);
+-		bt = &bt2;
 +#ifdef FFCLOCK
 +	if ((tstype & BPF_T_FFCLOCK) == 0) {
 +#endif
- 	if ((tstype & BPF_T_MONOTONIC) == 0) {
- 		bt2 = *bt;
- 		bintime_add(&bt2, &boottimebin);
- 		bt = &bt2;
- 	}
++		if ((tstype & BPF_T_MONOTONIC) == 0) {
++			bt2 = *bt;
++			bintime_add(&bt2, &boottimebin);
++			bt = &bt2;
++		}
 +#ifdef FFCLOCK
-+	}
+ 	}
 +#endif
  	switch (BPF_T_FORMAT(tstype)) {
  	case BPF_T_MICROTIME:
@@ -497,7 +507,7 @@ Index: head/sys/net/bpf.c
  		bintime2timespec(bt, &tsn);
  		ts->bt_sec = tsn.tv_sec;
  		ts->bt_frac = tsn.tv_nsec;
-@@ -2025,24 +2140,31 @@ bpf_bintime2ts(struct bintime *bt, struc
+@@ -2025,24 +2138,31 @@ bpf_bintime2ts(struct bintime *bt, struc
  	}
  }
  
@@ -529,7 +539,7 @@ Index: head/sys/net/bpf.c
  #endif
  	int caplen, curlen, hdrlen, totlen;
  	int do_wakeup = 0;
-@@ -2116,52 +2238,63 @@ catchpacket(struct bpf_d *d, u_char *pkt
+@@ -2116,52 +2236,63 @@ catchpacket(struct bpf_d *d, u_char *pkt
  	do_timestamp = tstype != BPF_T_NONE;
  #ifndef BURN_BRIDGES
  	if (tstype == BPF_T_NONE || BPF_T_FORMAT(tstype) == BPF_T_MICROTIME) {
@@ -595,21 +605,21 @@ Index: head/sys/net/bpf.c
  copy:
 Index: head/sys/net/bpf.h
 ===================================================================
---- head.orig/sys/net/bpf.h	2011-09-27 15:03:07.000000000 +1000
-+++ head/sys/net/bpf.h	2011-09-30 17:33:10.000000000 +1000
-@@ -1,19 +1,25 @@
+--- head.orig/sys/net/bpf.h	2011-10-31 14:27:17.000000000 +1100
++++ head/sys/net/bpf.h	2011-10-31 14:33:05.000000000 +1100
+@@ -1,19 +1,24 @@
  /*-
   * Copyright (C) 1990, 1991, 1993
-  *	The Regents of the University of California.  All rights reserved.
+- *	The Regents of the University of California.  All rights reserved.
++ *	The Regents of the University of California.
++ * Copyright (C) 2011 The FreeBSD Foundation
++ * All rights reserved.
   *
   * This code is derived from the Stanford/CMU enet packet filter,
   * (net/enet.c) distributed as part of 4.3BSD, and code contributed
   * to Berkeley by Steven McCanne and Van Jacobson both of Lawrence
   * Berkeley Laboratory.
   *
-+ * Copyright (C) 2011 The University of Melbourne.
-+ * All rights reserved.
-+ *
 + * Portions of this software were developed by Julien Ridoux at the University
 + * of Melbourne under sponsorship from the FreeBSD Foundation.
 + *
@@ -623,7 +633,7 @@ Index: head/sys/net/bpf.h
   *    documentation and/or other materials provided with the distribution.
   * 4. Neither the name of the University nor the names of its contributors
   *    may be used to endorse or promote products derived from this software
-@@ -163,25 +169,35 @@ enum bpf_direction {
+@@ -163,25 +168,35 @@ enum bpf_direction {
  #define	BPF_T_MICROTIME		0x0000
  #define	BPF_T_NANOTIME		0x0001
  #define	BPF_T_BINTIME		0x0002
@@ -659,7 +669,7 @@ Index: head/sys/net/bpf.h
  #define	BPF_T_MICROTIME_MONOTONIC_FAST	(BPF_T_MICROTIME | BPF_T_MONOTONIC_FAST)
  #define	BPF_T_NANOTIME_MONOTONIC_FAST	(BPF_T_NANOTIME | BPF_T_MONOTONIC_FAST)
  #define	BPF_T_BINTIME_MONOTONIC_FAST	(BPF_T_BINTIME | BPF_T_MONOTONIC_FAST)
-@@ -192,28 +208,34 @@ enum bpf_direction {
+@@ -192,28 +207,34 @@ enum bpf_direction {
  struct bpf_ts {
  	bpf_int64	bt_sec;		/* seconds */
  	bpf_u_int64	bt_frac;	/* fraction */

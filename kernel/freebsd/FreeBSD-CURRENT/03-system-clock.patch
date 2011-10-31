@@ -9,18 +9,16 @@ both kernel clocks are updated but only one serves time.
 Add similar wrappers for the feed-forward difference clock.
 
 ---
- sys/kern/kern_ffclock.c |  209 +++++++++++++++++++++++++++++++
+ sys/kern/kern_ffclock.c |  214 ++++++++++++++++++++++++++++++++
  sys/kern/kern_tc.c      |  319 +++++++++++++++++++++++++++++++++++++++++++++++-
- sys/sys/timeffc.h       |   35 +++++
- 3 files changed, 561 insertions(+), 2 deletions(-)
+ sys/sys/timeffc.h       |   36 +++++
+ 3 files changed, 567 insertions(+), 2 deletions(-)
 
 Index: head/sys/kern/kern_ffclock.c
 ===================================================================
---- head.orig/sys/kern/kern_ffclock.c	2011-09-30 17:45:27.000000000 +1000
-+++ head/sys/kern/kern_ffclock.c	2011-09-30 17:53:28.000000000 +1000
-@@ -22,20 +22,21 @@
-  * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
-  * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+--- head.orig/sys/kern/kern_ffclock.c	2011-10-31 18:24:28.000000000 +1100
++++ head/sys/kern/kern_ffclock.c	2011-10-31 18:26:13.000000000 +1100
+@@ -24,20 +24,22 @@
   * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
   * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
   * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
@@ -28,7 +26,10 @@ Index: head/sys/kern/kern_ffclock.c
   */
  
  #include <sys/cdefs.h>
+ __FBSDID("$FreeBSD$");
+ 
  #include <sys/param.h>
++#include <sys/sbuf.h>
 +#include <sys/sysctl.h>
  #include <sys/systm.h>
  #include <sys/timeffc.h>
@@ -37,10 +38,10 @@ Index: head/sys/kern/kern_ffclock.c
  extern struct bintime ffclock_boottime;
  
  /*
-  * Feed-forward clock absolute time. This should be the prefered way to read the
-  * feed-forward clock for "wall-clock" type time. The flags allow to compose
+  * Feed-forward clock absolute time. This should be the preferred way to read
+  * the feed-forward clock for "wall-clock" type time. The flags allow to compose
   * various flavours of absolute time (e.g. with or without leap seconds taken
-@@ -118,10 +119,218 @@ ffclock_difftime(ffcounter ffdelta, stru
+@@ -120,10 +122,222 @@ ffclock_difftime(ffcounter ffdelta, stru
  		do {
  			update_ffcount = ffclock_estimate.update_ffcount;
  			err_rate = ffclock_estimate.errb_rate;
@@ -66,24 +67,28 @@ Index: head/sys/kern/kern_ffclock.c
 + * Sysctl to select which clock is read when calling any of the
 + * [get]{bin,nano,micro}[up]time() functions
 + */
-+char *sysclocks[] = {"feedback", "feed-forward", "NO_SYSCLOCK"};
++char *sysclocks[] = {"feedback", "feed-forward"};
++
++#define	NUM_SYSCLOCKS (sizeof(sysclocks) / sizeof (char *))
 +
 +/* Report or change the active timecounter hardware. */
 +static int
 +sysctl_kern_ffclock_choice(SYSCTL_HANDLER_ARGS)
 +{
-+	char buf[32], *spc;
-+	int error, clk;
++	struct sbuf *s;
++	int clk, error;
 +
-+	spc = "";
-+	error = 0;
-+	for (clk = 0; ; clk++) {
-+		if (strcmp(sysclocks[clk], "NO_SYSCLOCK") == 0)
-+			break;
-+		sprintf(buf, "%s%s", spc, sysclocks[clk]);
-+		error = SYSCTL_OUT(req, buf, strlen(buf));
-+		spc = " ";
++	s = sbuf_new_for_sysctl(NULL, NULL, 16*NUM_SYSCLOCKS, req);
++	if (s == NULL)
++		return (ENOMEM);
++
++	for (clk = 0; clk < NUM_SYSCLOCKS; clk++) {
++		sbuf_cat(s, sysclocks[clk]);
++		if (clk + 1 < NUM_SYSCLOCKS)
++			sbuf_cat(s, " ");
 +	}
++	error = sbuf_finish(s);
++	sbuf_delete(s);
 +	return (error);
 +}
 +
@@ -110,16 +115,16 @@ Index: head/sys/kern/kern_ffclock.c
 +	error = sysctl_handle_string(oidp, &newclock[0], sizeof(newclock), req);
 +	if (error != 0 || req->newptr == NULL)
 +		return (error);
-+	if (strncmp(&newclock[0], sysclocks[SYSCLOCK_FBCK],
++	if (strncmp(newclock, sysclocks[SYSCLOCK_FBCK],
 +	    sizeof(sysclocks[SYSCLOCK_FBCK])) == 0)
 +		sysclock_active = SYSCLOCK_FBCK;
-+	else if (strncmp(&newclock[0], sysclocks[SYSCLOCK_FFWD],
++	else if (strncmp(newclock, sysclocks[SYSCLOCK_FFWD],
 +	    sizeof(sysclocks[SYSCLOCK_FFWD])) == 0)
 +		sysclock_active = SYSCLOCK_FFWD;
 +	else
 +		return (EINVAL);
 +
-+	return error;
++	return (error);
 +}
 +
 +SYSCTL_PROC(_kern_ffclock, OID_AUTO, active, CTLTYPE_STRING | CTLFLAG_RW,
@@ -127,8 +132,8 @@ Index: head/sys/kern/kern_ffclock.c
 +    "Kernel clock selected");
 +
 +/*
-+* High level functions to access the Feed-Forward Clock.
-+*/
++ * High level functions to access the Feed-Forward Clock.
++ */
 +void
 +ffclock_bintime(struct bintime *bt)
 +{
@@ -261,8 +266,8 @@ Index: head/sys/kern/kern_ffclock.c
 +}
 Index: head/sys/kern/kern_tc.c
 ===================================================================
---- head.orig/sys/kern/kern_tc.c	2011-09-30 17:42:02.000000000 +1000
-+++ head/sys/kern/kern_tc.c	2011-09-30 17:52:35.000000000 +1000
+--- head.orig/sys/kern/kern_tc.c	2011-10-31 18:24:28.000000000 +1100
++++ head/sys/kern/kern_tc.c	2011-10-31 18:24:31.000000000 +1100
 @@ -170,20 +170,158 @@ tc_delta(struct timehands *th)
  	return ((tc->tc_get_timecount(tc) - th->th_offset_count) &
  	    tc->tc_counter_mask);
@@ -735,9 +740,9 @@ Index: head/sys/kern/kern_tc.c
  /* Cpu tick handling -------------------------------------------------*/
 Index: head/sys/sys/timeffc.h
 ===================================================================
---- head.orig/sys/sys/timeffc.h	2011-09-30 17:45:27.000000000 +1000
-+++ head/sys/sys/timeffc.h	2011-09-30 17:53:28.000000000 +1000
-@@ -47,20 +47,26 @@ struct ffclock_estimate {
+--- head.orig/sys/sys/timeffc.h	2011-10-31 18:24:28.000000000 +1100
++++ head/sys/sys/timeffc.h	2011-10-31 18:25:35.000000000 +1100
+@@ -49,20 +49,27 @@ struct ffclock_estimate {
  	uint32_t	errb_rate;	/* Bound on counter rate error [ps/s]. */
  	uint32_t	status;		/* Clock status. */
  	int16_t		leapsec_total;	/* All leap seconds seen so far. */
@@ -748,7 +753,8 @@ Index: head/sys/sys/timeffc.h
  #ifdef _KERNEL
  
  /*
-+ * Selecting feedback or feed-forard clock to answer time requests.
++ * Index into the sysclocks array for obtaining the ASCII name of a particular
++ * sysclock.
 + */
 +#define	SYSCLOCK_FBCK	0
 +#define	SYSCLOCK_FFWD	1
@@ -764,11 +770,11 @@ Index: head/sys/sys/timeffc.h
  #define	FFCLOCK_STA_UNSYNC	1
  #define	FFCLOCK_STA_WARMUP	2
  
-@@ -117,13 +123,42 @@ void ffclock_convert_diff(ffcounter ffde
+@@ -121,13 +128,42 @@ void ffclock_convert_diff(ffcounter ffde
   *     are possible.
   * ffclock_difftime(): computes a time interval in seconds based on an interval
-  *     measured in counter value. This should be the preferred way to measure
-  *     very accurately small time intervals.
+  *     measured in ffcounter units. This should be the preferred way to measure
+  *     small time intervals very accurately.
   */
  void ffclock_abstime(ffcounter *ffcount, struct bintime *bt,
      struct bintime *error_bound, uint32_t flags);
@@ -798,7 +804,7 @@ Index: head/sys/sys/timeffc.h
 +
 +/*
 + * Wrapper routines to convert a time interval defined by ffcounter values into
-+ * a time interval in secounds using the current feed-forward clock estimates.
++ * a time interval in seconds using the current feed-forward clock estimates.
 + */
 +void ffclock_bindifftime(ffcounter ffdelta, struct bintime *bt);
 +void ffclock_nanodifftime(ffcounter ffdelta, struct timespec *tsp);

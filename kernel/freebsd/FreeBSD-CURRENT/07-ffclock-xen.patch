@@ -4,27 +4,25 @@ Allow clock dependent mode of operation and a universal ffcounter to ensure all
 guests see the same time and allow live migration.
 
 ---
- sys/i386/xen/clock.c |   36 ++++++++++++++++++++++++++++++++++++
- sys/kern/kern_tc.c   |   43 +++++++++++++++++++++++++++++++++++--------
+ sys/i386/xen/clock.c |   34 ++++++++++++++++++++++++++++++++++
+ sys/kern/kern_tc.c   |   42 ++++++++++++++++++++++++++++++++++--------
  sys/sys/timetc.h     |   14 ++++++++++++++
  sys/x86/x86/tsc.c    |   27 +++++++++++++++++++++++++++
- 4 files changed, 112 insertions(+), 8 deletions(-)
+ 4 files changed, 109 insertions(+), 8 deletions(-)
 
 Index: head/sys/i386/xen/clock.c
 ===================================================================
---- head.orig/sys/i386/xen/clock.c	2011-09-28 13:59:30.000000000 +1000
-+++ head/sys/i386/xen/clock.c	2011-09-30 17:26:49.000000000 +1000
-@@ -1,17 +1,23 @@
+--- head.orig/sys/i386/xen/clock.c	2011-10-31 14:35:15.000000000 +1100
++++ head/sys/i386/xen/clock.c	2011-10-31 14:35:44.000000000 +1100
+@@ -1,17 +1,21 @@
  /*-
   * Copyright (C) 1990 The Regents of the University of California.
++ * Copyright (C) 2011 The FreeBSD Foundation.
   * All rights reserved.
   *
   * This code is derived from software contributed to Berkeley by
   * William Jolitz and Don Ahn.
   *
-+ * Copyright (C) 2011 The University of Melbourne.
-+ * All rights reserved.
-+ *
 + * Portions of this software were developed by Julien Ridoux at the University
 + * of Melbourne under sponsorship from the FreeBSD Foundation.
 + *
@@ -38,7 +36,7 @@ Index: head/sys/i386/xen/clock.c
   *    documentation and/or other materials provided with the distribution.
   * 3. All advertising materials mentioning features or use of this software
   *    must display the following acknowledgement:
-@@ -39,20 +45,21 @@
+@@ -39,20 +43,21 @@
  #include <sys/cdefs.h>
  __FBSDID("$FreeBSD$");
  
@@ -60,7 +58,7 @@ Index: head/sys/i386/xen/clock.c
  #include <sys/proc.h>
  #include <sys/time.h>
  #include <sys/timeet.h>
-@@ -286,28 +293,42 @@ static inline int time_values_up_to_date
+@@ -286,28 +291,42 @@ static inline int time_values_up_to_date
  
  	src = &HYPERVISOR_shared_info->vcpu_info[cpu].time; 
  	dst = &per_cpu(shadow_time, cpu); 
@@ -103,7 +101,7 @@ Index: head/sys/i386/xen/clock.c
  #define	MODE_ONESHOT	2
  	int64_t		period;
  	int64_t		next;
-@@ -870,20 +891,35 @@ xen_get_timecount(struct timecounter *tc
+@@ -870,20 +889,35 @@ xen_get_timecount(struct timecounter *tc
  	shadow = &per_cpu(shadow_time, smp_processor_id());
  
  	__get_time_values_from_xen();
@@ -120,12 +118,12 @@ Index: head/sys/i386/xen/clock.c
 +{
 +	uint64_t clk;
 +	struct shadow_time_info *shadow;
-+	shadow = &per_cpu(shadow_time, smp_processor_id());
 +
++	shadow = &per_cpu(shadow_time, smp_processor_id());
 +	__get_time_values_from_xen();
 +	clk = shadow->system_timestamp + get_nsec_offset(shadow);
 +
-+	return clk;
++	return (clk);
 +}
 +#endif
 +
@@ -141,8 +139,8 @@ Index: head/sys/i386/xen/clock.c
  {
 Index: head/sys/kern/kern_tc.c
 ===================================================================
---- head.orig/sys/kern/kern_tc.c	2011-09-30 10:56:37.000000000 +1000
-+++ head/sys/kern/kern_tc.c	2011-09-30 17:17:33.000000000 +1000
+--- head.orig/sys/kern/kern_tc.c	2011-10-31 14:35:36.000000000 +1100
++++ head/sys/kern/kern_tc.c	2011-10-31 14:35:44.000000000 +1100
 @@ -455,20 +455,21 @@ getmicrotime(struct timeval *tvp)
  
  #ifdef FFCLOCK
@@ -165,7 +163,8 @@ Index: head/sys/kern/kern_tc.c
  
  struct sysclock_ops {
  	int active;
-@@ -921,34 +922,50 @@ ffclock_convert_diff(ffcounter ffdelta, 
+@@ -920,35 +921,51 @@ ffclock_convert_diff(ffcounter ffdelta, 
+ }
  
  /*
   * Access to current ffcounter value
@@ -175,14 +174,14 @@ Index: head/sys/kern/kern_tc.c
  {
  	struct timehands *th;
  	struct fftimehands *ffth;
- 	u_int gen, delta;
 +	struct timecounter *tc;
-+
+ 	u_int gen, delta;
+ 
 +	if (sysctl_kern_ffclock_ffcounter_bypass) {
 +		tc = timehands->th_counter;
 +		*ffcount = tc->tc_get_timecount_64(tc);
 +	}
- 
++
  	/*
  	 * ffclock_windup() called from tc_windup(), safe to rely on
  	 * th->th_generation only, for correct delta and ffcounter.
@@ -213,7 +212,7 @@ Index: head/sys/kern/kern_tc.c
 +	u_int count;
 +
 +	count = tc->tc_get_timecount(tc);
-+	return (uint64_t) count;
++	return ((uint64_t) count);
  }
  
  void
@@ -224,7 +223,7 @@ Index: head/sys/kern/kern_tc.c
  }
  
  void
-@@ -1048,20 +1065,30 @@ tc_init(struct timecounter *tc)
+@@ -1048,20 +1065,29 @@ tc_init(struct timecounter *tc)
  			printf("Timecounter \"%s\" frequency %ju Hz",
  			    tc->tc_name, (uintmax_t)tc->tc_frequency);
  			printf(" -- Insufficient hz, needs at least %u\n", u);
@@ -237,12 +236,11 @@ Index: head/sys/kern/kern_tc.c
  
 +#ifdef FFCLOCK
 +	/*
-+	 * TODO Each device timecounter should initialise this function instead.
++	 * XXX Each device timecounter should initialise this function instead.
 +	 * Will do it once returning the counter as a uint64_t is approved.
 +	 */
-+	if (tc->tc_get_timecount_64 == NULL) {
++	if (tc->tc_get_timecount_64 == NULL)
 +		tc->tc_get_timecount_64 = &tc_get_timecount_64;
-+	}
 +#endif
 +
  	tc->tc_next = timecounters;
@@ -257,8 +255,8 @@ Index: head/sys/kern/kern_tc.c
  	    "mask", CTLFLAG_RD, &(tc->tc_counter_mask), 0,
 Index: head/sys/sys/timetc.h
 ===================================================================
---- head.orig/sys/sys/timetc.h	2011-09-28 13:59:30.000000000 +1000
-+++ head/sys/sys/timetc.h	2011-09-30 17:27:43.000000000 +1000
+--- head.orig/sys/sys/timetc.h	2011-10-31 14:35:15.000000000 +1100
++++ head/sys/sys/timetc.h	2011-10-31 14:36:22.000000000 +1100
 @@ -1,18 +1,24 @@
  /*-
   * ----------------------------------------------------------------------------
@@ -268,7 +266,7 @@ Index: head/sys/sys/timetc.h
   * this stuff is worth it, you can buy me a beer in return.   Poul-Henning Kamp
   * ----------------------------------------------------------------------------
   *
-+ * Copyright (C) 2011 The University of Melbourne.
++ * Copyright (C) 2011 The FreeBSD Foundation
 + * All rights reserved.
 + *
 + * Portions of this software were developed by Julien Ridoux at the University
@@ -296,11 +294,11 @@ Index: head/sys/sys/timetc.h
  	struct timecounter	*tc_next;
  		/* Pointer to the next timecounter. */
 +#ifdef FFCLOCK
-+	uint64_t (*tc_get_timecount_64) (struct timecounter *);
++	uint64_t (*tc_get_timecount_64)(struct timecounter *);
 +		/*
-+		 * This function reads the counter and return a 64 bit unsigned int.
-+		 * It is used for the passthrough mode, required by feed-forward
-+		 * clocks in a virtual system (eg. Xen)
++		 * This function reads the counter and returns a 64 bit unsigned
++		 * int. It is used for the bypass mode, required by feed-forward
++		 * clocks in a virtual system (eg. Xen).
 +		 */
 +#endif
  };
@@ -315,16 +313,14 @@ Index: head/sys/sys/timetc.h
  void	tc_init(struct timecounter *tc);
 Index: head/sys/x86/x86/tsc.c
 ===================================================================
---- head.orig/sys/x86/x86/tsc.c	2011-09-28 13:59:30.000000000 +1000
-+++ head/sys/x86/x86/tsc.c	2011-09-30 17:28:22.000000000 +1000
-@@ -1,14 +1,20 @@
+--- head.orig/sys/x86/x86/tsc.c	2011-10-31 14:35:15.000000000 +1100
++++ head/sys/x86/x86/tsc.c	2011-10-31 14:35:44.000000000 +1100
+@@ -1,14 +1,18 @@
  /*-
   * Copyright (C) 1998-2003 Poul-Henning Kamp
++ * Copyright (C) 2011 The FreeBSD Foundation
   * All rights reserved.
   *
-+ * Copyright (C) 2011 The University of Melbourne.
-+ * All rights reserved.
-+ *
 + * Portions of this software were developed by Julien Ridoux at the University
 + * of Melbourne under sponsorship from the FreeBSD Foundation.
 + *
@@ -338,7 +334,7 @@ Index: head/sys/x86/x86/tsc.c
   *    documentation and/or other materials provided with the distribution.
   *
   * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
-@@ -76,28 +82,41 @@ SYSCTL_INT(_machdep, OID_AUTO, disable_t
+@@ -76,28 +80,42 @@ SYSCTL_INT(_machdep, OID_AUTO, disable_t
  TUNABLE_INT("machdep.disable_tsc_calibration", &tsc_skip_calibration);
  
  static void tsc_freq_changed(void *arg, const struct cf_level *level,
@@ -351,6 +347,7 @@ Index: head/sys/x86/x86/tsc.c
  
 +#ifdef FFCLOCK
 +static uint64_t tsc_get_timecount_64(struct timecounter *tc);
++
 +static struct timecounter tsc_timecounter = {
 +	.tc_get_timecount = tsc_get_timecount,
 +	.tc_poll_pps = 0,
@@ -380,7 +377,7 @@ Index: head/sys/x86/x86/tsc.c
  vmware_hvcall(u_int cmd, u_int *p)
  {
  
-@@ -597,10 +616,18 @@ tsc_get_timecount(struct timecounter *tc
+@@ -597,10 +615,19 @@ tsc_get_timecount(struct timecounter *tc
  
  static u_int
  tsc_get_timecount_low(struct timecounter *tc)
@@ -396,6 +393,7 @@ Index: head/sys/x86/x86/tsc.c
 +static uint64_t
 +tsc_get_timecount_64(struct timecounter *tc)
 +{
++
 +	return (rdtsc());
 +}
 +#endif

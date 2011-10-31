@@ -13,15 +13,15 @@ pick updates of ffclock estimates.
  sys/conf/NOTES       |    8 
  sys/conf/options     |    1 
  sys/kern/kern_tc.c   |  442 +++++++++++++++++++++++++++++++++++++++++++++++++++
- sys/kern/subr_rtc.c  |    8 
- sys/sys/_ffcounter.h |   40 ++++
- sys/sys/timeffc.h    |  108 ++++++++++++
- 6 files changed, 607 insertions(+)
+ sys/kern/subr_rtc.c  |   16 +
+ sys/sys/_ffcounter.h |   42 ++++
+ sys/sys/timeffc.h    |  110 ++++++++++++
+ 6 files changed, 618 insertions(+), 1 deletion(-)
 
 Index: head/sys/conf/NOTES
 ===================================================================
---- head.orig/sys/conf/NOTES	2011-09-27 18:38:41.000000000 +1000
-+++ head/sys/conf/NOTES	2011-09-27 18:39:35.000000000 +1000
+--- head.orig/sys/conf/NOTES	2011-10-31 14:27:17.000000000 +1100
++++ head/sys/conf/NOTES	2011-10-31 14:27:19.000000000 +1100
 @@ -1176,20 +1176,28 @@ options		PROCDESC
  # actually reducing the accuracy of operation.
  
@@ -53,8 +53,8 @@ Index: head/sys/conf/NOTES
  # device configuration sections below.
 Index: head/sys/conf/options
 ===================================================================
---- head.orig/sys/conf/options	2011-09-27 18:38:41.000000000 +1000
-+++ head/sys/conf/options	2011-09-27 18:39:35.000000000 +1000
+--- head.orig/sys/conf/options	2011-10-31 14:27:17.000000000 +1100
++++ head/sys/conf/options	2011-10-31 14:27:19.000000000 +1100
 @@ -72,20 +72,21 @@ COMPAT_43	opt_compat.h
  COMPAT_43TTY	opt_compat.h
  COMPAT_FREEBSD4	opt_compat.h
@@ -79,8 +79,8 @@ Index: head/sys/conf/options
  GEOM_GATE	opt_geom.h
 Index: head/sys/kern/kern_tc.c
 ===================================================================
---- head.orig/sys/kern/kern_tc.c	2011-09-27 18:38:41.000000000 +1000
-+++ head/sys/kern/kern_tc.c	2011-09-30 17:42:02.000000000 +1000
+--- head.orig/sys/kern/kern_tc.c	2011-10-31 14:27:17.000000000 +1100
++++ head/sys/kern/kern_tc.c	2011-10-31 14:27:19.000000000 +1100
 @@ -1,29 +1,43 @@
  /*-
   * ----------------------------------------------------------------------------
@@ -90,7 +90,7 @@ Index: head/sys/kern/kern_tc.c
   * this stuff is worth it, you can buy me a beer in return.   Poul-Henning Kamp
   * ----------------------------------------------------------------------------
 + *
-+ * Copyright (C) 2011 The University of Melbourne.
++ * Copyright (C) 2011 The FreeBSD Foundation
 + * All rights reserved.
 + *
 + * Portions of this software were developed by Julien Ridoux at the University
@@ -471,7 +471,7 @@ Index: head/sys/kern/kern_tc.c
 + * Absolute clock conversion. Low level function to convert ffcounter to
 + * bintime. The ffcounter is converted using the current ffclock period estimate
 + * or the "interpolated period" to ensure monotonicity.
-+ * NOTE: this conversion may have been deffered, and the clock updated since the
++ * NOTE: this conversion may have been deferred, and the clock updated since the
 + * hardware counter has been read.
 + */
 +void
@@ -639,23 +639,60 @@ Index: head/sys/kern/kern_tc.c
  
 Index: head/sys/kern/subr_rtc.c
 ===================================================================
---- head.orig/sys/kern/subr_rtc.c	2011-09-27 18:38:41.000000000 +1000
-+++ head/sys/kern/subr_rtc.c	2011-09-27 18:39:35.000000000 +1000
-@@ -53,20 +53,25 @@ __FBSDID("$FreeBSD$");
+--- head.orig/sys/kern/subr_rtc.c	2011-10-31 14:27:17.000000000 +1100
++++ head/sys/kern/subr_rtc.c	2011-10-31 14:28:32.000000000 +1100
+@@ -1,19 +1,24 @@
+ /*-
+  * Copyright (C) 1988 University of Utah.
+  * Copyright (C) 1982, 1990, 1993
+- *	The Regents of the University of California.  All rights reserved.
++ *	The Regents of the University of California.
++ * Copyright (C) 2011 The FreeBSD Foundation
++ * All rights reserved.
+  *
+  * This code is derived from software contributed to Berkeley by
+  * the Systems Programming Group of the University of Utah Computer
+  * Science Department.
+  *
++ * Portions of this software were developed by Julien Ridoux at the University
++ * of Melbourne under sponsorship from the FreeBSD Foundation.
++ *
+  * Redistribution and use in source and binary forms, with or without
+  * modification, are permitted provided that the following conditions
+  * are met:
+  * 1. Redistributions of source code must retain the above copyright
+  *    notice, this list of conditions and the following disclaimer.
+  * 2. Redistributions in binary form must reproduce the above copyright
+  *    notice, this list of conditions and the following disclaimer in the
+  *    documentation and/or other materials provided with the distribution.
+  * 4. Neither the name of the University nor the names of its contributors
+  *    may be used to endorse or promote products derived from this software
+@@ -43,30 +48,36 @@
+  * support multiple models of such clocks, and generally serves to make the
+  * code more machine-independent.
+  * If the clock in question can also be used as a time counter, the driver
+  * needs to initiate this.
+  * This code is not yet used by all architectures.
+  */
+ 
+ #include <sys/cdefs.h>
+ __FBSDID("$FreeBSD$");
+ 
++#include "opt_ffclock.h"
++
  #include <sys/param.h>
  #include <sys/systm.h>
  #include <sys/kernel.h>
  #include <sys/bus.h>
  #include <sys/clock.h>
  #include <sys/sysctl.h>
++#ifdef FFCLOCK
++#include <sys/timeffc.h>
++#endif
  #include <sys/timetc.h>
  
  #include "clock_if.h"
  
-+#include "opt_ffclock.h"
-+#ifdef FFCLOCK
-+#include <sys/timeffc.h>
-+#endif
 +
  static device_t clock_dev = NULL;
  static long clock_res;
@@ -667,7 +704,7 @@ Index: head/sys/kern/subr_rtc.c
      0, "Disallow adjusting time-of-day clock");
  
  void
-@@ -126,20 +131,23 @@ inittodr(time_t base)
+@@ -126,20 +137,23 @@ inittodr(time_t base)
  	}
  	if (error == EINVAL || ts.tv_sec < 0) {
  		printf("Invalid time in real time clock.\n"
@@ -694,10 +731,10 @@ Index: head/sys/kern/subr_rtc.c
 Index: head/sys/sys/_ffcounter.h
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ head/sys/sys/_ffcounter.h	2011-09-30 17:42:27.000000000 +1000
-@@ -0,0 +1,40 @@
++++ head/sys/sys/_ffcounter.h	2011-10-31 14:29:08.000000000 +1100
+@@ -0,0 +1,42 @@
 +/*-
-+ * Copyright (C) 2011 The University of Melbourne.
++ * Copyright (C) 2011 The University of Melbourne
 + * All rights reserved.
 + *
 + * This software was developed by Julien Ridoux at the University of Melbourne
@@ -723,6 +760,8 @@ Index: head/sys/sys/_ffcounter.h
 + * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
 + * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 + * SUCH DAMAGE.
++ *
++ * $FreeBSD$
 + */
 +
 +#ifndef _SYS__FFCOUNTER_H_
@@ -739,10 +778,10 @@ Index: head/sys/sys/_ffcounter.h
 Index: head/sys/sys/timeffc.h
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ head/sys/sys/timeffc.h	2011-09-30 17:43:17.000000000 +1000
-@@ -0,0 +1,108 @@
++++ head/sys/sys/timeffc.h	2011-10-31 14:29:27.000000000 +1100
+@@ -0,0 +1,110 @@
 +/*-
-+ * Copyright (C) 2010 The University of Melbourne.
++ * Copyright (C) 2011 The University of Melbourne
 + * All rights reserved.
 + *
 + * This software was developed by Julien Ridoux at the University of Melbourne
@@ -768,6 +807,8 @@ Index: head/sys/sys/timeffc.h
 + * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
 + * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 + * SUCH DAMAGE.
++ *
++ * $FreeBSD$
 + */
 +
 +#ifndef _SYS_TIMEFF_H_

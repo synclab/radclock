@@ -8,18 +8,18 @@ ffclock_setestimate(): update the kernel ffclock estimate from userland.
 ---
  lib/libc/sys/Makefile.inc            |    4 -
  lib/libc/sys/Symbol.map              |    3 
- lib/libc/sys/ffclock.2               |  121 +++++++++++++++++++++++++++++++++++
+ lib/libc/sys/ffclock.2               |  126 +++++++++++++++++++++++++++++++++++
  sys/compat/freebsd32/syscalls.master |    8 +-
- sys/kern/kern_ffclock.c              |  100 ++++++++++++++++++++++++++++
+ sys/kern/kern_ffclock.c              |  100 +++++++++++++++++++++++++++
  sys/kern/makesyscalls.sh             |    1 
  sys/kern/syscalls.master             |    8 +-
  sys/sys/timeffc.h                    |    9 ++
- 8 files changed, 247 insertions(+), 7 deletions(-)
+ 8 files changed, 252 insertions(+), 7 deletions(-)
 
 Index: head/lib/libc/sys/Makefile.inc
 ===================================================================
---- head.orig/lib/libc/sys/Makefile.inc	2011-09-30 17:37:41.000000000 +1000
-+++ head/lib/libc/sys/Makefile.inc	2011-09-30 17:45:49.000000000 +1000
+--- head.orig/lib/libc/sys/Makefile.inc	2011-10-31 18:22:52.000000000 +1100
++++ head/lib/libc/sys/Makefile.inc	2011-10-31 18:24:32.000000000 +1100
 @@ -73,21 +73,21 @@ ${SPSEUDO}:
  	printf '#include "SYS.h"\nPSEUDO(${.PREFIX:S/_//})\n' \
  	    >> ${.TARGET}
@@ -68,8 +68,8 @@ Index: head/lib/libc/sys/Makefile.inc
  MLINKS+=getpid.2 getppid.2
 Index: head/lib/libc/sys/Symbol.map
 ===================================================================
---- head.orig/lib/libc/sys/Symbol.map	2011-09-30 17:37:41.000000000 +1000
-+++ head/lib/libc/sys/Symbol.map	2011-09-30 17:45:49.000000000 +1000
+--- head.orig/lib/libc/sys/Symbol.map	2011-10-31 18:22:52.000000000 +1100
++++ head/lib/libc/sys/Symbol.map	2011-10-31 18:24:32.000000000 +1100
 @@ -358,20 +358,23 @@ FBSD_1.1 {
  	shmctl;
  	symlinkat;
@@ -97,9 +97,9 @@ Index: head/lib/libc/sys/Symbol.map
 Index: head/lib/libc/sys/ffclock.2
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ head/lib/libc/sys/ffclock.2	2011-09-30 17:46:27.000000000 +1000
-@@ -0,0 +1,121 @@
-+.\" Copyright (C) 2011 The University of Melbourne.
++++ head/lib/libc/sys/ffclock.2	2011-10-31 18:24:32.000000000 +1100
+@@ -0,0 +1,126 @@
++.\" Copyright (C) 2011 The University of Melbourne
 +.\" All rights reserved.
 +.\"
 +.\" This documentation was written by Julien Ridoux at the University of
@@ -126,7 +126,9 @@ Index: head/lib/libc/sys/ffclock.2
 +.\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 +.\" SUCH DAMAGE.
 +.\"
-+.Dd July 20, 2011
++.\" $FreeBSD$
++.\"
++.Dd November 1, 2011
 +.Dt FFCLOCK 2
 +.Os
 +.Sh NAME
@@ -155,10 +157,12 @@ Index: head/lib/libc/sys/ffclock.2
 +and
 +.Fn ffclock_setestimate
 +system calls allow to respectively get and set the current estimates of the
-+feed-forward clock parameters stored in the kernel. The
++feed-forward clock parameters stored in the kernel.
++The
 +.Fn ffclock_setestimate
 +system call should be invoked by a single instance of a feed-forward
-+synchronisation daemon. The
++synchronisation daemon.
++The
 +.Fn ffclock_getestimate
 +system call can be used by any process although they may be of limited
 +interest (see USAGE below).
@@ -194,24 +198,25 @@ Index: head/lib/libc/sys/ffclock.2
 +.Fa ffcounter
 +or
 +.Fa cest
-+argument addresses referenced invalid memory.
++pointer referenced invalid memory.
 +.It Bq Er EPERM
 +A user other than the super-user attempted to set the feed-forward clock
 +parameters.
 +.El
 +.Sh USAGE
 +The feed-forward paradigm decouples the timestamping and timekeeping functions,
-+which allow to define specialized clock functions. Different methods exist to
-+access timestamps in seconds (the feed-forward counter timestamp converted using
-+the feed-forward clock parameters). One method is to select the feed-forward
-+clock as the active system clock and use the
++which enables the definition of specialised clock functions.
++Different methods exist to access timestamps in seconds (the feed-forward
++counter timestamp converted using the feed-forward clock parameters).
++One method is to select the feed-forward clock as the active system clock and
++use the
 +.Xr clock_gettime 2
 +system call.
 +.Pp
-+Another method is to retrieve feed-forward counter timestamp from the kernel and
-+use the feed-forward clock parameters maintained by the synchronisation daemon
-+to convert the timestamps into seconds, and collect upper bounds on current
-+clock error.
++Another method is to retrieve the feed-forward counter timestamp from the kernel
++and use the feed-forward clock parameters maintained by the synchronisation
++daemon to convert the timestamps into seconds, and collect upper bounds on
++current clock error.
 +.Sh SEE ALSO
 +.Xr date 1 ,
 +.Xr adjtime 2 ,
@@ -222,8 +227,8 @@ Index: head/lib/libc/sys/ffclock.2
 +with Darryl Veitch under sponsorship from the FreeBSD Foundation.
 Index: head/sys/compat/freebsd32/syscalls.master
 ===================================================================
---- head.orig/sys/compat/freebsd32/syscalls.master	2011-09-30 17:37:41.000000000 +1000
-+++ head/sys/compat/freebsd32/syscalls.master	2011-09-30 17:45:49.000000000 +1000
+--- head.orig/sys/compat/freebsd32/syscalls.master	2011-10-31 18:22:52.000000000 +1100
++++ head/sys/compat/freebsd32/syscalls.master	2011-10-31 18:24:32.000000000 +1100
 @@ -440,23 +440,25 @@
  234	AUE_NULL	STD	{ int freebsd32_clock_getres(clockid_t clock_id, \
  				    struct timespec32 *tp); }
@@ -255,11 +260,9 @@ Index: head/sys/compat/freebsd32/syscalls.master
  251	AUE_RFORK	NOPROTO	{ int rfork(int flags); }
 Index: head/sys/kern/kern_ffclock.c
 ===================================================================
---- head.orig/sys/kern/kern_ffclock.c	2011-09-30 17:45:48.000000000 +1000
-+++ head/sys/kern/kern_ffclock.c	2011-09-30 17:45:49.000000000 +1000
-@@ -22,26 +22,37 @@
-  * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
-  * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+--- head.orig/sys/kern/kern_ffclock.c	2011-10-31 18:24:31.000000000 +1100
++++ head/sys/kern/kern_ffclock.c	2011-10-31 18:24:32.000000000 +1100
+@@ -24,27 +24,38 @@
   * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
   * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
   * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
@@ -267,6 +270,8 @@ Index: head/sys/kern/kern_ffclock.c
   */
  
  #include <sys/cdefs.h>
+ __FBSDID("$FreeBSD$");
+ 
  #include <sys/param.h>
 +#include <sys/bus.h>
 +#include <sys/kernel.h>
@@ -275,9 +280,10 @@ Index: head/sys/kern/kern_ffclock.c
 +#include <sys/mutex.h>
 +#include <sys/priv.h>
 +#include <sys/proc.h>
- #include <sys/sysctl.h>
+ #include <sys/sbuf.h>
 +#include <sys/sysent.h>
 +#include <sys/sysproto.h>
+ #include <sys/sysctl.h>
  #include <sys/systm.h>
  #include <sys/timeffc.h>
  
@@ -287,19 +293,19 @@ Index: head/sys/kern/kern_ffclock.c
 +extern struct mtx ffclock_mtx;
  
  /*
-  * Feed-forward clock absolute time. This should be the prefered way to read the
-  * feed-forward clock for "wall-clock" type time. The flags allow to compose
+  * Feed-forward clock absolute time. This should be the preferred way to read
+  * the feed-forward clock for "wall-clock" type time. The flags allow to compose
   * various flavours of absolute time (e.g. with or without leap seconds taken
   * into account). If valid pointers are provided, the ffcounter value and an
   * upper bound on clock error associated with the bintime are provided.
   * NOTE: use ffclock_convert_abs() to differ the conversion of a ffcounter value
   * read earlier.
   */
-@@ -194,20 +205,26 @@ sysctl_kern_ffclock_active(SYSCTL_HANDLE
+@@ -201,20 +212,26 @@ sysctl_kern_ffclock_active(SYSCTL_HANDLE
  	else
  		return (EINVAL);
  
- 	return error;
+ 	return (error);
  }
  
  SYSCTL_PROC(_kern_ffclock, OID_AUTO, active, CTLTYPE_STRING | CTLFLAG_RW,
@@ -309,12 +315,12 @@ Index: head/sys/kern/kern_ffclock.c
 +int sysctl_kern_ffclock_ffcounter_bypass = 0;
 +
 +SYSCTL_INT(_kern_ffclock, OID_AUTO, ffcounter_bypass, CTLFLAG_RW,
-+	&sysctl_kern_ffclock_ffcounter_bypass, 0,
-+	"Use reliable hardware timecounter as the Feed-Forward Counter");
++    &sysctl_kern_ffclock_ffcounter_bypass, 0,
++    "Use reliable hardware timecounter as the Feed-Forward Counter");
 +
  /*
- * High level functions to access the Feed-Forward Clock.
- */
+  * High level functions to access the Feed-Forward Clock.
+  */
  void
  ffclock_bintime(struct bintime *bt)
  {
@@ -322,7 +328,7 @@ Index: head/sys/kern/kern_ffclock.c
  	ffclock_abstime(NULL, bt, NULL, FFCLOCK_LERP | FFCLOCK_LEAPSEC);
  }
  
-@@ -327,10 +344,93 @@ ffclock_nanodifftime(ffcounter ffdelta, 
+@@ -334,10 +351,93 @@ ffclock_nanodifftime(ffcounter ffdelta, 
  }
  
  void
@@ -335,7 +341,7 @@ Index: head/sys/kern/kern_ffclock.c
  }
 +
 +/*
-+ * System calls returning Feed-Forward Clock counter to user space
++ * System calls returning Feed-Forward Clock counter to user space.
 + */
 +
 +#ifndef _SYS_SYSPROTO_H_
@@ -363,8 +369,8 @@ Index: head/sys/kern/kern_ffclock.c
 + * estimates to the kernel. Acquire ffclock_mtx to prevent several instances of
 + * the daemon to update concurrently and ensure data consistency.
 + * NOTE: ffclock_updated signals the fftimehands that new estimates are
-+ * available. The updated estimates are used after up to hz seconds if ticks
-+ * are not missed.
++ * available. The updated estimates are picked by the fftimehands on next tick,
++ * which could take as long as 1/hz seconds (if ticks are not missed).
 + */
 +#ifndef _SYS_SYSPROTO_H_
 +struct ffclock_setestimate_args {
@@ -418,8 +424,8 @@ Index: head/sys/kern/kern_ffclock.c
 +}
 Index: head/sys/kern/makesyscalls.sh
 ===================================================================
---- head.orig/sys/kern/makesyscalls.sh	2011-09-30 17:37:41.000000000 +1000
-+++ head/sys/kern/makesyscalls.sh	2011-09-30 17:45:49.000000000 +1000
+--- head.orig/sys/kern/makesyscalls.sh	2011-10-31 18:22:52.000000000 +1100
++++ head/sys/kern/makesyscalls.sh	2011-10-31 18:24:32.000000000 +1100
 @@ -145,20 +145,21 @@ s/\$//g
  
  		printf "\n/* The casts are bogus but will do for now. */\n" > sysent
@@ -444,8 +450,8 @@ Index: head/sys/kern/makesyscalls.sh
  		printf "#define\tPADR_(t)\tPAD_(t)\n" > sysarg
 Index: head/sys/kern/syscalls.master
 ===================================================================
---- head.orig/sys/kern/syscalls.master	2011-09-30 17:37:41.000000000 +1000
-+++ head/sys/kern/syscalls.master	2011-09-30 17:45:49.000000000 +1000
+--- head.orig/sys/kern/syscalls.master	2011-10-31 18:22:52.000000000 +1100
++++ head/sys/kern/syscalls.master	2011-10-31 18:24:32.000000000 +1100
 @@ -449,23 +449,25 @@
  				    struct sigevent *evp, int *timerid); }
  236	AUE_NULL	STD	{ int ktimer_delete(int timerid); }
@@ -477,14 +483,14 @@ Index: head/sys/kern/syscalls.master
  251	AUE_RFORK	STD	{ int rfork(int flags); }
 Index: head/sys/sys/timeffc.h
 ===================================================================
---- head.orig/sys/sys/timeffc.h	2011-09-30 17:45:48.000000000 +1000
-+++ head/sys/sys/timeffc.h	2011-09-30 17:45:49.000000000 +1000
-@@ -152,13 +152,22 @@ void ffclock_getnanouptime(struct timesp
+--- head.orig/sys/sys/timeffc.h	2011-10-31 18:24:31.000000000 +1100
++++ head/sys/sys/timeffc.h	2011-10-31 18:24:32.000000000 +1100
+@@ -157,13 +157,22 @@ void ffclock_getnanouptime(struct timesp
  void ffclock_getmicrouptime(struct timeval *tvp);
  
  /*
   * Wrapper routines to convert a time interval defined by ffcounter values into
-  * a time interval in secounds using the current feed-forward clock estimates.
+  * a time interval in seconds using the current feed-forward clock estimates.
   */
  void ffclock_bindifftime(ffcounter ffdelta, struct bintime *bt);
  void ffclock_nanodifftime(ffcounter ffdelta, struct timespec *tsp);

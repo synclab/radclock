@@ -7,14 +7,14 @@ example with or without leap seconds, monotonic or not, etc.
 
 ---
  sys/conf/files          |    1 
- sys/kern/kern_ffclock.c |  127 ++++++++++++++++++++++++++++++++++++++++++++++++
- sys/sys/timeffc.h       |   21 +++++++
- 3 files changed, 149 insertions(+)
+ sys/kern/kern_ffclock.c |  129 ++++++++++++++++++++++++++++++++++++++++++++++++
+ sys/sys/timeffc.h       |   25 ++++++++-
+ 3 files changed, 154 insertions(+), 1 deletion(-)
 
 Index: head/sys/conf/files
 ===================================================================
---- head.orig/sys/conf/files	2011-09-27 18:38:32.000000000 +1000
-+++ head/sys/conf/files	2011-09-27 18:40:21.000000000 +1000
+--- head.orig/sys/conf/files	2011-10-31 14:27:17.000000000 +1100
++++ head/sys/conf/files	2011-10-31 14:29:42.000000000 +1100
 @@ -2299,20 +2299,21 @@ kern/kern_cpu.c			standard
  kern/kern_cpuset.c		standard
  kern/kern_context.c		standard
@@ -40,10 +40,10 @@ Index: head/sys/conf/files
 Index: head/sys/kern/kern_ffclock.c
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ head/sys/kern/kern_ffclock.c	2011-09-30 17:39:43.000000000 +1000
-@@ -0,0 +1,127 @@
++++ head/sys/kern/kern_ffclock.c	2011-10-31 14:29:57.000000000 +1100
+@@ -0,0 +1,129 @@
 +/*-
-+ * Copyright (C) 2011 The University of Melbourne.
++ * Copyright (C) 2011 The University of Melbourne
 + * All rights reserved.
 + *
 + * This software was developed by Julien Ridoux at the University of Melbourne
@@ -72,6 +72,8 @@ Index: head/sys/kern/kern_ffclock.c
 + */
 +
 +#include <sys/cdefs.h>
++__FBSDID("$FreeBSD$");
++
 +#include <sys/param.h>
 +#include <sys/systm.h>
 +#include <sys/timeffc.h>
@@ -80,8 +82,8 @@ Index: head/sys/kern/kern_ffclock.c
 +extern struct bintime ffclock_boottime;
 +
 +/*
-+ * Feed-forward clock absolute time. This should be the prefered way to read the
-+ * feed-forward clock for "wall-clock" type time. The flags allow to compose
++ * Feed-forward clock absolute time. This should be the preferred way to read
++ * the feed-forward clock for "wall-clock" type time. The flags allow to compose
 + * various flavours of absolute time (e.g. with or without leap seconds taken
 + * into account). If valid pointers are provided, the ffcounter value and an
 + * upper bound on clock error associated with the bintime are provided.
@@ -112,7 +114,7 @@ Index: head/sys/kern/kern_ffclock.c
 +	} while (update_ffcount != ffclock_estimate.update_ffcount);
 +
 +	/*
-+	 * Leap second adjustement. Total as seen by synchronisation algorithm
++	 * Leap second adjustment. Total as seen by synchronisation algorithm
 +	 * since it started. cest.leapsec_next is the ffcounter prediction of
 +	 * when the next leapsecond occurs.
 +	 */
@@ -122,7 +124,7 @@ Index: head/sys/kern/kern_ffclock.c
 +			bt->sec -= cest.leapsec;
 +	}
 +
-+	/* Boot time adjustement, for uptime/monotonic clocks. */
++	/* Boot time adjustment, for uptime/monotonic clocks. */
 +	if ((flags & FFCLOCK_UPTIME) == FFCLOCK_UPTIME) {
 +		bintime_sub(bt, &ffclock_boottime);
 +	}
@@ -144,7 +146,7 @@ Index: head/sys/kern/kern_ffclock.c
 +}
 +
 +/*
-+ * Feed-forward difference clock. This should be the prefered way to convert a
++ * Feed-forward difference clock. This should be the preferred way to convert a
 + * time interval in ffcounter values into a time interval in seconds. If a valid
 + * pointer is passed, an upper bound on the error in computing the time interval
 + * in seconds is provided.
@@ -171,9 +173,32 @@ Index: head/sys/kern/kern_ffclock.c
 +}
 Index: head/sys/sys/timeffc.h
 ===================================================================
---- head.orig/sys/sys/timeffc.h	2011-09-27 18:39:35.000000000 +1000
-+++ head/sys/sys/timeffc.h	2011-09-30 17:37:59.000000000 +1000
-@@ -96,13 +96,34 @@ void ffclock_read_counter(ffcounter *ffc
+--- head.orig/sys/sys/timeffc.h	2011-10-31 14:29:27.000000000 +1100
++++ head/sys/sys/timeffc.h	2011-10-31 14:29:42.000000000 +1100
+@@ -64,21 +64,21 @@ struct ffclock_estimate {
+  * Feed-forward clock status
+  */
+ #define	FFCLOCK_STA_UNSYNC	1
+ #define	FFCLOCK_STA_WARMUP	2
+ 
+ /*
+  * Clock flags to select how the feed-forward counter is converted to absolute
+  * time by ffclock_convert_abs().
+  * FAST:    do not read the hardware counter, return feed-forward clock time
+  *          at last tick. The time returned has the resolution of the kernel
+- *           tick (1/hz [s]).
++ *          tick (1/hz [s]).
+  * LERP:    linear interpolation of ffclock time to guarantee monotonic time.
+  * LEAPSEC: include leap seconds.
+  * UPTIME:  removes time of boot.
+  */
+ #define	FFCLOCK_FAST		1
+ #define	FFCLOCK_LERP		2
+ #define	FFCLOCK_LEAPSEC		4
+ #define	FFCLOCK_UPTIME		8
+ 
+ /* Resets feed-forward clock from RTC */
+@@ -98,13 +98,36 @@ void ffclock_read_counter(ffcounter *ffc
  void ffclock_last_tick(ffcounter *ffcount, struct bintime *bt, uint32_t flags);
  
  /*
@@ -192,13 +217,15 @@ Index: head/sys/sys/timeffc.h
 + * clock but an upper bound on the error of the absolute time or time interval
 + * returned.
 + *
-+ * ffclock_abstime(): retrieves current time as counter value and corresponding
-+ *     conversion in seconds. The value of the time in seconds depends on the
-+ *     flags passed: for a unique counter value, different conversions in second
++ * ffclock_abstime(): retrieves current time as counter value and convert this
++ *     timestamp in seconds. The value (in seconds) of the converted timestamp
++ *     depends on the flags passed: for a given counter value, different
++ *     conversions corresponding to different clocks are possible (for example
++ *     with  (FFCLOCK_LERP|FFCLOCK_UPTIME) flags).
 + *     are possible.
 + * ffclock_difftime(): computes a time interval in seconds based on an interval
-+ *     measured in counter value. This should be the preferred way to measure
-+ *     very accurately small time intervals.
++ *     measured in ffcounter units. This should be the preferred way to measure
++ *     small time intervals very accurately.
 + */
 +void ffclock_abstime(ffcounter *ffcount, struct bintime *bt,
 +    struct bintime *error_bound, uint32_t flags);
