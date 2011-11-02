@@ -11,9 +11,9 @@ Add IOCTL to retrieve ffclock timestamps from userland.
 
 Index: head/sys/kern/kern_tc.c
 ===================================================================
---- head.orig/sys/kern/kern_tc.c	2011-10-31 14:30:25.000000000 +1100
-+++ head/sys/kern/kern_tc.c	2011-10-31 14:33:11.000000000 +1100
-@@ -1357,53 +1357,86 @@ SYSCTL_PROC(_kern_timecounter, OID_AUTO,
+--- head.orig/sys/kern/kern_tc.c	2011-11-01 15:36:11.000000000 +1100
++++ head/sys/kern/kern_tc.c	2011-11-01 15:56:30.000000000 +1100
+@@ -1358,53 +1358,86 @@ SYSCTL_PROC(_kern_timecounter, OID_AUTO,
  
  /*
   * RFC 2783 PPS-API implementation.
@@ -100,7 +100,7 @@ Index: head/sys/kern/kern_tc.c
  			return (EINVAL);
  		if (kapi->edge & ~pps->ppscap)
  			return (EINVAL);
-@@ -1418,65 +1451,86 @@ pps_ioctl(u_long cmd, caddr_t data, stru
+@@ -1419,65 +1452,86 @@ pps_ioctl(u_long cmd, caddr_t data, stru
  }
  
  void
@@ -187,7 +187,7 @@ Index: head/sys/kern/kern_tc.c
  		pps->ppstc = pps->capth->th_counter;
  		*pcount = pps->capcount;
  		pps->ppscount[2] = pps->capcount;
-@@ -1499,20 +1553,31 @@ pps_event(struct pps_state *pps, int eve
+@@ -1500,20 +1554,31 @@ pps_event(struct pps_state *pps, int eve
  	(*pseq)++;
  	*tsp = ts;
  
@@ -221,8 +221,8 @@ Index: head/sys/kern/kern_tc.c
  		tcount = pps->capcount - pps->ppscount[2];
 Index: head/sys/sys/timepps.h
 ===================================================================
---- head.orig/sys/sys/timepps.h	2011-10-31 14:27:17.000000000 +1100
-+++ head/sys/sys/timepps.h	2011-10-31 14:33:34.000000000 +1100
+--- head.orig/sys/sys/timepps.h	2011-11-01 15:03:05.000000000 +1100
++++ head/sys/sys/timepps.h	2011-11-01 15:56:30.000000000 +1100
 @@ -1,33 +1,40 @@
  /*-
   * ----------------------------------------------------------------------------

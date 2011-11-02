@@ -12,16 +12,16 @@ pick updates of ffclock estimates.
 ---
  sys/conf/NOTES       |    8 
  sys/conf/options     |    1 
- sys/kern/kern_tc.c   |  442 +++++++++++++++++++++++++++++++++++++++++++++++++++
+ sys/kern/kern_tc.c   |  443 +++++++++++++++++++++++++++++++++++++++++++++++++++
  sys/kern/subr_rtc.c  |   16 +
  sys/sys/_ffcounter.h |   42 ++++
  sys/sys/timeffc.h    |  110 ++++++++++++
- 6 files changed, 618 insertions(+), 1 deletion(-)
+ 6 files changed, 619 insertions(+), 1 deletion(-)
 
 Index: head/sys/conf/NOTES
 ===================================================================
---- head.orig/sys/conf/NOTES	2011-10-31 14:27:17.000000000 +1100
-+++ head/sys/conf/NOTES	2011-10-31 14:27:19.000000000 +1100
+--- head.orig/sys/conf/NOTES	2011-11-01 15:03:05.000000000 +1100
++++ head/sys/conf/NOTES	2011-11-01 15:03:10.000000000 +1100
 @@ -1176,20 +1176,28 @@ options		PROCDESC
  # actually reducing the accuracy of operation.
  
@@ -53,8 +53,8 @@ Index: head/sys/conf/NOTES
  # device configuration sections below.
 Index: head/sys/conf/options
 ===================================================================
---- head.orig/sys/conf/options	2011-10-31 14:27:17.000000000 +1100
-+++ head/sys/conf/options	2011-10-31 14:27:19.000000000 +1100
+--- head.orig/sys/conf/options	2011-11-01 15:03:05.000000000 +1100
++++ head/sys/conf/options	2011-11-01 15:03:10.000000000 +1100
 @@ -72,20 +72,21 @@ COMPAT_43	opt_compat.h
  COMPAT_43TTY	opt_compat.h
  COMPAT_FREEBSD4	opt_compat.h
@@ -79,8 +79,8 @@ Index: head/sys/conf/options
  GEOM_GATE	opt_geom.h
 Index: head/sys/kern/kern_tc.c
 ===================================================================
---- head.orig/sys/kern/kern_tc.c	2011-10-31 14:27:17.000000000 +1100
-+++ head/sys/kern/kern_tc.c	2011-10-31 14:27:19.000000000 +1100
+--- head.orig/sys/kern/kern_tc.c	2011-11-01 15:03:05.000000000 +1100
++++ head/sys/kern/kern_tc.c	2011-11-01 15:32:57.000000000 +1100
 @@ -1,29 +1,43 @@
  /*-
   * ----------------------------------------------------------------------------
@@ -125,7 +125,7 @@ Index: head/sys/kern/kern_tc.c
   * in the typical 'missed a couple of seconds' case, but doesn't loop
   * forever when the time step is large.
   */
-@@ -293,20 +307,439 @@ getmicrotime(struct timeval *tvp)
+@@ -293,20 +307,440 @@ getmicrotime(struct timeval *tvp)
  	struct timehands *th;
  	u_int gen;
  
@@ -225,7 +225,8 @@ Index: head/sys/kern/kern_tc.c
 + * Sub-routine to convert a time interval measured in RAW counter units to time
 + * in seconds stored in bintime format.
 + * NOTE: bintime_mul requires u_int, but the value of the ffcounter may be
-+ * larger than the max value of u_int. Loop to consume extra cycles.
++ * larger than the max value of u_int (on 32 bit architecture). Loop to consume
++ * extra cycles.
 + */
 +static void
 +ffclock_convert_delta(ffcounter ffdelta, uint64_t period, struct bintime *bt)
@@ -233,7 +234,7 @@ Index: head/sys/kern/kern_tc.c
 +	struct bintime bt2;
 +	ffcounter delta, delta_max;
 +
-+	delta_max = (1LLU << (8 * sizeof(u_int))) - 1;
++	delta_max = (1LLU << (8 * sizeof(unsigned int))) - 1;
 +	bintime_clear(bt);
 +	do {
 +		if (ffdelta > delta_max)
@@ -242,7 +243,7 @@ Index: head/sys/kern/kern_tc.c
 +			delta = ffdelta;
 +		bt2.sec = 0;
 +		bt2.frac = period;
-+		bintime_mul(&bt2, (u_int)delta);
++		bintime_mul(&bt2, (unsigned int)delta);
 +		bintime_add(bt, &bt2);
 +		ffdelta -= delta;
 +	} while (ffdelta > 0);
@@ -257,7 +258,7 @@ Index: head/sys/kern/kern_tc.c
 + * current, and compute the linear interpolation for monotonic time if needed.
 + */
 +static void
-+ffclock_windup(u_int delta)
++ffclock_windup(unsigned int delta)
 +{
 +	struct ffclock_estimate *cest;
 +	struct fftimehands *ffth;
@@ -373,7 +374,7 @@ Index: head/sys/kern/kern_tc.c
 +			polling = bt.sec;
 +			bt.sec = 0;
 +			bt.frac = 5000000 * (uint64_t)18446744073LL;
-+			bintime_mul(&bt, (u_int)polling);
++			bintime_mul(&bt, polling);
 +			if (bintime_cmp(&gap_lerp, &bt, >))
 +				gap_lerp = bt;
 +
@@ -537,7 +538,7 @@ Index: head/sys/kern/kern_tc.c
 +{
 +	struct timehands *th;
 +	struct fftimehands *ffth;
-+	u_int gen, delta;
++	unsigned int gen, delta;
 +
 +	/*
 +	 * ffclock_windup() called from tc_windup(), safe to rely on
@@ -565,7 +566,7 @@ Index: head/sys/kern/kern_tc.c
  	struct sysctl_oid *tc_root;
  
  	u = tc->tc_frequency / tc->tc_counter_mask;
-@@ -433,20 +866,23 @@ tc_windup(void)
+@@ -433,20 +867,23 @@ tc_windup(void)
  	/*
  	 * Capture a timecounter delta on the current timecounter and if
  	 * changing timecounters, a counter value from the new timecounter.
@@ -589,7 +590,7 @@ Index: head/sys/kern/kern_tc.c
  	if ((delta > th->th_counter->tc_frequency / 2) &&
  	    (th->th_scale * delta < ((uint64_t)1 << 63))) {
  		/* The product th_scale * delta just barely overflows. */
-@@ -495,20 +931,23 @@ tc_windup(void)
+@@ -495,20 +932,23 @@ tc_windup(void)
  #ifndef __arm__
  		if ((timecounter->tc_flags & TC_FLAGS_C3STOP) != 0)
  			cpu_disable_deep_sleep++;
@@ -613,7 +614,7 @@ Index: head/sys/kern/kern_tc.c
  	 *
  	 * The th_adjustment is nanoseconds per second with 32 bit binary
  	 * fraction and we want 64 bit binary fraction of second:
-@@ -813,20 +1252,23 @@ inittimecounter(void *dummy)
+@@ -813,20 +1253,23 @@ inittimecounter(void *dummy)
  	 * smallest reasonable one.  If they want better timestamps they
  	 * should use the non-"get"* functions.
  	 */
@@ -639,8 +640,8 @@ Index: head/sys/kern/kern_tc.c
  
 Index: head/sys/kern/subr_rtc.c
 ===================================================================
---- head.orig/sys/kern/subr_rtc.c	2011-10-31 14:27:17.000000000 +1100
-+++ head/sys/kern/subr_rtc.c	2011-10-31 14:28:32.000000000 +1100
+--- head.orig/sys/kern/subr_rtc.c	2011-11-01 15:03:05.000000000 +1100
++++ head/sys/kern/subr_rtc.c	2011-11-01 15:03:10.000000000 +1100
 @@ -1,19 +1,24 @@
  /*-
   * Copyright (C) 1988 University of Utah.
@@ -731,7 +732,7 @@ Index: head/sys/kern/subr_rtc.c
 Index: head/sys/sys/_ffcounter.h
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ head/sys/sys/_ffcounter.h	2011-10-31 14:29:08.000000000 +1100
++++ head/sys/sys/_ffcounter.h	2011-11-01 15:03:10.000000000 +1100
 @@ -0,0 +1,42 @@
 +/*-
 + * Copyright (C) 2011 The University of Melbourne
@@ -778,7 +779,7 @@ Index: head/sys/sys/_ffcounter.h
 Index: head/sys/sys/timeffc.h
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ head/sys/sys/timeffc.h	2011-10-31 14:29:27.000000000 +1100
++++ head/sys/sys/timeffc.h	2011-11-01 15:03:10.000000000 +1100
 @@ -0,0 +1,110 @@
 +/*-
 + * Copyright (C) 2011 The University of Melbourne

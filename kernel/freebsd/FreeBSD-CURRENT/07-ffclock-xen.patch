@@ -12,8 +12,8 @@ guests see the same time and allow live migration.
 
 Index: head/sys/i386/xen/clock.c
 ===================================================================
---- head.orig/sys/i386/xen/clock.c	2011-10-31 14:35:15.000000000 +1100
-+++ head/sys/i386/xen/clock.c	2011-10-31 14:35:44.000000000 +1100
+--- head.orig/sys/i386/xen/clock.c	2011-11-01 15:03:05.000000000 +1100
++++ head/sys/i386/xen/clock.c	2011-11-01 15:56:44.000000000 +1100
 @@ -1,17 +1,21 @@
  /*-
   * Copyright (C) 1990 The Regents of the University of California.
@@ -139,8 +139,8 @@ Index: head/sys/i386/xen/clock.c
  {
 Index: head/sys/kern/kern_tc.c
 ===================================================================
---- head.orig/sys/kern/kern_tc.c	2011-10-31 14:35:36.000000000 +1100
-+++ head/sys/kern/kern_tc.c	2011-10-31 14:35:44.000000000 +1100
+--- head.orig/sys/kern/kern_tc.c	2011-11-01 15:56:30.000000000 +1100
++++ head/sys/kern/kern_tc.c	2011-11-01 16:01:31.000000000 +1100
 @@ -455,20 +455,21 @@ getmicrotime(struct timeval *tvp)
  
  #ifdef FFCLOCK
@@ -163,7 +163,7 @@ Index: head/sys/kern/kern_tc.c
  
  struct sysclock_ops {
  	int active;
-@@ -920,35 +921,51 @@ ffclock_convert_diff(ffcounter ffdelta, 
+@@ -921,35 +922,51 @@ ffclock_convert_diff(ffcounter ffdelta, 
  }
  
  /*
@@ -175,7 +175,7 @@ Index: head/sys/kern/kern_tc.c
  	struct timehands *th;
  	struct fftimehands *ffth;
 +	struct timecounter *tc;
- 	u_int gen, delta;
+ 	unsigned int gen, delta;
  
 +	if (sysctl_kern_ffclock_ffcounter_bypass) {
 +		tc = timehands->th_counter;
@@ -209,7 +209,7 @@ Index: head/sys/kern/kern_tc.c
 +static __inline uint64_t
 +tc_get_timecount_64(struct timecounter *tc)
 +{
-+	u_int count;
++	unsigned int count;
 +
 +	count = tc->tc_get_timecount(tc);
 +	return ((uint64_t) count);
@@ -223,7 +223,7 @@ Index: head/sys/kern/kern_tc.c
  }
  
  void
-@@ -1048,20 +1065,29 @@ tc_init(struct timecounter *tc)
+@@ -1049,20 +1066,29 @@ tc_init(struct timecounter *tc)
  			printf("Timecounter \"%s\" frequency %ju Hz",
  			    tc->tc_name, (uintmax_t)tc->tc_frequency);
  			printf(" -- Insufficient hz, needs at least %u\n", u);
@@ -255,8 +255,8 @@ Index: head/sys/kern/kern_tc.c
  	    "mask", CTLFLAG_RD, &(tc->tc_counter_mask), 0,
 Index: head/sys/sys/timetc.h
 ===================================================================
---- head.orig/sys/sys/timetc.h	2011-10-31 14:35:15.000000000 +1100
-+++ head/sys/sys/timetc.h	2011-10-31 14:36:22.000000000 +1100
+--- head.orig/sys/sys/timetc.h	2011-11-01 15:03:05.000000000 +1100
++++ head/sys/sys/timetc.h	2011-11-01 15:56:44.000000000 +1100
 @@ -1,18 +1,24 @@
  /*-
   * ----------------------------------------------------------------------------
@@ -313,8 +313,8 @@ Index: head/sys/sys/timetc.h
  void	tc_init(struct timecounter *tc);
 Index: head/sys/x86/x86/tsc.c
 ===================================================================
---- head.orig/sys/x86/x86/tsc.c	2011-10-31 14:35:15.000000000 +1100
-+++ head/sys/x86/x86/tsc.c	2011-10-31 14:35:44.000000000 +1100
+--- head.orig/sys/x86/x86/tsc.c	2011-11-01 15:03:05.000000000 +1100
++++ head/sys/x86/x86/tsc.c	2011-11-01 15:56:44.000000000 +1100
 @@ -1,14 +1,18 @@
  /*-
   * Copyright (C) 1998-2003 Poul-Henning Kamp

@@ -9,21 +9,21 @@ both kernel clocks are updated but only one serves time.
 Add similar wrappers for the feed-forward difference clock.
 
 ---
- sys/kern/kern_ffclock.c |  214 ++++++++++++++++++++++++++++++++
+ sys/kern/kern_ffclock.c |  215 ++++++++++++++++++++++++++++++++
  sys/kern/kern_tc.c      |  319 +++++++++++++++++++++++++++++++++++++++++++++++-
  sys/sys/timeffc.h       |   36 +++++
- 3 files changed, 567 insertions(+), 2 deletions(-)
+ 3 files changed, 568 insertions(+), 2 deletions(-)
 
 Index: head/sys/kern/kern_ffclock.c
 ===================================================================
---- head.orig/sys/kern/kern_ffclock.c	2011-10-31 18:24:28.000000000 +1100
-+++ head/sys/kern/kern_ffclock.c	2011-10-31 18:26:13.000000000 +1100
-@@ -24,20 +24,22 @@
-  * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
-  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+--- head.orig/sys/kern/kern_ffclock.c	2011-11-02 11:25:40.000000000 +1100
++++ head/sys/kern/kern_ffclock.c	2011-11-02 11:28:58.000000000 +1100
+@@ -26,20 +26,22 @@
   * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
   * SUCH DAMAGE.
   */
+ 
+ #include "opt_ffclock.h"
  
  #include <sys/cdefs.h>
  __FBSDID("$FreeBSD$");
@@ -34,15 +34,14 @@ Index: head/sys/kern/kern_ffclock.c
  #include <sys/systm.h>
  #include <sys/timeffc.h>
  
+ #ifdef FFCLOCK
+ 
  extern struct ffclock_estimate ffclock_estimate;
  extern struct bintime ffclock_boottime;
  
  /*
   * Feed-forward clock absolute time. This should be the preferred way to read
-  * the feed-forward clock for "wall-clock" type time. The flags allow to compose
-  * various flavours of absolute time (e.g. with or without leap seconds taken
-@@ -120,10 +122,222 @@ ffclock_difftime(ffcounter ffdelta, stru
- 		do {
+@@ -125,11 +127,224 @@ ffclock_difftime(ffcounter ffdelta, stru
  			update_ffcount = ffclock_estimate.update_ffcount;
  			err_rate = ffclock_estimate.errb_rate;
  		} while (update_ffcount != ffclock_estimate.update_ffcount);
@@ -52,6 +51,7 @@ Index: head/sys/kern/kern_ffclock.c
  		bintime_mul(error_bound, err_rate * (uint64_t)18446744073709LL);
  	}
  }
+ 
 +
 +/*
 + * Sysctl for the Feed-Forward Clock
@@ -264,10 +264,12 @@ Index: head/sys/kern/kern_ffclock.c
 +	ffclock_difftime(ffdelta, &bt, NULL);
 +	bintime2timeval(&bt, tvp);
 +}
++
+ #endif /* FFCLOCK */
 Index: head/sys/kern/kern_tc.c
 ===================================================================
---- head.orig/sys/kern/kern_tc.c	2011-10-31 18:24:28.000000000 +1100
-+++ head/sys/kern/kern_tc.c	2011-10-31 18:24:31.000000000 +1100
+--- head.orig/sys/kern/kern_tc.c	2011-11-02 11:22:44.000000000 +1100
++++ head/sys/kern/kern_tc.c	2011-11-02 11:25:54.000000000 +1100
 @@ -170,20 +170,158 @@ tc_delta(struct timehands *th)
  	return ((tc->tc_get_timecount(tc) - th->th_offset_count) &
  	    tc->tc_counter_mask);
@@ -284,7 +286,7 @@ Index: head/sys/kern/kern_tc.c
 +fbclock_binuptime(struct bintime *bt)
 +{
 +	struct timehands *th;
-+	u_int gen;
++	unsigned int gen;
 +
 +	do {
 +		th = timehands;
@@ -342,7 +344,7 @@ Index: head/sys/kern/kern_tc.c
 +fbclock_getbinuptime(struct bintime *bt)
 +{
 +	struct timehands *th;
-+	u_int gen;
++	unsigned int gen;
 +
 +	do {
 +		th = timehands;
@@ -355,7 +357,7 @@ Index: head/sys/kern/kern_tc.c
 +fbclock_getnanouptime(struct timespec *tsp)
 +{
 +	struct timehands *th;
-+	u_int gen;
++	unsigned int gen;
 +
 +	do {
 +		th = timehands;
@@ -368,7 +370,7 @@ Index: head/sys/kern/kern_tc.c
 +fbclock_getmicrouptime(struct timeval *tvp)
 +{
 +	struct timehands *th;
-+	u_int gen;
++	unsigned int gen;
 +
 +	do {
 +		th = timehands;
@@ -381,7 +383,7 @@ Index: head/sys/kern/kern_tc.c
 +fbclock_getbintime(struct bintime *bt)
 +{
 +	struct timehands *th;
-+	u_int gen;
++	unsigned int gen;
 +
 +	do {
 +		th = timehands;
@@ -395,7 +397,7 @@ Index: head/sys/kern/kern_tc.c
 +fbclock_getnanotime(struct timespec *tsp)
 +{
 +	struct timehands *th;
-+	u_int gen;
++	unsigned int gen;
 +
 +	do {
 +		th = timehands;
@@ -408,7 +410,7 @@ Index: head/sys/kern/kern_tc.c
 +fbclock_getmicrotime(struct timeval *tvp)
 +{
 +	struct timehands *th;
-+	u_int gen;
++	unsigned int gen;
 +
 +	do {
 +		th = timehands;
@@ -499,7 +501,7 @@ Index: head/sys/kern/kern_tc.c
  	struct fftimehands *next;
  };
  
-@@ -614,20 +787,59 @@ ffclock_change_tc(struct timehands *th)
+@@ -615,20 +788,59 @@ ffclock_change_tc(struct timehands *th)
  
  	/* Do not lock but ignore next update from synchronization daemon */
  	ffclock_updated--;
@@ -559,7 +561,7 @@ Index: head/sys/kern/kern_tc.c
  	uint8_t gen;
  
  	/*
-@@ -724,20 +936,104 @@ ffclock_read_counter(ffcounter *ffcount)
+@@ -725,20 +937,104 @@ ffclock_read_counter(ffcounter *ffcount)
  	do {
  		th = timehands;
  		gen = th->th_generation;
@@ -664,7 +666,7 @@ Index: head/sys/kern/kern_tc.c
  {
  	u_int u;
  	struct sysctl_oid *tc_root;
-@@ -964,31 +1260,49 @@ tc_windup(void)
+@@ -965,31 +1261,49 @@ tc_windup(void)
   	 *
  	 * We happily sacrifice the lowest of the 64 bits of our result
  	 * to the goddess of code clarity.
@@ -716,7 +718,7 @@ Index: head/sys/kern/kern_tc.c
  	char newname[32];
  	struct timecounter *newtc, *tc;
  	int error;
-@@ -1254,20 +1568,21 @@ inittimecounter(void *dummy)
+@@ -1255,20 +1569,21 @@ inittimecounter(void *dummy)
  	 */
  	if (hz > 1000)
  		tc_tick = (hz + 500) / 1000;
@@ -740,8 +742,8 @@ Index: head/sys/kern/kern_tc.c
  /* Cpu tick handling -------------------------------------------------*/
 Index: head/sys/sys/timeffc.h
 ===================================================================
---- head.orig/sys/sys/timeffc.h	2011-10-31 18:24:28.000000000 +1100
-+++ head/sys/sys/timeffc.h	2011-10-31 18:25:35.000000000 +1100
+--- head.orig/sys/sys/timeffc.h	2011-11-02 11:23:31.000000000 +1100
++++ head/sys/sys/timeffc.h	2011-11-02 11:25:54.000000000 +1100
 @@ -49,20 +49,27 @@ struct ffclock_estimate {
  	uint32_t	errb_rate;	/* Bound on counter rate error [ps/s]. */
  	uint32_t	status;		/* Clock status. */
