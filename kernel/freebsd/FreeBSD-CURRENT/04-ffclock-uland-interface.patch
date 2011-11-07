@@ -6,20 +6,20 @@ ffclock_getestimate(): returns current ffclock estimates to userland.
 ffclock_setestimate(): update the kernel ffclock estimate from userland.
 
 ---
- lib/libc/sys/Makefile.inc            |    4 -
+ lib/libc/sys/Makefile.inc            |    4 
  lib/libc/sys/Symbol.map              |    3 
- lib/libc/sys/ffclock.2               |  126 +++++++++++++++++++++++++++++++++++
- sys/compat/freebsd32/syscalls.master |    8 +-
- sys/kern/kern_ffclock.c              |  123 ++++++++++++++++++++++++++++++++++
+ lib/libc/sys/ffclock.2               |  171 +++++++++++++++++++++++++++++++++++
+ sys/compat/freebsd32/syscalls.master |    8 +
+ sys/kern/kern_ffclock.c              |  123 +++++++++++++++++++++++++
  sys/kern/makesyscalls.sh             |    1 
- sys/kern/syscalls.master             |    8 +-
- sys/sys/timeffc.h                    |    9 ++
- 8 files changed, 275 insertions(+), 7 deletions(-)
+ sys/kern/syscalls.master             |    8 +
+ sys/sys/timeffc.h                    |    9 +
+ 8 files changed, 320 insertions(+), 7 deletions(-)
 
 Index: head/lib/libc/sys/Makefile.inc
 ===================================================================
---- head.orig/lib/libc/sys/Makefile.inc	2011-11-02 15:50:30.000000000 +1100
-+++ head/lib/libc/sys/Makefile.inc	2011-11-02 16:31:10.000000000 +1100
+--- head.orig/lib/libc/sys/Makefile.inc	2011-11-07 11:54:23.000000000 +1100
++++ head/lib/libc/sys/Makefile.inc	2011-11-07 11:54:34.000000000 +1100
 @@ -73,21 +73,21 @@ ${SPSEUDO}:
  	printf '#include "SYS.h"\nPSEUDO(${.PREFIX:S/_//})\n' \
  	    >> ${.TARGET}
@@ -68,8 +68,8 @@ Index: head/lib/libc/sys/Makefile.inc
  MLINKS+=getpid.2 getppid.2
 Index: head/lib/libc/sys/Symbol.map
 ===================================================================
---- head.orig/lib/libc/sys/Symbol.map	2011-11-02 15:50:30.000000000 +1100
-+++ head/lib/libc/sys/Symbol.map	2011-11-02 16:31:10.000000000 +1100
+--- head.orig/lib/libc/sys/Symbol.map	2011-11-07 11:54:23.000000000 +1100
++++ head/lib/libc/sys/Symbol.map	2011-11-07 11:54:34.000000000 +1100
 @@ -358,20 +358,23 @@ FBSD_1.1 {
  	shmctl;
  	symlinkat;
@@ -97,8 +97,8 @@ Index: head/lib/libc/sys/Symbol.map
 Index: head/lib/libc/sys/ffclock.2
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ head/lib/libc/sys/ffclock.2	2011-11-02 16:31:10.000000000 +1100
-@@ -0,0 +1,126 @@
++++ head/lib/libc/sys/ffclock.2	2011-11-07 13:31:00.000000000 +1100
+@@ -0,0 +1,171 @@
 +.\" Copyright (C) 2011 The University of Melbourne
 +.\" All rights reserved.
 +.\"
@@ -147,6 +147,21 @@ Index: head/lib/libc/sys/ffclock.2
 +.Ft int
 +.Fn ffclock_setestimate "struct ffclock_estimate *cest"
 +.Sh DESCRIPTION
++The ffclock is an alternative method to synchronise the system clock.
++The ffclock implements a feed-forward paradigm and decouples the timestamping
++and timekeeping kernel functions.
++This ensures that past clock errors do not affect current timekeeping, an
++approach radically different from the feedback alternative implemented by the
++ntpd daemon when adjusting the system clock.
++The feed-forward approach has demonstrated better performance and higher
++robustness than a feedback approach when synchronising over the network.
++.Pp
++In the feed-forward context, a
++.Em timestamp
++is a cumulative value of the ticks of the timecounter, which can be converted
++into seconds by using the feed-forward
++.Em clock estimates.
++.Pp
 +The
 +.Fn ffclock_getcounter
 +system call allows the calling process to retrieve the current value of the
@@ -164,8 +179,20 @@ Index: head/lib/libc/sys/ffclock.2
 +synchronisation daemon.
 +The
 +.Fn ffclock_getestimate
-+system call can be used by any process although they may be of limited
-+interest (see USAGE below).
++system call can be called by any process to retrieve the feed-forward clock
++estimates.
++.Pp
++The feed-forward approach does not require to retrieve the clock
++estimates every time a timestamp is to be converted into seconds.
++The number of system calls can then be greatly reduced if the calling
++process retrieves the clock estimates from the clock synchronisation daemon
++instead.
++The
++.Fn ffclock_getestimate
++must be used when the feed-forward synchronisation daemon is not running
++.Po see
++USAGE below
++.Pc .
 +.Pp
 +The clock parameters estimates structure pointed to by
 +.Fa cest
@@ -204,31 +231,49 @@ Index: head/lib/libc/sys/ffclock.2
 +parameters.
 +.El
 +.Sh USAGE
-+The feed-forward paradigm decouples the timestamping and timekeeping functions,
-+which enables the definition of specialised clock functions.
-+Different methods exist to access timestamps in seconds (the feed-forward
-+counter timestamp converted using the feed-forward clock parameters).
-+One method is to select the feed-forward clock as the active system clock and
-+use the
-+.Xr clock_gettime 2
-+system call.
++The feed-forward paradigm enables the definition of specialised clock functions.
 +.Pp
-+Another method is to retrieve the feed-forward counter timestamp from the kernel
-+and use the feed-forward clock parameters maintained by the synchronisation
-+daemon to convert the timestamps into seconds, and collect upper bounds on
-+current clock error.
++In its simplest form,
++.Fn ffclock_getcounter
++can be used to establish strict order between events or to measure small time
++intervals very accurately with a minimum performance cost.
++.Pp
++Different methods exist to access absolute time
++.Po or
++.Qq wall-clock time
++.Pc tracked by the ffclock.
++The simplest method uses the ffclock sysctl interface
++.Va kern.ffclock
++to make the system clock return the ffclock time.
++The
++.Xr clock_gettime 2
++system call can then be used to retrieve the current time seen by the
++feed-forward clock.
++Note that this setting affects the entire system and that a feed-forward
++synchronisation daemon should be running.
++.Pp
++A less automated method consists in retrieving the feed-forward counter
++timestamp from the kernel and use the feed-forward clock parameters maintained
++to convert the timestamps into seconds.
++The feed-forward clock parameters can be retrieved from the kernel or from the
++synchronisation daemon directly (preferred).
++This method allows converting timestamps using different clock models as needed
++by the application, while collecting meaningful upper bounds on current clock
++error.
 +.Sh SEE ALSO
 +.Xr date 1 ,
 +.Xr adjtime 2 ,
 +.Xr clock_gettime 2,
 +.Xr ctime 3
++.Xr radclock 8
 +.Sh AUTHORS
-+The feed-forward clock support was written by Julien Ridoux in collaboration
-+with Darryl Veitch under sponsorship from the FreeBSD Foundation.
++The feed-forward clock support was written by Julien Ridoux at the University
++of Melbourne in collaboration with Darryl Veitch and under sponsorship from
++the FreeBSD Foundation.
 Index: head/sys/compat/freebsd32/syscalls.master
 ===================================================================
---- head.orig/sys/compat/freebsd32/syscalls.master	2011-11-02 15:50:30.000000000 +1100
-+++ head/sys/compat/freebsd32/syscalls.master	2011-11-02 16:31:10.000000000 +1100
+--- head.orig/sys/compat/freebsd32/syscalls.master	2011-11-07 11:54:23.000000000 +1100
++++ head/sys/compat/freebsd32/syscalls.master	2011-11-07 11:54:34.000000000 +1100
 @@ -440,23 +440,25 @@
  234	AUE_NULL	STD	{ int freebsd32_clock_getres(clockid_t clock_id, \
  				    struct timespec32 *tp); }
@@ -260,8 +305,8 @@ Index: head/sys/compat/freebsd32/syscalls.master
  251	AUE_RFORK	NOPROTO	{ int rfork(int flags); }
 Index: head/sys/kern/kern_ffclock.c
 ===================================================================
---- head.orig/sys/kern/kern_ffclock.c	2011-11-02 16:30:56.000000000 +1100
-+++ head/sys/kern/kern_ffclock.c	2011-11-02 16:31:48.000000000 +1100
+--- head.orig/sys/kern/kern_ffclock.c	2011-11-07 11:54:32.000000000 +1100
++++ head/sys/kern/kern_ffclock.c	2011-11-07 11:54:34.000000000 +1100
 @@ -26,29 +26,40 @@
   * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
   * SUCH DAMAGE.
@@ -450,8 +495,8 @@ Index: head/sys/kern/kern_ffclock.c
  #endif /* FFCLOCK */
 Index: head/sys/kern/makesyscalls.sh
 ===================================================================
---- head.orig/sys/kern/makesyscalls.sh	2011-11-02 15:50:30.000000000 +1100
-+++ head/sys/kern/makesyscalls.sh	2011-11-02 16:31:10.000000000 +1100
+--- head.orig/sys/kern/makesyscalls.sh	2011-11-07 11:54:23.000000000 +1100
++++ head/sys/kern/makesyscalls.sh	2011-11-07 11:54:34.000000000 +1100
 @@ -145,20 +145,21 @@ s/\$//g
  
  		printf "\n/* The casts are bogus but will do for now. */\n" > sysent
@@ -476,8 +521,8 @@ Index: head/sys/kern/makesyscalls.sh
  		printf "#define\tPADR_(t)\tPAD_(t)\n" > sysarg
 Index: head/sys/kern/syscalls.master
 ===================================================================
---- head.orig/sys/kern/syscalls.master	2011-11-02 15:50:30.000000000 +1100
-+++ head/sys/kern/syscalls.master	2011-11-02 16:31:10.000000000 +1100
+--- head.orig/sys/kern/syscalls.master	2011-11-07 11:54:23.000000000 +1100
++++ head/sys/kern/syscalls.master	2011-11-07 11:54:34.000000000 +1100
 @@ -449,23 +449,25 @@
  				    struct sigevent *evp, int *timerid); }
  236	AUE_NULL	STD	{ int ktimer_delete(int timerid); }
@@ -509,8 +554,8 @@ Index: head/sys/kern/syscalls.master
  251	AUE_RFORK	STD	{ int rfork(int flags); }
 Index: head/sys/sys/timeffc.h
 ===================================================================
---- head.orig/sys/sys/timeffc.h	2011-11-02 16:30:56.000000000 +1100
-+++ head/sys/sys/timeffc.h	2011-11-02 16:31:10.000000000 +1100
+--- head.orig/sys/sys/timeffc.h	2011-11-07 11:54:32.000000000 +1100
++++ head/sys/sys/timeffc.h	2011-11-07 11:54:34.000000000 +1100
 @@ -157,13 +157,22 @@ void ffclock_getnanouptime(struct timesp
  void ffclock_getmicrouptime(struct timeval *tvp);
  
