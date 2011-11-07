@@ -13,8 +13,8 @@ example with or without leap seconds, monotonic or not, etc.
 
 Index: head/sys/conf/files
 ===================================================================
---- head.orig/sys/conf/files	2011-11-07 14:34:04.000000000 +1100
-+++ head/sys/conf/files	2011-11-07 14:45:26.000000000 +1100
+--- head.orig/sys/conf/files	2011-11-07 17:37:03.000000000 +1100
++++ head/sys/conf/files	2011-11-07 17:37:16.000000000 +1100
 @@ -2303,20 +2303,21 @@ kern/kern_cpu.c			standard
  kern/kern_cpuset.c		standard
  kern/kern_context.c		standard
@@ -40,7 +40,7 @@ Index: head/sys/conf/files
 Index: head/sys/kern/kern_ffclock.c
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ head/sys/kern/kern_ffclock.c	2011-11-07 14:45:26.000000000 +1100
++++ head/sys/kern/kern_ffclock.c	2011-11-07 17:38:05.000000000 +1100
 @@ -0,0 +1,135 @@
 +/*-
 + * Copyright (C) 2011 The University of Melbourne
@@ -71,10 +71,10 @@ Index: head/sys/kern/kern_ffclock.c
 + * SUCH DAMAGE.
 + */
 +
-+#include "opt_ffclock.h"
-+
 +#include <sys/cdefs.h>
 +__FBSDID("$FreeBSD$");
++
++#include "opt_ffclock.h"
 +
 +#include <sys/param.h>
 +#include <sys/systm.h>
@@ -179,8 +179,8 @@ Index: head/sys/kern/kern_ffclock.c
 +#endif /* FFCLOCK */
 Index: head/sys/sys/timeffc.h
 ===================================================================
---- head.orig/sys/sys/timeffc.h	2011-11-07 14:45:16.000000000 +1100
-+++ head/sys/sys/timeffc.h	2011-11-07 14:45:26.000000000 +1100
+--- head.orig/sys/sys/timeffc.h	2011-11-07 17:37:15.000000000 +1100
++++ head/sys/sys/timeffc.h	2011-11-07 17:44:16.000000000 +1100
 @@ -64,21 +64,21 @@ struct ffclock_estimate {
   * Feed-forward clock status
   */
@@ -226,9 +226,9 @@ Index: head/sys/sys/timeffc.h
 + * ffclock_abstime(): retrieves current time as counter value and convert this
 + *     timestamp in seconds. The value (in seconds) of the converted timestamp
 + *     depends on the flags passed: for a given counter value, different
-+ *     conversions corresponding to different clocks are possible (for example
-+ *     with  (FFCLOCK_LERP|FFCLOCK_UPTIME) flags).
-+ *     are possible.
++ *     conversions are possible. Different clock models can be selected by
++ *     combining flags (for example (FFCLOCK_LERP|FFCLOCK_UPTIME) produces
++ *     linearly interpolated uptime).
 + * ffclock_difftime(): computes a time interval in seconds based on an interval
 + *     measured in ffcounter units. This should be the preferred way to measure
 + *     small time intervals very accurately.

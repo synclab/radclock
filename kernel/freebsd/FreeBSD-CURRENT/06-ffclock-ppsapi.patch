@@ -11,8 +11,8 @@ Add IOCTL to retrieve ffclock timestamps from userland.
 
 Index: head/sys/kern/kern_tc.c
 ===================================================================
---- head.orig/sys/kern/kern_tc.c	2011-11-01 15:36:11.000000000 +1100
-+++ head/sys/kern/kern_tc.c	2011-11-01 15:56:30.000000000 +1100
+--- head.orig/sys/kern/kern_tc.c	2011-11-07 17:44:35.000000000 +1100
++++ head/sys/kern/kern_tc.c	2011-11-07 17:47:34.000000000 +1100
 @@ -1358,53 +1358,86 @@ SYSCTL_PROC(_kern_timecounter, OID_AUTO,
  
  /*
@@ -221,8 +221,8 @@ Index: head/sys/kern/kern_tc.c
  		tcount = pps->capcount - pps->ppscount[2];
 Index: head/sys/sys/timepps.h
 ===================================================================
---- head.orig/sys/sys/timepps.h	2011-11-01 15:03:05.000000000 +1100
-+++ head/sys/sys/timepps.h	2011-11-01 15:56:30.000000000 +1100
+--- head.orig/sys/sys/timepps.h	2011-11-07 17:37:03.000000000 +1100
++++ head/sys/sys/timepps.h	2011-11-07 17:48:08.000000000 +1100
 @@ -1,33 +1,40 @@
  /*-
   * ----------------------------------------------------------------------------
@@ -323,7 +323,7 @@ Index: head/sys/sys/timepps.h
  };
  
 +struct pps_fetch_ffc_args {
-+	int tsformat;
++	int		tsformat;
 +	pps_info_ffc_t	pps_info_buf_ffc;
 +	struct timespec	timeout;
 +};

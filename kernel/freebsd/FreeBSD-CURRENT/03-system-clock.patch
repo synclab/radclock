@@ -9,24 +9,24 @@ both kernel clocks are updated but only one serves time.
 Add similar wrappers for the feed-forward difference clock.
 
 ---
- sys/kern/kern_ffclock.c |  215 ++++++++++++++++++++++++++++++++
+ sys/kern/kern_ffclock.c |  216 ++++++++++++++++++++++++++++++++
  sys/kern/kern_tc.c      |  319 +++++++++++++++++++++++++++++++++++++++++++++++-
  sys/sys/timeffc.h       |   36 +++++
- 3 files changed, 568 insertions(+), 2 deletions(-)
+ 3 files changed, 569 insertions(+), 2 deletions(-)
 
 Index: head/sys/kern/kern_ffclock.c
 ===================================================================
---- head.orig/sys/kern/kern_ffclock.c	2011-11-02 11:25:40.000000000 +1100
-+++ head/sys/kern/kern_ffclock.c	2011-11-02 11:28:58.000000000 +1100
+--- head.orig/sys/kern/kern_ffclock.c	2011-11-07 17:38:05.000000000 +1100
++++ head/sys/kern/kern_ffclock.c	2011-11-07 17:46:20.000000000 +1100
 @@ -26,20 +26,22 @@
   * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
   * SUCH DAMAGE.
   */
  
- #include "opt_ffclock.h"
- 
  #include <sys/cdefs.h>
  __FBSDID("$FreeBSD$");
+ 
+ #include "opt_ffclock.h"
  
  #include <sys/param.h>
 +#include <sys/sbuf.h>
@@ -41,7 +41,7 @@ Index: head/sys/kern/kern_ffclock.c
  
  /*
   * Feed-forward clock absolute time. This should be the preferred way to read
-@@ -125,11 +127,224 @@ ffclock_difftime(ffcounter ffdelta, stru
+@@ -125,11 +127,225 @@ ffclock_difftime(ffcounter ffdelta, stru
  			update_ffcount = ffclock_estimate.update_ffcount;
  			err_rate = ffclock_estimate.errb_rate;
  		} while (update_ffcount != ffclock_estimate.update_ffcount);
@@ -78,7 +78,7 @@ Index: head/sys/kern/kern_ffclock.c
 +	struct sbuf *s;
 +	int clk, error;
 +
-+	s = sbuf_new_for_sysctl(NULL, NULL, 16*NUM_SYSCLOCKS, req);
++	s = sbuf_new_for_sysctl(NULL, NULL, 16 * NUM_SYSCLOCKS, req);
 +	if (s == NULL)
 +		return (ENOMEM);
 +
@@ -89,6 +89,7 @@ Index: head/sys/kern/kern_ffclock.c
 +	}
 +	error = sbuf_finish(s);
 +	sbuf_delete(s);
++
 +	return (error);
 +}
 +
@@ -268,8 +269,8 @@ Index: head/sys/kern/kern_ffclock.c
  #endif /* FFCLOCK */
 Index: head/sys/kern/kern_tc.c
 ===================================================================
---- head.orig/sys/kern/kern_tc.c	2011-11-02 11:22:44.000000000 +1100
-+++ head/sys/kern/kern_tc.c	2011-11-02 11:25:54.000000000 +1100
+--- head.orig/sys/kern/kern_tc.c	2011-11-07 17:37:15.000000000 +1100
++++ head/sys/kern/kern_tc.c	2011-11-07 17:44:35.000000000 +1100
 @@ -170,20 +170,158 @@ tc_delta(struct timehands *th)
  	return ((tc->tc_get_timecount(tc) - th->th_offset_count) &
  	    tc->tc_counter_mask);
@@ -742,8 +743,8 @@ Index: head/sys/kern/kern_tc.c
  /* Cpu tick handling -------------------------------------------------*/
 Index: head/sys/sys/timeffc.h
 ===================================================================
---- head.orig/sys/sys/timeffc.h	2011-11-02 11:23:31.000000000 +1100
-+++ head/sys/sys/timeffc.h	2011-11-02 11:25:54.000000000 +1100
+--- head.orig/sys/sys/timeffc.h	2011-11-07 17:44:16.000000000 +1100
++++ head/sys/sys/timeffc.h	2011-11-07 17:44:35.000000000 +1100
 @@ -49,20 +49,27 @@ struct ffclock_estimate {
  	uint32_t	errb_rate;	/* Bound on counter rate error [ps/s]. */
  	uint32_t	status;		/* Clock status. */
@@ -773,7 +774,7 @@ Index: head/sys/sys/timeffc.h
  #define	FFCLOCK_STA_WARMUP	2
  
 @@ -121,13 +128,42 @@ void ffclock_convert_diff(ffcounter ffde
-  *     are possible.
+  *     linearly interpolated uptime).
   * ffclock_difftime(): computes a time interval in seconds based on an interval
   *     measured in ffcounter units. This should be the preferred way to measure
   *     small time intervals very accurately.
