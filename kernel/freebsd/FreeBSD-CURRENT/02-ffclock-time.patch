@@ -13,9 +13,9 @@ example with or without leap seconds, monotonic or not, etc.
 
 Index: head/sys/conf/files
 ===================================================================
---- head.orig/sys/conf/files	2011-11-02 15:50:31.000000000 +1100
-+++ head/sys/conf/files	2011-11-02 16:30:13.000000000 +1100
-@@ -2301,20 +2301,21 @@ kern/kern_cpu.c			standard
+--- head.orig/sys/conf/files	2011-11-07 14:34:04.000000000 +1100
++++ head/sys/conf/files	2011-11-07 14:45:26.000000000 +1100
+@@ -2303,20 +2303,21 @@ kern/kern_cpu.c			standard
  kern/kern_cpuset.c		standard
  kern/kern_context.c		standard
  kern/kern_descrip.c		standard
@@ -40,7 +40,7 @@ Index: head/sys/conf/files
 Index: head/sys/kern/kern_ffclock.c
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ head/sys/kern/kern_ffclock.c	2011-11-02 16:30:13.000000000 +1100
++++ head/sys/kern/kern_ffclock.c	2011-11-07 14:45:26.000000000 +1100
 @@ -0,0 +1,135 @@
 +/*-
 + * Copyright (C) 2011 The University of Melbourne
@@ -179,8 +179,8 @@ Index: head/sys/kern/kern_ffclock.c
 +#endif /* FFCLOCK */
 Index: head/sys/sys/timeffc.h
 ===================================================================
---- head.orig/sys/sys/timeffc.h	2011-11-02 16:30:07.000000000 +1100
-+++ head/sys/sys/timeffc.h	2011-11-02 16:30:13.000000000 +1100
+--- head.orig/sys/sys/timeffc.h	2011-11-07 14:45:16.000000000 +1100
++++ head/sys/sys/timeffc.h	2011-11-07 14:45:26.000000000 +1100
 @@ -64,21 +64,21 @@ struct ffclock_estimate {
   * Feed-forward clock status
   */

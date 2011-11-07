@@ -18,8 +18,8 @@ ffclock_setestimate(): update the kernel ffclock estimate from userland.
 
 Index: head/lib/libc/sys/Makefile.inc
 ===================================================================
---- head.orig/lib/libc/sys/Makefile.inc	2011-11-07 11:54:23.000000000 +1100
-+++ head/lib/libc/sys/Makefile.inc	2011-11-07 11:54:34.000000000 +1100
+--- head.orig/lib/libc/sys/Makefile.inc	2011-11-07 14:34:03.000000000 +1100
++++ head/lib/libc/sys/Makefile.inc	2011-11-07 14:45:34.000000000 +1100
 @@ -73,21 +73,21 @@ ${SPSEUDO}:
  	printf '#include "SYS.h"\nPSEUDO(${.PREFIX:S/_//})\n' \
  	    >> ${.TARGET}
@@ -43,7 +43,7 @@ Index: head/lib/libc/sys/Makefile.inc
  	kldunload.2 kqueue.2 ktrace.2 link.2 lio_listio.2 listen.2 \
  	lseek.2 \
  	madvise.2 mincore.2 minherit.2 mkdir.2 mkfifo.2 mknod.2 mlock.2 \
-@@ -134,20 +134,22 @@ MLINKS+=extattr_get_file.2 extattr.2 \
+@@ -135,20 +135,22 @@ MLINKS+=extattr_get_file.2 extattr.2 \
  	extattr_get_file.2 extattr_delete_file.2 \
  	extattr_get_file.2 extattr_delete_list.2 \
  	extattr_get_file.2 extattr_get_fd.2 \
@@ -68,8 +68,8 @@ Index: head/lib/libc/sys/Makefile.inc
  MLINKS+=getpid.2 getppid.2
 Index: head/lib/libc/sys/Symbol.map
 ===================================================================
---- head.orig/lib/libc/sys/Symbol.map	2011-11-07 11:54:23.000000000 +1100
-+++ head/lib/libc/sys/Symbol.map	2011-11-07 11:54:34.000000000 +1100
+--- head.orig/lib/libc/sys/Symbol.map	2011-11-07 14:34:03.000000000 +1100
++++ head/lib/libc/sys/Symbol.map	2011-11-07 14:45:34.000000000 +1100
 @@ -358,20 +358,23 @@ FBSD_1.1 {
  	shmctl;
  	symlinkat;
@@ -97,7 +97,7 @@ Index: head/lib/libc/sys/Symbol.map
 Index: head/lib/libc/sys/ffclock.2
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ head/lib/libc/sys/ffclock.2	2011-11-07 13:31:00.000000000 +1100
++++ head/lib/libc/sys/ffclock.2	2011-11-07 14:45:34.000000000 +1100
 @@ -0,0 +1,171 @@
 +.\" Copyright (C) 2011 The University of Melbourne
 +.\" All rights reserved.
@@ -272,8 +272,8 @@ Index: head/lib/libc/sys/ffclock.2
 +the FreeBSD Foundation.
 Index: head/sys/compat/freebsd32/syscalls.master
 ===================================================================
---- head.orig/sys/compat/freebsd32/syscalls.master	2011-11-07 11:54:23.000000000 +1100
-+++ head/sys/compat/freebsd32/syscalls.master	2011-11-07 11:54:34.000000000 +1100
+--- head.orig/sys/compat/freebsd32/syscalls.master	2011-11-07 14:36:20.000000000 +1100
++++ head/sys/compat/freebsd32/syscalls.master	2011-11-07 14:45:34.000000000 +1100
 @@ -440,23 +440,25 @@
  234	AUE_NULL	STD	{ int freebsd32_clock_getres(clockid_t clock_id, \
  				    struct timespec32 *tp); }
@@ -305,8 +305,8 @@ Index: head/sys/compat/freebsd32/syscalls.master
  251	AUE_RFORK	NOPROTO	{ int rfork(int flags); }
 Index: head/sys/kern/kern_ffclock.c
 ===================================================================
---- head.orig/sys/kern/kern_ffclock.c	2011-11-07 11:54:32.000000000 +1100
-+++ head/sys/kern/kern_ffclock.c	2011-11-07 11:54:34.000000000 +1100
+--- head.orig/sys/kern/kern_ffclock.c	2011-11-07 14:45:32.000000000 +1100
++++ head/sys/kern/kern_ffclock.c	2011-11-07 14:45:34.000000000 +1100
 @@ -26,29 +26,40 @@
   * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
   * SUCH DAMAGE.
@@ -495,8 +495,8 @@ Index: head/sys/kern/kern_ffclock.c
  #endif /* FFCLOCK */
 Index: head/sys/kern/makesyscalls.sh
 ===================================================================
---- head.orig/sys/kern/makesyscalls.sh	2011-11-07 11:54:23.000000000 +1100
-+++ head/sys/kern/makesyscalls.sh	2011-11-07 11:54:34.000000000 +1100
+--- head.orig/sys/kern/makesyscalls.sh	2011-11-07 14:32:59.000000000 +1100
++++ head/sys/kern/makesyscalls.sh	2011-11-07 14:45:34.000000000 +1100
 @@ -145,20 +145,21 @@ s/\$//g
  
  		printf "\n/* The casts are bogus but will do for now. */\n" > sysent
@@ -521,8 +521,8 @@ Index: head/sys/kern/makesyscalls.sh
  		printf "#define\tPADR_(t)\tPAD_(t)\n" > sysarg
 Index: head/sys/kern/syscalls.master
 ===================================================================
---- head.orig/sys/kern/syscalls.master	2011-11-07 11:54:23.000000000 +1100
-+++ head/sys/kern/syscalls.master	2011-11-07 11:54:34.000000000 +1100
+--- head.orig/sys/kern/syscalls.master	2011-11-07 14:36:10.000000000 +1100
++++ head/sys/kern/syscalls.master	2011-11-07 14:45:34.000000000 +1100
 @@ -449,23 +449,25 @@
  				    struct sigevent *evp, int *timerid); }
  236	AUE_NULL	STD	{ int ktimer_delete(int timerid); }
@@ -554,8 +554,8 @@ Index: head/sys/kern/syscalls.master
  251	AUE_RFORK	STD	{ int rfork(int flags); }
 Index: head/sys/sys/timeffc.h
 ===================================================================
---- head.orig/sys/sys/timeffc.h	2011-11-07 11:54:32.000000000 +1100
-+++ head/sys/sys/timeffc.h	2011-11-07 11:54:34.000000000 +1100
+--- head.orig/sys/sys/timeffc.h	2011-11-07 14:45:32.000000000 +1100
++++ head/sys/sys/timeffc.h	2011-11-07 14:45:34.000000000 +1100
 @@ -157,13 +157,22 @@ void ffclock_getnanouptime(struct timesp
  void ffclock_getmicrouptime(struct timeval *tvp);
  
