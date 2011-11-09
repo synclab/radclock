@@ -20,9 +20,9 @@ pick updates of ffclock estimates.
 
 Index: head/sys/conf/NOTES
 ===================================================================
---- head.orig/sys/conf/NOTES	2011-11-07 14:34:04.000000000 +1100
-+++ head/sys/conf/NOTES	2011-11-07 14:45:16.000000000 +1100
-@@ -1176,20 +1176,28 @@ options		PROCDESC
+--- head.orig/sys/conf/NOTES	2011-11-09 20:10:35.000000000 +1100
++++ head/sys/conf/NOTES	2011-11-09 20:14:09.000000000 +1100
+@@ -1179,20 +1179,28 @@ options		PROCDESC
  # actually reducing the accuracy of operation.
  
  options 	HZ=100
@@ -53,8 +53,8 @@ Index: head/sys/conf/NOTES
  # device configuration sections below.
 Index: head/sys/conf/options
 ===================================================================
---- head.orig/sys/conf/options	2011-11-07 14:34:04.000000000 +1100
-+++ head/sys/conf/options	2011-11-07 14:45:16.000000000 +1100
+--- head.orig/sys/conf/options	2011-11-09 20:10:35.000000000 +1100
++++ head/sys/conf/options	2011-11-09 20:14:09.000000000 +1100
 @@ -73,20 +73,21 @@ COMPAT_43	opt_compat.h
  COMPAT_43TTY	opt_compat.h
  COMPAT_FREEBSD4	opt_compat.h
@@ -79,8 +79,8 @@ Index: head/sys/conf/options
  GEOM_GATE	opt_geom.h
 Index: head/sys/kern/kern_tc.c
 ===================================================================
---- head.orig/sys/kern/kern_tc.c	2011-11-07 14:32:59.000000000 +1100
-+++ head/sys/kern/kern_tc.c	2011-11-07 14:45:16.000000000 +1100
+--- head.orig/sys/kern/kern_tc.c	2011-11-09 20:10:38.000000000 +1100
++++ head/sys/kern/kern_tc.c	2011-11-09 20:14:09.000000000 +1100
 @@ -1,29 +1,43 @@
  /*-
   * ----------------------------------------------------------------------------
@@ -640,8 +640,8 @@ Index: head/sys/kern/kern_tc.c
  
 Index: head/sys/kern/subr_rtc.c
 ===================================================================
---- head.orig/sys/kern/subr_rtc.c	2011-11-07 14:32:59.000000000 +1100
-+++ head/sys/kern/subr_rtc.c	2011-11-07 14:45:16.000000000 +1100
+--- head.orig/sys/kern/subr_rtc.c	2011-11-09 20:05:46.000000000 +1100
++++ head/sys/kern/subr_rtc.c	2011-11-09 20:14:09.000000000 +1100
 @@ -1,19 +1,24 @@
  /*-
   * Copyright (C) 1988 University of Utah.
@@ -732,7 +732,7 @@ Index: head/sys/kern/subr_rtc.c
 Index: head/sys/sys/_ffcounter.h
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ head/sys/sys/_ffcounter.h	2011-11-07 14:45:16.000000000 +1100
++++ head/sys/sys/_ffcounter.h	2011-11-09 20:14:09.000000000 +1100
 @@ -0,0 +1,42 @@
 +/*-
 + * Copyright (C) 2011 The University of Melbourne
@@ -779,7 +779,7 @@ Index: head/sys/sys/_ffcounter.h
 Index: head/sys/sys/timeffc.h
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ head/sys/sys/timeffc.h	2011-11-07 14:45:16.000000000 +1100
++++ head/sys/sys/timeffc.h	2011-11-09 20:14:09.000000000 +1100
 @@ -0,0 +1,110 @@
 +/*-
 + * Copyright (C) 2011 The University of Melbourne

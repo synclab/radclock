@@ -10,8 +10,8 @@ Allow to choose between feedback and feed-forward clock for timestamping.
 
 Index: head/sys/net/bpf.c
 ===================================================================
---- head.orig/sys/net/bpf.c	2011-11-01 15:03:05.000000000 +1100
-+++ head/sys/net/bpf.c	2011-11-01 15:46:41.000000000 +1100
+--- head.orig/sys/net/bpf.c	2011-11-09 20:10:38.000000000 +1100
++++ head/sys/net/bpf.c	2011-11-09 20:23:07.000000000 +1100
 @@ -1,19 +1,24 @@
  /*-
   * Copyright (C) 1990, 1991, 1993
@@ -166,7 +166,7 @@ Index: head/sys/net/bpf.c
  static int bpf_zerocopy_enable = 0;
  SYSCTL_INT(_net_bpf, OID_AUTO, zerocopy_enable, CTLFLAG_RW,
      &bpf_zerocopy_enable, 0, "Enable new zero-copy BPF buffer sessions");
- SYSCTL_NODE(_net_bpf, OID_AUTO, stats, CTLFLAG_MPSAFE | CTLFLAG_RW,
+ static SYSCTL_NODE(_net_bpf, OID_AUTO, stats, CTLFLAG_MPSAFE | CTLFLAG_RW,
      bpf_stats_sysctl, "bpf statistics portal");
 +#ifdef FFCLOCK
 +static int bpf_ffclock_tstamp = 0;
@@ -607,8 +607,8 @@ Index: head/sys/net/bpf.c
  copy:
 Index: head/sys/net/bpf.h
 ===================================================================
---- head.orig/sys/net/bpf.h	2011-11-01 15:03:05.000000000 +1100
-+++ head/sys/net/bpf.h	2011-11-01 15:39:53.000000000 +1100
+--- head.orig/sys/net/bpf.h	2011-11-09 20:05:46.000000000 +1100
++++ head/sys/net/bpf.h	2011-11-09 20:14:33.000000000 +1100
 @@ -1,19 +1,24 @@
  /*-
   * Copyright (C) 1990, 1991, 1993
