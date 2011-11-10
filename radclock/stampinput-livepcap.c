@@ -431,7 +431,7 @@ int get_address_by_name(char* addr, char* hostname)
  * (port number, remote host name, etc) 
  */
 // XXX TODO: should accept IP addresses only, and make it IPv6 friendly
-int build_BPFfilter( char *fltstr, int maxsize, char *hostname, char *ntp_host) 
+int build_BPFfilter(struct radclock *handle, char *fltstr, int maxsize, char *hostname, char *ntp_host)
 {
 	int strsize;
 	char ntp_filter[150];
@@ -448,8 +448,12 @@ int build_BPFfilter( char *fltstr, int maxsize, char *hostname, char *ntp_host)
 		sprintf(ntp_filter, "and dst host %s) or (src host %s and", ntp_host, ntp_host);
 	
 	strsize = snprintf(fltstr, maxsize, 
-			"(src host %s and dst port 123 %s dst host %s and src port 123)",
-			hostname, ntp_filter, hostname);
+			"(src host %s and dst port %d %s dst host %s and src port %d)",
+			hostname,
+                        handle->conf->ntp_downstream_port,
+                        ntp_filter,
+                        hostname,
+                        handle->conf->ntp_upstream_port);
 
 	return strsize;
 }
@@ -501,7 +505,7 @@ static pcap_t* open_live(struct radclock *handle, char *src_ipaddr)
 	/* Build the BPF filter string
 	 */
 	strcpy(fltstr, "");
-	strsize = build_BPFfilter(fltstr, MAXLINE, addr_if, handle->conf->time_server);  
+	strsize = build_BPFfilter(handle, fltstr, MAXLINE, addr_if, handle->conf->time_server);  
 	if ( (strsize < 0) || (strsize > MAXLINE-2) ) {     
 		verbose(LOG_ERR, "BPF filter string error (too long?)");
 		return NULL;
@@ -716,7 +720,10 @@ static int livepcapstamp_update_filter(struct radclock *handle, struct stampsour
 	struct bpf_program filter;       
 
 // TODO XXX: should pass IP addresses only to libpcap and not hostnames!
-	strsize = build_BPFfilter(fltstr, MAXLINE, handle->conf->hostname, handle->conf->time_server); 
+	strsize = build_BPFfilter(handle, fltstr, MAXLINE,
+                                  handle->conf->hostname,
+                                  handle->conf->time_server); 
+
 	if ( (strsize < 0) || (strsize > MAXLINE-2) ) {     
 		verbose(LOG_ERR, "BPF filter string error (too long?)");
 		goto err_out;

@@ -111,6 +111,8 @@ static void usage(void) {
 		"\t-a <filename> write sync output to file (ascii)\n"
 		"\t-o <filename> write clock data output to file (ascii)\n"
                 "\t-P <filename> write pid lockfile to file\n"
+                "\t-U <port_number> NTP upstream port\n"
+                "\t-D <port_number> NTP downstream port\n"
 		"\t-v -vv verbose\n"
 		"\t-h this help mesage\n"
 		);
@@ -608,7 +610,7 @@ int main(int argc, char *argv[])
 	param_mask = UPDMASK_NOUPD;
 
 	/* Reading the command line arguments */     
-	while ((ch = getopt(argc, argv, "dxvhLc:i:l:n:t:r:w:s:a:o:p:P:")) != -1)
+	while ((ch = getopt(argc, argv, "dxvhLc:i:l:n:t:r:w:s:a:o:p:P:U:D:")) != -1)
 		switch (ch) {
 			case 'x':
 				SET_UPDATE(param_mask, UPDMASK_SERVER_IPC);
@@ -719,6 +721,14 @@ int main(int argc, char *argv[])
 				SET_UPDATE(param_mask, UPDMASK_VERBOSE);
 				clock_handle->conf->verbose_level++;
 				break;
+                        case 'U':
+                                SET_UPDATE(param_mask, UPD_NTP_UPSTREAM_PORT);
+                                clock_handle->conf->ntp_upstream_port = atoi(optarg);
+                                break;
+                        case 'D':
+                                SET_UPDATE(param_mask, UPD_NTP_DOWNSTREAM_PORT);
+                                clock_handle->conf->ntp_downstream_port = atoi(optarg);
+                                break;
 			case 'h':
 			case '?':
 			default:

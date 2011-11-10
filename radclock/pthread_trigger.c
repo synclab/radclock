@@ -402,7 +402,8 @@ int ntp_init(struct radclock* clock_handle)
 
 	/* Build server infos */
 	CLIENT_DATA(clock_handle)->s_to.sin_family 	= PF_INET;
-	CLIENT_DATA(clock_handle)->s_to.sin_port 	= ntohs(NTP_PORT);
+	CLIENT_DATA(clock_handle)->s_to.sin_port 	=
+            ntohs(clock_handle->conf->ntp_upstream_port);
 	if( (he=gethostbyname(clock_handle->conf->time_server)) == NULL )
 	{
 		herror("gethostbyname");

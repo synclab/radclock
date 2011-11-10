@@ -45,6 +45,7 @@
 #include "pthread_mgr.h"
 #include "proto_ntp.h"
 #include "jdebug.h"
+#include "config_mgr.h"
 
 
 
@@ -147,8 +148,11 @@ void* thread_ntp_server(void *c_handle)
 	memset((char *) &sin_server, sizeof(struct sockaddr_in), 0);
 
 	sin_server.sin_family 		= AF_INET;
-	sin_server.sin_port 		= htons((long)123);
 	sin_server.sin_addr.s_addr 	= htonl(INADDR_ANY);
+
+        /* Listen for requests coming from downstream clients */
+	sin_server.sin_port =
+            htons((long)clock_handle->conf->ntp_downstream_port);
 
 	/* Set the receive timeout */
 	so_timeout.tv_sec 	= 1;

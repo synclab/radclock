@@ -32,6 +32,7 @@
 #include "sync_algo.h"
 #include "config_mgr.h"
 #include "jdebug.h"
+#include "proto_ntp.h"
 
 
 
@@ -144,6 +145,8 @@ void config_init(struct radclock_config *conf)
 	/* Network level  */
 	strcpy(conf->hostname, "");
 	strcpy(conf->time_server, "");
+        conf->ntp_upstream_port = DEFAULT_NTP_PORT;
+        conf->ntp_downstream_port = DEFAULT_NTP_PORT;
 	
 	/* Input/Output files and devices */ 
 	// Must be put to empty string not to confuse anything. Only one input must
@@ -1203,6 +1206,8 @@ void config_print(int level, struct radclock_config *conf)
 	verbose(level, "Client sync          : %s", labels_sync[conf->synchro_type]);
 	verbose(level, "Server IPC           : %s", labels_bool[conf->server_ipc]);
 	verbose(level, "Server NTP           : %s", labels_bool[conf->server_ntp]);
+	verbose(level, "Upstream NTP port    : %d", conf->ntp_upstream_port);
+	verbose(level, "Downstream NTP port  : %d", conf->ntp_downstream_port);
 	verbose(level, "Adjust system clock  : %s", labels_bool[conf->adjust_sysclock]);
 	verbose(level, "Virtual Machine mode : %s", labels_vm[conf->virtual_machine]);
 	verbose(level, "Polling period       : %d", conf->poll_period);
