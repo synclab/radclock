@@ -450,7 +450,7 @@ int build_BPFfilter(struct radclock *handle, char *fltstr, int maxsize, char *ho
 	strsize = snprintf(fltstr, maxsize, 
 			"(src host %s and dst port %d %s dst host %s and src port %d)",
 			hostname,
-                        handle->conf->ntp_downstream_port,
+                        handle->conf->ntp_upstream_port,
                         ntp_filter,
                         hostname,
                         handle->conf->ntp_upstream_port);
