@@ -45,6 +45,7 @@
 #include "pthread_mgr.h"
 #include "proto_ntp.h"
 #include "jdebug.h"
+#include "config_mgr.h"
 
 
 
@@ -143,12 +144,15 @@ void* thread_ntp_server(void *c_handle)
 	}
 
 	/* Init data structures */
-	memset((char *) &sin_client, sizeof(struct sockaddr_in), 0);
-	memset((char *) &sin_server, sizeof(struct sockaddr_in), 0);
+	memset((char *) &sin_client, 0, sizeof(struct sockaddr_in));
+	memset((char *) &sin_server, 0, sizeof(struct sockaddr_in));
 
 	sin_server.sin_family 		= AF_INET;
-	sin_server.sin_port 		= htons((long)123);
 	sin_server.sin_addr.s_addr 	= htonl(INADDR_ANY);
+
+        /* Listen for requests coming from downstream clients */
+	sin_server.sin_port =
+            htons((long)clock_handle->conf->ntp_downstream_port);
 
 	/* Set the receive timeout */
 	so_timeout.tv_sec 	= 1;
@@ -170,12 +174,12 @@ void* thread_ntp_server(void *c_handle)
 
 	while ( (clock_handle->pthread_flag_stop & PTH_NTP_SERV_STOP) != PTH_NTP_SERV_STOP )
 	{
-		memset((char *) &reftime, sizeof(struct timeval), 0);
-		memset((char *) &org, sizeof(struct timeval), 0);
-		memset((char *) &rec, sizeof(struct timeval), 0);
-		memset((char *) &xmt, sizeof(struct timeval), 0);
-		memset((char *) pkt_out, sizeof(struct ntp_pkt), 0);
-		memset((char *) &rdata, sizeof(struct radclock_data), 0);
+		memset((char *) &reftime, 0, sizeof(struct timeval));
+		memset((char *) &org, 0, sizeof(struct timeval));
+		memset((char *) &rec, 0, sizeof(struct timeval));
+		memset((char *) &xmt, 0, sizeof(struct timeval));
+		memset((char *) pkt_out, 0, sizeof(struct ntp_pkt));
+		memset((char *) &rdata, 0, sizeof(struct radclock_data));
 	
 		/* Receive the request 
 		 * Need a recvfrom() call, since we need to get client return address

@@ -165,6 +165,9 @@
 #define UPDMASK_SYNC_OUT_ASCII	0x020800
 #define UPDMASK_CLOCK_OUT_ASCII	0x040000
 #define UPDMASK_VIRTUAL_MACHINE	0x080000
+#define UPDMASK_PID_FILE	0x100000
+#define UPD_NTP_UPSTREAM_PORT	0x200000
+#define UPD_NTP_DOWNSTREAM_PORT	0x400000
 
 
 #define HAS_UPDATE(val,mask)	((val & mask) == mask)	
@@ -194,6 +197,8 @@ struct radclock_config {
 	double 	phat_init;					/* Initial value for phat */
 	double 	asym_host;					/* Host asymmetry estimate [sec] */
 	double	asym_net;					/* Network asymmetry estimate [sec] */ 
+        int     ntp_upstream_port;                      /* NTP Upstream port */
+        int     ntp_downstream_port;                    /* NTP Downstream port */
 	char 	hostname[MAXLINE]; 			/* Client hostname */
 	char 	time_server[MAXLINE]; 		/* Server name */
 	char 	network_device[MAXLINE];	/* physical device string, eg xl0, eth0 */ 

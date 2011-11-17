@@ -82,7 +82,7 @@ typedef struct {
  */
 #define	NTP_VERSION	((u_char)4) /* current version number */
 #define	NTP_OLDVERSION	((u_char)1) /* oldest credible version */
-#define	NTP_PORT	123	/* included for non-unix machines */
+#define	DEFAULT_NTP_PORT	123	/* included for non-unix machines */
 
 /*
  * Poll interval parameters
