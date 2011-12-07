@@ -110,10 +110,11 @@ static void usage(void) {
 		"\t-w <filename> write sync output to file (modified pcap format)\n"
 		"\t-a <filename> write sync output to file (ascii)\n"
 		"\t-o <filename> write clock data output to file (ascii)\n"
-                "\t-P <filename> write pid lockfile to file\n"
-                "\t-U <port_number> NTP upstream port\n"
-                "\t-D <port_number> NTP downstream port\n"
+		"\t-P <filename> write pid lockfile to file\n"
+		"\t-U <port_number> NTP upstream port\n"
+		"\t-D <port_number> NTP downstream port\n"
 		"\t-v -vv verbose\n"
+		"\t-V print version\n"
 		"\t-h this help mesage\n"
 		);
 	exit(EXIT_SUCCESS);
@@ -593,7 +594,7 @@ int main(int argc, char *argv[])
 
 	/* Initialise with unspect stratum */
 	SERVER_DATA(clock_handle)->stratum = STRATUM_UNSPEC;
-  
+
 	/*** Management of configuration options *****/
 	// The command line arguments are given the priority and override possible
 	// values of the configuration file
@@ -609,130 +610,131 @@ int main(int argc, char *argv[])
 	/* Init the mask we use to signal configuration updates */
 	param_mask = UPDMASK_NOUPD;
 
-	/* Reading the command line arguments */     
-	while ((ch = getopt(argc, argv, "dxvhLc:i:l:n:t:r:w:s:a:o:p:P:U:D:")) != -1)
+	/* Reading the command line arguments */
+	while ((ch = getopt(argc, argv, "dxvhLc:i:l:n:t:r:w:s:a:o:p:P:U:D:V")) != -1)
 		switch (ch) {
-			case 'x':
-				SET_UPDATE(param_mask, UPDMASK_SERVER_IPC);
-				clock_handle->conf->server_ipc = BOOL_OFF;
-				break;
-			case 'c':
-				strcpy(clock_handle->conf->conffile, optarg);
-				break;
-			case 'd':
-				clock_handle->is_daemon = 1;
-				break;
-			case 'l':
-				strcpy(clock_handle->conf->logfile, optarg);
-				break;
-			case 'L':
-				SET_UPDATE(param_mask, UPDMASK_PLOCAL);
-				clock_handle->conf->start_plocal = 0;
-				break;
-			case 'n':
-				if (strlen(optarg) > MAXLINE) {
-					fprintf(stdout, "ERROR: parameter too long\n");
-					exit (1);
-				}
-				SET_UPDATE(param_mask, UPDMASK_HOSTNAME);
-				strcpy(clock_handle->conf->hostname, optarg);
-				break;
-			case 'p':
-				SET_UPDATE(param_mask, UPDMASK_POLLPERIOD);
-				if ( atoi(optarg) < RAD_MINPOLL )
-				{
-					clock_handle->conf->poll_period = RAD_MINPOLL;
-					fprintf(stdout, "Warning: Poll period too small, set to %d\n",
-						   	clock_handle->conf->poll_period);
-				}
-				else
-					clock_handle->conf->poll_period = atoi(optarg);
-				if ( clock_handle->conf->poll_period > RAD_MAXPOLL )
-				{
-					clock_handle->conf->poll_period = RAD_MAXPOLL;
-					fprintf(stdout, "Warning: Poll period too big, set to %d\n",
-						   	clock_handle->conf->poll_period);
-				}
-				break;
-			case 't':
-				if (strlen(optarg) > MAXLINE) {
-					fprintf(stdout, "ERROR: parameter too long\n");
-					exit (1);
-				}
-				SET_UPDATE(param_mask, UPDMASK_TIME_SERVER);
-				strcpy(clock_handle->conf->time_server, optarg);
-				break;
-			case 'i':
-				if (strlen(optarg) > MAXLINE) {
-					fprintf(stdout, "ERROR: parameter too long\n");
-					exit (1);
-				}
-				SET_UPDATE(param_mask, UPDMASK_NETWORKDEV);
-				strcpy(clock_handle->conf->network_device, optarg);
-				break;
-			case 'r':
-				if (strlen(optarg) > MAXLINE) {
-					fprintf(stdout, "ERROR: parameter too long\n");
-					exit (1);
-				}
-				SET_UPDATE(param_mask, UPDMASK_SYNC_IN_PCAP);
-				strcpy(clock_handle->conf->sync_in_pcap, optarg);
-				break;
-			case 'w':
-				if (strlen(optarg) > MAXLINE) {
-					fprintf(stdout, "ERROR: parameter too long\n");
-					exit (1);
-				}
-				SET_UPDATE(param_mask, UPDMASK_SYNC_OUT_PCAP);
-				strcpy(clock_handle->conf->sync_out_pcap, optarg);
-				break;
-			case 's':
-				if (strlen(optarg) > MAXLINE) {
-					fprintf(stdout, "ERROR: parameter too long\n");
-					exit (1);
-				}
-				SET_UPDATE(param_mask, UPDMASK_SYNC_IN_ASCII);
-				strcpy(clock_handle->conf->sync_in_ascii, optarg);
-				break;             
-			case 'a':
-				if (strlen(optarg) > MAXLINE) {
-					fprintf(stdout, "ERROR: parameter too long\n");
-					exit (1);
-				}
-				SET_UPDATE(param_mask, UPDMASK_SYNC_OUT_ASCII);
-				strcpy(clock_handle->conf->sync_out_ascii, optarg);
-				break;
-			case 'o':
-				if (strlen(optarg) > MAXLINE) {
-					fprintf(stdout, "ERROR: parameter too long\n");
-					exit (1);
-				}
-				SET_UPDATE(param_mask, UPDMASK_CLOCK_OUT_ASCII);
-				strcpy(clock_handle->conf->clock_out_ascii, optarg);
-				break;
-                        case 'P':
-                                if (strlen(optarg) > MAXLINE) {
-					fprintf(stdout, "ERROR: parameter too long\n");
-					exit (1);
-                                }
-                                SET_UPDATE(param_mask, UPDMASK_PID_FILE);
-                                pid_lockfile = optarg;
-			case 'v':
-				SET_UPDATE(param_mask, UPDMASK_VERBOSE);
-				clock_handle->conf->verbose_level++;
-				break;
-                        case 'U':
-                                SET_UPDATE(param_mask, UPD_NTP_UPSTREAM_PORT);
-                                clock_handle->conf->ntp_upstream_port = atoi(optarg);
-                                break;
-                        case 'D':
-                                SET_UPDATE(param_mask, UPD_NTP_DOWNSTREAM_PORT);
-                                clock_handle->conf->ntp_downstream_port = atoi(optarg);
-                                break;
-			case 'h':
-			case '?':
-			default:
-				usage();
+		case 'x':
+			SET_UPDATE(param_mask, UPDMASK_SERVER_IPC);
+			clock_handle->conf->server_ipc = BOOL_OFF;
+			break;
+		case 'c':
+			strcpy(clock_handle->conf->conffile, optarg);
+			break;
+		case 'd':
+			clock_handle->is_daemon = 1;
+			break;
+		case 'l':
+			strcpy(clock_handle->conf->logfile, optarg);
+			break;
+		case 'L':
+			SET_UPDATE(param_mask, UPDMASK_PLOCAL);
+			clock_handle->conf->start_plocal = 0;
+			break;
+		case 'n':
+			if (strlen(optarg) > MAXLINE) {
+				fprintf(stdout, "ERROR: parameter too long\n");
+				exit (1);
+			}
+			SET_UPDATE(param_mask, UPDMASK_HOSTNAME);
+			strcpy(clock_handle->conf->hostname, optarg);
+			break;
+		case 'p':
+			SET_UPDATE(param_mask, UPDMASK_POLLPERIOD);
+			if ( atoi(optarg) < RAD_MINPOLL ) {
+				clock_handle->conf->poll_period = RAD_MINPOLL;
+				fprintf(stdout, "Warning: Poll period too small, set to %d\n",
+					clock_handle->conf->poll_period);
+			}
+			else
+				clock_handle->conf->poll_period = atoi(optarg);
+			if ( clock_handle->conf->poll_period > RAD_MAXPOLL ) {
+				clock_handle->conf->poll_period = RAD_MAXPOLL;
+				fprintf(stdout, "Warning: Poll period too big, set to %d\n",
+						clock_handle->conf->poll_period);
+			}
+			break;
+		case 't':
+			if (strlen(optarg) > MAXLINE) {
+				fprintf(stdout, "ERROR: parameter too long\n");
+				exit (1);
+			}
+			SET_UPDATE(param_mask, UPDMASK_TIME_SERVER);
+			strcpy(clock_handle->conf->time_server, optarg);
+			break;
+		case 'i':
+			if (strlen(optarg) > MAXLINE) {
+				fprintf(stdout, "ERROR: parameter too long\n");
+				exit (1);
+			}
+			SET_UPDATE(param_mask, UPDMASK_NETWORKDEV);
+			strcpy(clock_handle->conf->network_device, optarg);
+			break;
+		case 'r':
+			if (strlen(optarg) > MAXLINE) {
+				fprintf(stdout, "ERROR: parameter too long\n");
+				exit (1);
+			}
+			SET_UPDATE(param_mask, UPDMASK_SYNC_IN_PCAP);
+			strcpy(clock_handle->conf->sync_in_pcap, optarg);
+			break;
+		case 'w':
+			if (strlen(optarg) > MAXLINE) {
+				fprintf(stdout, "ERROR: parameter too long\n");
+				exit (1);
+			}
+			SET_UPDATE(param_mask, UPDMASK_SYNC_OUT_PCAP);
+			strcpy(clock_handle->conf->sync_out_pcap, optarg);
+			break;
+		case 's':
+			if (strlen(optarg) > MAXLINE) {
+				fprintf(stdout, "ERROR: parameter too long\n");
+				exit (1);
+			}
+			SET_UPDATE(param_mask, UPDMASK_SYNC_IN_ASCII);
+			strcpy(clock_handle->conf->sync_in_ascii, optarg);
+			break;
+		case 'a':
+			if (strlen(optarg) > MAXLINE) {
+				fprintf(stdout, "ERROR: parameter too long\n");
+				exit (1);
+			}
+			SET_UPDATE(param_mask, UPDMASK_SYNC_OUT_ASCII);
+			strcpy(clock_handle->conf->sync_out_ascii, optarg);
+			break;
+		case 'o':
+			if (strlen(optarg) > MAXLINE) {
+				fprintf(stdout, "ERROR: parameter too long\n");
+				exit (1);
+			}
+			SET_UPDATE(param_mask, UPDMASK_CLOCK_OUT_ASCII);
+			strcpy(clock_handle->conf->clock_out_ascii, optarg);
+			break;
+		case 'P':
+			if (strlen(optarg) > MAXLINE) {
+				fprintf(stdout, "ERROR: parameter too long\n");
+				exit (1);
+			}
+			SET_UPDATE(param_mask, UPDMASK_PID_FILE);
+			pid_lockfile = optarg;
+			break;
+		case 'v':
+			SET_UPDATE(param_mask, UPDMASK_VERBOSE);
+			clock_handle->conf->verbose_level++;
+			break;
+		case 'U':
+			SET_UPDATE(param_mask, UPD_NTP_UPSTREAM_PORT);
+			clock_handle->conf->ntp_upstream_port = atoi(optarg);
+			break;
+		case 'D':
+			SET_UPDATE(param_mask, UPD_NTP_DOWNSTREAM_PORT);
+			clock_handle->conf->ntp_downstream_port = atoi(optarg);
+			break;
+		case 'V':
+			fprintf(stdout, "%s version %s\n", PACKAGE_NAME, PACKAGE_VERSION);
+		case 'h':
+		case '?':
+		default:
+			usage();
 		}
 
 	argc -= optind;
