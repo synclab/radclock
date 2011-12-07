@@ -3,6 +3,14 @@
 ## 
 
 
+- Version 0.3.2
+	* December 2011
+	* Maintenance release
+	* Reduces penalty on internal server latency to handle busy NTP servers 
+	* Fix thread synchronisation to reduce NTP packet processing latency
+	* Add some command line switches for specialist users
+
+
 - Version 0.3.1
 	* March 2011
 	* Maintenance release
