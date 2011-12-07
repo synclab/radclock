@@ -77,34 +77,40 @@ int update_system_clock(struct radclock *clock_handle) { return 0; }
 
 
 /* Report back to back timestamps of RADclock and system clock */
-static inline void read_clocks(struct radclock *clock_handle, 
-		struct timeval *sys_tv, struct timeval *rad_tv, vcounter_t *rad_vc)
+static inline void
+read_clocks(struct radclock *clock_handle, struct timeval *sys_tv,
+	struct timeval *rad_tv, vcounter_t *counter)
 {
-	vcounter_t vc;
+	vcounter_t before;
+	vcounter_t after;
 	int i;
 
-	for (i=0; i<5; i++)
-	{
-		radclock_get_vcounter(clock_handle, &vc);
+	/*
+	 * Make up to 5 attempts to bracket a reading of the system clock. A system
+	 * call is in the order of 1-2 mus, here we have 3 of them. Pick up an
+	 * (arbitrary) bracket threshold: 5 mus.
+	 */
+	for (i=0; i<5; i++) {
+		radclock_get_vcounter(clock_handle, &before);
 		gettimeofday(sys_tv, NULL);
-		radclock_get_vcounter(clock_handle, rad_vc);
+		radclock_get_vcounter(clock_handle, &after);
 
-		/* A system call is in the order of 1-2 mus, here we have 3 of them plus a
-		 * reasonable safety bound ... 5 mus?
-		 */
-		if ( (*rad_vc - vc) < ( 5e-6 / RAD_DATA(clock_handle)->phat ) )
+		if ((after - before) < (5e-6 / RAD_DATA(clock_handle)->phat))
 			break;
 	}
-	verbose(VERB_DEBUG, "System clock read_clocks vc= %"VC_FMT" rad_vc= %"VC_FMT" delay= %.03f [mus]",
-			vc, *rad_vc, (*rad_vc - vc) * RAD_DATA(clock_handle)->phat * 1e6 );
+	verbose(VERB_DEBUG, "System clock read_clocks bracket: "
+		"%"VC_FMT" [cycles], %.03f [mus]",
+		(after - before),
+		(after - before) * RAD_DATA(clock_handle)->phat * 1e6 );
 
-	*rad_vc = (vcounter_t) ((vc + *rad_vc)/2);
-	radclock_vcount_to_abstime(clock_handle, rad_vc, rad_tv);
+	*counter = (vcounter_t) ((before + after)/2);
+	radclock_vcount_to_abstime(clock_handle, counter, rad_tv);
 }
 
 
 /* Subtract two timeval */
-void subtract_tv (struct timeval *delta, struct timeval tv1, struct timeval tv2)
+void
+subtract_tv(struct timeval *delta, struct timeval tv1, struct timeval tv2)
 {
 	int nsec;
 
@@ -131,7 +137,7 @@ void subtract_tv (struct timeval *delta, struct timeval tv1, struct timeval tv2)
  *	The code in here is in packets chronological order, could have made it
  *	prettier with a little state machine.
  */
-int update_system_clock(struct radclock *clock_handle)
+int update_system_clock(struct radclock *clock)
 {
 	vcounter_t vcount;
 	struct timeval rad_tv;
@@ -151,7 +157,7 @@ int update_system_clock(struct radclock *clock_handle)
 	/* At the very beginning, we are sending a few packets in burst. Let's be
 	 * patient to have a decent radclock data and simply mark initialisation.
 	 */
-	if ( ((struct bidir_output*)clock_handle->algo_output)->n_stamps < NTP_BURST )
+	if ( ((struct bidir_output*)clock->algo_output)->n_stamps < NTP_BURST )
 	{
 		sys_init = 0;
 		return 0;
@@ -161,9 +167,9 @@ int update_system_clock(struct radclock *clock_handle)
 	 * can break causality but not worst than using ntpdate or equivalent (and
 	 * we do that only once).
 	 */
-	if ( ((struct bidir_output*)clock_handle->algo_output)->n_stamps == NTP_BURST )
+	if ( ((struct bidir_output*)clock->algo_output)->n_stamps == NTP_BURST )
 	{
-		radclock_gettimeofday(clock_handle, &rad_tv);
+		radclock_gettimeofday(clock, &rad_tv);
 		err = settimeofday(&rad_tv, NULL);
 		if ( err < 0 )
 			verbose(LOG_WARNING, "System clock update failed on settimeofday()");
@@ -187,7 +193,7 @@ int update_system_clock(struct radclock *clock_handle)
 		/* Use legacy adjtime to bring system clock as close as possible but
 		 * with respecting causality and a monotonic clock.  
 		 */
-		read_clocks(clock_handle, &sys_tv, &rad_tv, &vcount); 
+		read_clocks(clock, &sys_tv, &rad_tv, &vcount); 
 		subtract_tv(&delta_tv, rad_tv, sys_tv);
 		offset = delta_tv.tv_sec + (double)delta_tv.tv_usec / 1e6;
 
@@ -216,10 +222,10 @@ int update_system_clock(struct radclock *clock_handle)
 		 * mentioned in ntpd code, it is equivalent to removing any corrupted
 		 * drift file.
 		 */
-		if ( RAD_DATA(clock_handle)->phat_err < 5e-7  && ( fabs(offset) < 1e-3) )
+		if ( RAD_DATA(clock)->phat_err < 5e-7  && ( fabs(offset) < 1e-3) )
 		{
-			next_stamp = (int) (60 / clock_handle->conf->poll_period) + 1;
-			next_stamp = next_stamp + ((struct bidir_output*)clock_handle->algo_output)->n_stamps;
+			next_stamp = (int) (60 / clock->conf->poll_period) + 1;
+			next_stamp = next_stamp + ((struct bidir_output*)clock->algo_output)->n_stamps;
 
 			memset(&tx, 0, sizeof(struct timex));
 			tx.modes = MOD_FREQUENCY | MOD_STATUS;
@@ -231,7 +237,7 @@ int update_system_clock(struct radclock *clock_handle)
 				(double)(tx.offset/KERN_RES), (double)tx.freq/(1L<<SHIFT_USEC), tx.status);
 
 			/* Left hand side of freq skew estimation */	
-			read_clocks(clock_handle, &sys_tv, &rad_tv, &vcount); 
+			read_clocks(clock, &sys_tv, &rad_tv, &vcount); 
 			sys_init_tv = sys_tv;
 			sys_init = vcount;
 			verbose(VERB_DEBUG, "System clock frequency skew estimation start (%d.%.06d | %"VC_FMT")",
@@ -246,19 +252,17 @@ int update_system_clock(struct radclock *clock_handle)
 	 * adjust the freq skew in here, that would lead to disastrous results with
 	 * a meaningless estimate (I tried ;-))
 	 */
-	if ( ((struct bidir_output*)clock_handle->algo_output)->n_stamps < next_stamp )
+	if (((struct bidir_output*)clock->algo_output)->n_stamps < next_stamp)
 		return 0;
-
 
 	/* End of the skew period estimation. Compute the freq skew and pass it to
 	 * the kernel. Go on directly into STA_PLL.
 	 */
-	if ( ((struct bidir_output*)clock_handle->algo_output)->n_stamps == next_stamp )
-	{
-		read_clocks(clock_handle, &sys_tv, &rad_tv, &vcount); 
+	if (((struct bidir_output*)clock->algo_output)->n_stamps == next_stamp) {
+		read_clocks(clock, &sys_tv, &rad_tv, &vcount);
 		subtract_tv(&delta_tv, sys_tv, sys_init_tv);
 		offset = delta_tv.tv_sec + (double)delta_tv.tv_usec / 1e6;
-		freq = (( RAD_DATA(clock_handle)->phat * ((vcount - sys_init) / offset) ) - 1 ) * 1e6; 
+		freq = ((RAD_DATA(clock)->phat * ((vcount - sys_init) / offset)) - 1) * 1e6;
 
 		subtract_tv(&delta_tv, rad_tv, sys_tv);
 		offset = delta_tv.tv_sec + (double)delta_tv.tv_usec / 1e6;
@@ -268,48 +272,48 @@ int update_system_clock(struct radclock *clock_handle)
 		tx.status = STA_PLL | STA_FLL;
 		tx.freq = freq * (1L << SHIFT_USEC);
 		err = ntp_adjtime(&tx);
-		
-		verbose(VERB_DEBUG, "System clock frequency skew estimation end (%d.%.06d | %"VC_FMT")",
-					sys_tv.tv_sec, sys_tv.tv_usec, vcount);
+
+		verbose(VERB_DEBUG, "System clock frequency skew estimation end "
+			"(%d.%.06d | %"VC_FMT")",
+			sys_tv.tv_sec, sys_tv.tv_usec, vcount);
 
 		/* Make up for the frantic run */
-		read_clocks(clock_handle, &sys_tv, &rad_tv, &vcount); 
+		read_clocks(clock, &sys_tv, &rad_tv, &vcount);
 		subtract_tv(&delta_tv, rad_tv, sys_tv);
 		err = adjtime(&delta_tv, NULL);
-	
+
 		memset(&tx, 0, sizeof(struct timex));
 		err = NTP_ADJTIME(&tx);
-		verbose(VERB_DEBUG, "System clock freq skew estimated (offset freq status) %.09f %.2f %d",
-				(double)(tx.offset/KERN_RES), (double)tx.freq/(1L<<SHIFT_USEC), tx.status);
+		verbose(VERB_DEBUG, "System clock freq skew estimated "
+			"(offset freq status) %.09f %.2f %d",
+			(double)(tx.offset / KERN_RES), (double)tx.freq / (1L<<SHIFT_USEC),
+			tx.status);
 	}
 
-	
 	/* Here is the normal mode of operation for updating the system clock. Use
 	 * the ntp_time interface to the kernel to pass offset estimates and let the
 	 * kernel PLL infer the corresponding freq skew.
 	 */
-	read_clocks(clock_handle, &sys_tv, &rad_tv, &vcount); 
+	read_clocks(clock, &sys_tv, &rad_tv, &vcount); 
 	subtract_tv(&delta_tv, rad_tv, sys_tv);
 	offset = delta_tv.tv_sec + (double)delta_tv.tv_usec / 1e6;
 
 	tx.modes = TX_MODES | MOD_MAXERROR | MOD_ESTERROR | MOD_TIMECONST;
 	tx.offset = (int32_t) (offset * KERN_RES);
 	tx.status = STA_PLL;
-	tx.maxerror = (long) ((SERVER_DATA(clock_handle)->rootdelay/2 + SERVER_DATA(clock_handle)->rootdispersion) * 1e6);
-	tx.esterror = (long) (RAD_DATA(clock_handle)->phat * 1e6);	/* TODO: not the right estimate !! */
+	tx.maxerror = (long) ((SERVER_DATA(clock)->rootdelay/2 + SERVER_DATA(clock)->rootdispersion) * 1e6);
+	tx.esterror = (long) (RAD_DATA(clock)->phat * 1e6);	/* TODO: not the right estimate !! */
 	
 	/* Play slightly with the rate of convergence of the PLL in the kernel. Try
 	 * to converge faster when it is further away
 	 * Also set a the status of the sysclock when it gets very good.
 	 */
-	if (fabs(offset) > 100e-6) 
-	{
+	if (fabs(offset) > 100e-6) {
 		tx.constant = TIME_CONSTANT - 2;
-		DEL_STATUS(clock_handle, STARAD_SYSCLOCK);
-	}
-	else {
-		ADD_STATUS(clock_handle, STARAD_SYSCLOCK);
-		if (fabs(offset) > 40e-6) 
+		DEL_STATUS(clock, STARAD_SYSCLOCK);
+	} else {
+		ADD_STATUS(clock, STARAD_SYSCLOCK);
+		if (fabs(offset) > 40e-6)
 			tx.constant = TIME_CONSTANT - 1;
 		else
 			tx.constant = TIME_CONSTANT;
@@ -317,15 +321,19 @@ int update_system_clock(struct radclock *clock_handle)
 
 	err = NTP_ADJTIME(&tx);
 
-	verbose(VERB_DEBUG, "System clock PLL adjusted (offset freq status maxerr esterr) %.09f %.2f %d %.06f %.06f",
-				(double)(tx.offset/KERN_RES), (double)tx.freq/(1L<<SHIFT_USEC), 
-				tx.status, (double)tx.maxerror/1e6, (double)tx.esterror/1e6 );
+	verbose(VERB_DEBUG, "System clock PLL adjusted "
+		"(offset freq status maxerr esterr) %.09f %.2f %d %.06f %.06f",
+		(double)(tx.offset/KERN_RES), (double)tx.freq/(1L<<SHIFT_USEC), 
+		tx.status, (double)tx.maxerror/1e6, (double)tx.esterror/1e6 );
 
-	poll_period = ((struct bidir_peer*)(clock_handle->active_peer))->poll_period;
-	if (VERB_LEVEL && !(OUTPUT(clock_handle, n_stamps) % ((int)(3600*6/poll_period))) ) 
-		verbose(VERB_CONTROL, "System clock PLL adjusted (offset freq status maxerr esterr) %.09f %.2f %d %.06f %.06f",
-				(double)(tx.offset/KERN_RES), (double)tx.freq/(1L<<SHIFT_USEC), 
-				tx.status, (double)tx.maxerror/1e6, (double)tx.esterror/1e6 );
+	poll_period = ((struct bidir_peer*)(clock->active_peer))->poll_period;
+
+	if (VERB_LEVEL && !(OUTPUT(clock, n_stamps) % (int)(3600*6/poll_period))) {
+		verbose(VERB_CONTROL, "System clock PLL adjusted (offset freq status "
+			"maxerr esterr) %.09f %.2f %d %.06f %.06f",
+			(double)(tx.offset / KERN_RES), (double)tx.freq / (1L<<SHIFT_USEC),
+			tx.status, (double)tx.maxerror / 1e6, (double)tx.esterror / 1e6 );
+	}
 
 	return err;
 }
@@ -341,7 +349,7 @@ int update_system_clock(struct radclock *clock_handle)
  * is not clear what to do, and that's up to the algo to deal with them. Black
  * stamps are insane and could break processing (e.g. induce zero division, NaN
  * results, etc.). We get rid of them here.
- */ 
+ */
 int insane_bidir_stamp(struct stamp_t *stamp, struct stamp_t *laststamp)
 {
 	/* Sanity check if two consecutive stamps are identical
