@@ -87,15 +87,17 @@ int ffclock_getcounter(vcounter_t *vcount)
 #define	BIOCSTSTAMP	_IOW('B', 132, u_int)
 
 
+// XXX conditionnally include sys/bpf.h instead?
 #define	BPF_T_MICROTIME		0x0000
 #define	BPF_T_NANOTIME		0x0001
 #define	BPF_T_BINTIME		0x0002
-#define	BPF_T_NONE		0x0003
+#define	BPF_T_NONE			0x0003
+#define	BPF_T_FFCOUNTER		0x0004
 #define	BPF_T_NORMAL		0x0000
-#define	BPF_T_FAST		0x0100
+#define	BPF_T_FAST			0x0100
 #define	BPF_T_MONOTONIC		0x0200
 #define	BPF_T_MONOTONIC_FAST	(BPF_T_FAST | BPF_T_MONOTONIC)
-#define	BPF_T_FFCLOCK		0x8000
+#define	BPF_T_FFCLOCK		0x2000
 //#endif
 
 
@@ -107,7 +109,7 @@ int ffclock_getcounter(vcounter_t *vcount)
  * vcount field.
  */
 
-struct bpf_hdr_hack 
+struct bpf_hdr_hack_OLD
 {
 	struct timeval bh_tstamp;	/* time stamp */
 	bpf_u_int32 bh_caplen;		/* length of captured portion */
@@ -117,10 +119,23 @@ struct bpf_hdr_hack
 	vcounter_t vcount;			/* raw vcount value for this packet */
 };
 
+struct bpf_hdr_hack
+{
+	union {
+		struct timeval bh_tstamp;	/* time stamp */
+		vcounter_t vcount;
+	} bh_ustamp;
+	bpf_u_int32 bh_caplen;		/* length of captured portion */
+	bpf_u_int32 bh_datalen;		/* original length of packet */
+	u_short bh_hdrlen;			/* length of bpf header (this struct plus alignment padding) */
+//	u_short padding;			/* padding to align the fields */
+//	vcounter_t vcount;			/* raw vcount value for this packet */
+};
+
 
 // TODO move out of the library and use IPC call to retrieve the value from
 // radclock if needed ??
-int found_ffwd_kernel_version (void) 
+int found_ffwd_kernel_version (void)
 {
 	int ret;
 	int	version = -1;
@@ -434,7 +449,9 @@ int descriptor_set_tsmode(struct radclock *handle, pcap_t *p_handle, int kmode)
 				bd_tstamp = BPF_T_MICROTIME;
 				break;
 			case RADCLOCK_TSMODE_RADCLOCK:
-				bd_tstamp = BPF_T_MICROTIME | BPF_T_FFCLOCK;
+				// TODO this is not very clean, need to do better management of
+				// the format flag
+				bd_tstamp = BPF_T_FFCOUNTER | BPF_T_FFCLOCK;
 //				bd_tstamp = BPF_T_MICROTIME | BPF_T_FFCLOCK | BPF_T_MONOTONIC;
 				break;
 			default:
@@ -525,7 +542,7 @@ int descriptor_get_tsmode(struct radclock *handle, pcap_t *p_handle, int *kmode)
  *
  * Example of ethernet capture on amd64:
  * [[bpf_header 40bytes][padding 2bytes]]  [Ether 14bytes]  [IPv4 20 bytes]
- * 
+ *
  * XXX
  * As soon as we move to capture on other MAC layer or use 802.1Q, things will
  * break, and we need a new implementation that provides the MAC header length
@@ -533,36 +550,42 @@ int descriptor_get_tsmode(struct radclock *handle, pcap_t *p_handle, int *kmode)
  * XXX
  */
 
-/* 
+/*
  * Also make sure we compute the padding inside the hacked bpf header the same
  * way as in the kernel to avoid different behaviour accross compilers.
  */
 #define BPF_ALIGNMENT sizeof(long)
 #define BPF_WORDALIGN(x) (((x)+(BPF_ALIGNMENT-1))&~(BPF_ALIGNMENT-1))
 
+// TODO
+//#define SIZEOF_BPF_HDR(type)	\
+//	(offsetof(type, vcount) + sizeof(((type *)0)->vcount))
+
 #define SIZEOF_BPF_HDR(type)	\
-	(offsetof(type, vcount) + sizeof(((type *)0)->vcount))
+	(offsetof(type, bh_hdrlen) + sizeof(((type *)0)->bh_hdrlen))
 
 #define BPF_HDR_LEN		\
 	(BPF_WORDALIGN(SIZEOF_BPF_HDR(struct bpf_hdr_hack) + ETHER_HDR_LEN)	- ETHER_HDR_LEN)
 
 inline int
-extract_vcount_stamp(pcap_t *p_handle, const struct pcap_pkthdr *header, 
+extract_vcount_stamp(pcap_t *p_handle, const struct pcap_pkthdr *header,
 		const unsigned char *packet, vcounter_t *vcount)
 {
-	struct bpf_hdr_hack *hack; 
+	struct bpf_hdr_hack *hack;
 
 	/* Check we are running live */
 	if (pcap_fileno(p_handle) < 0)
 		return -1;
 
-   	/* 
+	/*
 	 * Find the beginning of the hacked header starting from the MAC header.
 	 * Useful for checking we are doing the right thing.
 	 */
 	hack = (struct bpf_hdr_hack *) (packet - BPF_HDR_LEN);
    
 	/* Check we did the right thing by comparing hack and pcap header pointer */
+	// TODO: it may be that BPF_FFCOUNTER was not defined in the kernel.
+	// it is not a bug anymore, but a new case to handle
 	if ((hack->bh_hdrlen != BPF_HDR_LEN)
 		|| (memcmp(hack, header, sizeof(struct pcap_pkthdr)) != 0))
 	{
@@ -571,7 +594,8 @@ extract_vcount_stamp(pcap_t *p_handle, const struct pcap_pkthdr *header,
 	   	return -1;
 	}
 
-	*vcount= hack->vcount;
+	//*vcount= hack->vcount;
+	*vcount= hack->bh_ustamp.vcount;
 	return 0;
 }
 

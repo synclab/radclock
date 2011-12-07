@@ -104,7 +104,7 @@ void fill_rawdata_ntp(u_char *c_handle, const struct pcap_pkthdr *pcap_hdr, cons
 	RD_NTP(rdb)->vcount = 0;	
 	if ( extract_vcount_stamp(clock_handle->pcap_handle, pcap_hdr, packet_data, &(RD_NTP(rdb)->vcount)) < 0 )
 	{
-		verbose(LOG_ERR, "Could not extract vcounter from packet timestamped: %l.%l",
+		verbose(LOG_ERR, "Could not extract vcounter from packet timestamped: %ld.%ld",
 			   	pcap_hdr->ts.tv_sec, pcap_hdr->ts.tv_usec); 	
 	}
 

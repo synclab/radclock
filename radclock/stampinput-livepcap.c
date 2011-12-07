@@ -596,7 +596,11 @@ static int livepcapstamp_init(struct radclock *handle, struct stampsource *sourc
 	 */
 //	if (radclock_set_tsmode(handle, LIVEPCAP_DATA(source)->live_input, RADCLOCK_TSMODE_RADCLOCK)){
 //	if (radclock_set_tsmode(handle, LIVEPCAP_DATA(source)->live_input, RADCLOCK_TSMODE_FAIRCOMPARE)){
-	if (radclock_set_tsmode(handle, LIVEPCAP_DATA(source)->live_input, RADCLOCK_TSMODE_SYSCLOCK)){
+	// TODO move somewhere else or don't use the library
+	// if bsd-kernel version < 2 then SYSCLOCK
+	// else RADCLOCK
+	//if (radclock_set_tsmode(handle, LIVEPCAP_DATA(source)->live_input, RADCLOCK_TSMODE_SYSCLOCK)){
+	if (radclock_set_tsmode(handle, LIVEPCAP_DATA(source)->live_input, RADCLOCK_TSMODE_RADCLOCK)){
 		verbose(LOG_WARNING, "Could not set RADclock timestamping mode");
 	}
 
