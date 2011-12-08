@@ -81,7 +81,8 @@ inline void insert_rdb_in_list(struct radclock *clock_handle, struct raw_data_bu
 
 
 
-/* Really, I have tried to make this as fast as possible
+/* 
+ * Really, I have tried to make this as fast as possible
  * but if you have a better implementation, go for it.
  */
 void fill_rawdata_ntp(u_char *c_handle, const struct pcap_pkthdr *pcap_hdr, const u_char *packet_data)
@@ -90,6 +91,7 @@ void fill_rawdata_ntp(u_char *c_handle, const struct pcap_pkthdr *pcap_hdr, cons
 
 	struct radclock *clock_handle = (struct radclock *) c_handle;
 	struct raw_data_bundle *rdb;
+	int err;
 
 	/* Initialise raw data bundle */
 	rdb = (struct raw_data_bundle *) malloc (sizeof(struct raw_data_bundle));
@@ -102,10 +104,26 @@ void fill_rawdata_ntp(u_char *c_handle, const struct pcap_pkthdr *pcap_hdr, cons
 
 	/* Copy data of interest into the raw data bundle */
 	RD_NTP(rdb)->vcount = 0;	
-	if ( extract_vcount_stamp(clock_handle->pcap_handle, pcap_hdr, packet_data, &(RD_NTP(rdb)->vcount)) < 0 )
-	{
-		verbose(LOG_ERR, "Could not extract vcounter from packet timestamped: %ld.%ld",
-			   	pcap_hdr->ts.tv_sec, pcap_hdr->ts.tv_usec); 	
+
+	// FIXME : need a function pointer to the correct extract_vcount function
+	switch (clock_handle->kernel_version) {
+	case 0:
+	case 1:
+		err = extract_vcount_stamp(clock_handle->pcap_handle, pcap_hdr,
+			packet_data, &(RD_NTP(rdb)->vcount));
+		break;
+	case 2:
+		err = extract_vcount_stamp_v2(clock_handle->pcap_handle, pcap_hdr,
+			packet_data, &(RD_NTP(rdb)->vcount));
+		break;
+	default:
+		err = -1;
+		break;
+	}
+
+	if (err < 0) {
+		verbose(LOG_ERR, "Cannot extract vcounter from packet timestamped: %ld.%ld",
+			pcap_hdr->ts.tv_sec, pcap_hdr->ts.tv_usec); 	
 	}
 
 	memcpy( &(RD_NTP(rdb)->pcap_hdr), pcap_hdr, sizeof(struct pcap_pkthdr));

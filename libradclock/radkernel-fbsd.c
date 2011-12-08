@@ -109,8 +109,7 @@ int ffclock_getcounter(vcounter_t *vcount)
  * vcount field.
  */
 
-struct bpf_hdr_hack_OLD
-{
+struct bpf_hdr_hack_v1 {
 	struct timeval bh_tstamp;	/* time stamp */
 	bpf_u_int32 bh_caplen;		/* length of captured portion */
 	bpf_u_int32 bh_datalen;		/* original length of packet */
@@ -119,8 +118,7 @@ struct bpf_hdr_hack_OLD
 	vcounter_t vcount;			/* raw vcount value for this packet */
 };
 
-struct bpf_hdr_hack
-{
+struct bpf_hdr_hack_v2 {
 	union {
 		struct timeval bh_tstamp;	/* time stamp */
 		vcounter_t vcount;
@@ -550,6 +548,11 @@ int descriptor_get_tsmode(struct radclock *handle, pcap_t *p_handle, int *kmode)
  * XXX
  */
 
+
+// TODO XXX improve the management of kernel support versions. Currently that's
+// pretty ugly and not optimised
+
+
 /*
  * Also make sure we compute the padding inside the hacked bpf header the same
  * way as in the kernel to avoid different behaviour accross compilers.
@@ -557,21 +560,26 @@ int descriptor_get_tsmode(struct radclock *handle, pcap_t *p_handle, int *kmode)
 #define BPF_ALIGNMENT sizeof(long)
 #define BPF_WORDALIGN(x) (((x)+(BPF_ALIGNMENT-1))&~(BPF_ALIGNMENT-1))
 
-// TODO
-//#define SIZEOF_BPF_HDR(type)	\
-//	(offsetof(type, vcount) + sizeof(((type *)0)->vcount))
+#define SIZEOF_BPF_HDR_v1(type)	\
+	(offsetof(type, vcount) + sizeof(((type *)0)->vcount))
 
-#define SIZEOF_BPF_HDR(type)	\
+#define BPF_HDR_LEN_v1		\
+	(BPF_WORDALIGN(SIZEOF_BPF_HDR_v1(struct bpf_hdr_hack_v1) + ETHER_HDR_LEN)	- ETHER_HDR_LEN)
+
+#define SIZEOF_BPF_HDR_v2(type)	\
 	(offsetof(type, bh_hdrlen) + sizeof(((type *)0)->bh_hdrlen))
 
-#define BPF_HDR_LEN		\
-	(BPF_WORDALIGN(SIZEOF_BPF_HDR(struct bpf_hdr_hack) + ETHER_HDR_LEN)	- ETHER_HDR_LEN)
+#define BPF_HDR_LEN_v2		\
+	(BPF_WORDALIGN(SIZEOF_BPF_HDR_v2(struct bpf_hdr_hack_v2) + ETHER_HDR_LEN)	- ETHER_HDR_LEN)
 
+
+// FIXME inline should be in a header file, d'oh...
+// FIXME should convert to void, make these tests once and not on each packet
 inline int
 extract_vcount_stamp(pcap_t *p_handle, const struct pcap_pkthdr *header,
 		const unsigned char *packet, vcounter_t *vcount)
 {
-	struct bpf_hdr_hack *hack;
+	struct bpf_hdr_hack_v1 *hack;
 
 	/* Check we are running live */
 	if (pcap_fileno(p_handle) < 0)
@@ -581,22 +589,57 @@ extract_vcount_stamp(pcap_t *p_handle, const struct pcap_pkthdr *header,
 	 * Find the beginning of the hacked header starting from the MAC header.
 	 * Useful for checking we are doing the right thing.
 	 */
-	hack = (struct bpf_hdr_hack *) (packet - BPF_HDR_LEN);
-   
+	hack = (struct bpf_hdr_hack_v1 *) (packet - BPF_HDR_LEN_v1);
+
 	/* Check we did the right thing by comparing hack and pcap header pointer */
 	// TODO: it may be that BPF_FFCOUNTER was not defined in the kernel.
 	// it is not a bug anymore, but a new case to handle
-	if ((hack->bh_hdrlen != BPF_HDR_LEN)
+	if ((hack->bh_hdrlen != BPF_HDR_LEN_v1)
 		|| (memcmp(hack, header, sizeof(struct pcap_pkthdr)) != 0))
 	{
 		logger(RADLOG_ERR, "Either modified kernel not installed, "
 				"or bpf interface has changed");
-	   	return -1;
+		return (-1);
 	}
 
-	//*vcount= hack->vcount;
-	*vcount= hack->bh_ustamp.vcount;
-	return 0;
+	*vcount= hack->vcount;
+	return (0);
 }
+
+
+
+// FIXME inline should be in a header file, d'oh...
+// FIXME should convert to void, make these tests once and not on each packet
+inline int
+extract_vcount_stamp_v2(pcap_t *p_handle, const struct pcap_pkthdr *header,
+		const unsigned char *packet, vcounter_t *vcount)
+{
+	struct bpf_hdr_hack_v2 *hack;
+
+	/* Check we are running live */
+	if (pcap_fileno(p_handle) < 0)
+		return -1;
+
+	/*
+	 * Find the beginning of the hacked header starting from the MAC header.
+	 * Useful for checking we are doing the right thing.
+	 */
+	hack = (struct bpf_hdr_hack_v2 *) (packet - BPF_HDR_LEN_v2);
+
+	/* Check we did the right thing by comparing hack and pcap header pointer */
+	// TODO: it may be that BPF_FFCOUNTER was not defined in the kernel.
+	// it is not a bug anymore, but a new case to handle
+	if ((hack->bh_hdrlen != BPF_HDR_LEN_v2)
+		|| (memcmp(hack, header, sizeof(struct pcap_pkthdr)) != 0))
+	{
+		logger(RADLOG_ERR, "Either modified kernel not installed, "
+				"or bpf interface has changed");
+		return (-1);
+	}
+
+	*vcount= hack->bh_ustamp.vcount;
+	return (0);
+}
+
 
 #endif
