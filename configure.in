@@ -44,20 +44,13 @@ dnl ===========================================================================
 AC_CONFIG_SRCDIR(radclock/radclock_main.c)
 AC_CONFIG_FILES([Makefile libradclock/Makefile radclock/Makefile examples/Makefile man/Makefile])
 
-dnl Conditional for the tools that are not shipped away 
-if test -d tools; then
-	AM_CONDITIONAL([HAVE_TOOLS_DIR], [test 1 = 1])
-	AC_CONFIG_FILES([tools/Makefile])
+dnl Conditional for the autotools that are not shipped away 
+if test -d autotools; then
+	AM_CONDITIONAL([HAVE_AUTOTOOLS_DIR], [test 1 = 1])
 else
-	AM_CONDITIONAL([HAVE_TOOLS_DIR], [test 0 = 1])
+	AM_CONDITIONAL([HAVE_AUTOTOOLS_DIR], [test 0 = 1])
 fi
-dnl Conditional for the testbed apps that are not shipped away 
-if test -d testbed; then
-	AM_CONDITIONAL([HAVE_TESTBED_DIR], [test 1 = 1])
-	AC_CONFIG_FILES([testbed/Makefile])
-else
-	AM_CONDITIONAL([HAVE_TESTBED_DIR], [test 0 = 1])
-fi
+
 
 AM_CONFIG_HEADER(config.h)
 
@@ -197,14 +190,6 @@ dnl pcap_activate does not exist in previous versions
 dnl need AC_CHECK_LIB beforehand
 AC_CHECK_FUNCS(pcap_activate)
 
-
-
-dnl ===========================================================================
-dnl Conditional for the testbed apps that may require these guys
-dnl ===========================================================================
-AC_CHECK_HEADER(dagapi.h, 
-				[AM_CONDITIONAL([HAVE_DAG_API], [test 1 = 1])], 
-				[AM_CONDITIONAL([HAVE_DAG_API], [test 0 = 1])])
 
 
 

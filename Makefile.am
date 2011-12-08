@@ -21,27 +21,15 @@
 
 SUBDIRS = libradclock radclock examples man
 
-if HAVE_TESTBED_DIR
-SUBDIRS += testbed 
-else
-SUBDIRS +=
-endif
-
-if HAVE_TOOLS_DIR
-SUBDIRS += tools 
-else
-SUBDIRS +=
-endif
-
 DIST_SUBDIRS = libradclock radclock examples man
 
 EXTRA_DIST = python-module debian redhat
 
-if HAVE_TESTBED_DIR
+if HAVE_AUTOTOOLS_DIR
 dist-hook:
 	@echo "Cleaning the sync algo from its comments (radclock/sync_bidir.c)"
-	sed -f $(srcdir)/tools/remove_comments.sed $(distdir)/radclock/sync_bidir.c > $(distdir)/radclock/sync_bidir.c.clean
-	cat $(srcdir)/tools/copyright-header.txt > $(distdir)/radclock/sync_bidir.c
+	sed -f $(srcdir)/autotools/remove_comments.sed $(distdir)/radclock/sync_bidir.c > $(distdir)/radclock/sync_bidir.c.clean
+	cat $(srcdir)/autotools/copyright-header.txt > $(distdir)/radclock/sync_bidir.c
 	cat $(distdir)/radclock/sync_bidir.c.clean >> $(distdir)/radclock/sync_bidir.c
 	rm $(distdir)/radclock/sync_bidir.c.clean
 	@echo "Copying the python module and wall clock into the tarball"
