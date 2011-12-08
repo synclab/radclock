@@ -352,7 +352,6 @@ int deliver_rawdata_spy(struct radclock *clock_handle, struct stamp_t *stamp)
 	BST(stamp)->Tf = RD_SPY(rdb)->Tf;
 	stamp->type = STAMP_SPY;
 	stamp->qual_warning = 0;
-	stamp->sPort = 0;
 
 	/* Mark this raw data element read */
 	rdb->read = 1;
