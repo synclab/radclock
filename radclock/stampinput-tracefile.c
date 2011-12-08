@@ -69,12 +69,12 @@ static int get_packet_tracefile(struct radclock *handle, void *userdata, radpcap
 	/* Read the packet from the input trace and store pcap header and packet
 	 * payload into the buffer one after the other. Use the generic libpcap
 	 * function since the vcount is hidden in the ethernet SLL header (seamless)
-	 */	
+	 */
 	packet->header  = packet->buffer;
 	packet->payload = packet->buffer + sizeof(struct pcap_pkthdr);
-	ret = pcap_next_ex(data->trace_input, 
+	ret = pcap_next_ex(data->trace_input,
 		(struct pcap_pkthdr**) (&(packet->header)),
-	   	(const u_char*) (&(packet->payload)));
+		(const u_char*) (&(packet->payload)));
 	switch (ret)
 	{
 		case -2:
@@ -151,9 +151,9 @@ static int tracefilestamp_init(struct radclock *handle, struct stampsource *sour
 }
 
 
-static int tracefilestamp_get_next( struct radclock *handle, 
-									struct stampsource *source, 
-									struct stamp_t *stamp)
+static int
+tracefilestamp_get_next(struct radclock *handle, struct stampsource *source,
+	struct stamp_t *stamp, uint64_t *stamp_id)
 {
 	int err;
 
@@ -165,14 +165,15 @@ static int tracefilestamp_get_next( struct radclock *handle,
 			handle,
 			(void *)TRACEFILE_DATA(source),
 			get_packet_tracefile,
-			stamp, 
-			&source->ntp_stats, 
+			stamp,
+			stamp_id,
+			&source->ntp_stats,
 			TRACEFILE_DATA(source)->src_ipaddr);
 
-	if (err < 0) {           // EOF 
+	if (err < 0) {
 		verbose(LOG_NOTICE, "Got EOF on read of bpf device.");
 		return -1;
-	} 
+	}
 	return 0;
 }
 

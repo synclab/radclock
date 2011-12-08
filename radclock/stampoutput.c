@@ -158,7 +158,7 @@ void close_output_matlab(struct radclock *clock_handle)
 
 
 #define OUTPUT(clock, x) ((struct bidir_output*)clock->algo_output)->x
-void print_out_files(struct radclock *clock_handle, struct stamp_t *stamp) 
+void print_out_files(struct radclock *clock_handle, struct stamp_t *stamp, uint64_t stamp_id) 
 {
 	int err;
 	// XXX What is the reason for me to do it that way? Cannot remember.
@@ -178,12 +178,12 @@ void print_out_files(struct radclock *clock_handle, struct stamp_t *stamp)
 
 	/* Store generated stamp values */
 	if (clock_handle->stampout_fd != NULL) { 
-		err = fprintf(clock_handle->stampout_fd,"%"VC_FMT" %.9Lf %.9Lf %"VC_FMT" %d\n",
+		err = fprintf(clock_handle->stampout_fd,"%"VC_FMT" %.9Lf %.9Lf %"VC_FMT" %llu\n",
 				BST(stamp)->Ta,
 				BST(stamp)->Tb,
 				BST(stamp)->Te,
 				BST(stamp)->Tf,
-				stamp->sPort);
+				(long long unsigned)stamp_id);
 		if ( err < 0 )
 			verbose(LOG_ERR, "Failed to write data to timestamp file");
 	}

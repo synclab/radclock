@@ -149,8 +149,6 @@ struct bidir_stamp {
 };
 
 
-// TODO sPort is useful for packet mathing purpose (packet pairs and DAG data
-// but it is a bit dirty 
 struct stamp_t {
 	stamp_type_t type;
 	union stamp_u {
@@ -158,8 +156,7 @@ struct stamp_t {
 		struct bidir_stamp  bstamp;
 	} st;
 		
-	int qual_warning;	// warning level: route or server changes, server problem
-	int sPort; 			// Source port of the client NTP request (useful if using ntpdate)
+	int qual_warning;	/* warning: route or server changes, server problem */
 };
 
 #define UST(x) (&((x)->st.ustamp))

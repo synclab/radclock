@@ -664,7 +664,9 @@ static int livepcapstamp_init(struct radclock *handle, struct stampsource *sourc
 }
 
 
-static int livepcapstamp_get_next(struct radclock *handle, struct stampsource *source, struct stamp_t *stamp)
+static int
+livepcapstamp_get_next(struct radclock *handle, struct stampsource *source,
+	struct stamp_t *stamp, uint64_t *stamp_id)
 {
 	JDEBUG
 
@@ -674,17 +676,18 @@ static int livepcapstamp_get_next(struct radclock *handle, struct stampsource *s
 	stamp->qual_warning = 0;
 	stamp->type = STAMP_NTP;
 	
-	// Call for get_bidir_stamp to read through a BPF device
+	/* Call for get_bidir_stamp to read through a BPF device */
 	err = get_bidir_stamp(
 			handle,
 			(void *)LIVEPCAP_DATA(source),
 			get_packet_livepcap,
-			stamp, 
-			&source->ntp_stats, 
+			stamp,
+			stamp_id,
+			&source->ntp_stats,
 			LIVEPCAP_DATA(source)->src_ipaddr);
 
+	/* Used to be EOF or capture break, but now only signals empty buffer */
 	if (err < 0) {
-		/* Used to be EOF or capture break, but now only signals empty buffer */
 		return err;
 	}
 	return 0;
@@ -698,7 +701,7 @@ static void livepcapstamp_breakloop(struct radclock *handle, struct stampsource 
 	 * call does not affect other threads. In other words, the pcap_get*() functions
 	 * have to be in the main thread. Will not work otherwise
 	 */
-	pcap_breakloop(LIVEPCAP_DATA(source)->live_input);	
+	pcap_breakloop(LIVEPCAP_DATA(source)->live_input);
 	return;
 }
 
