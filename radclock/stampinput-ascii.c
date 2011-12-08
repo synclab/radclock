@@ -115,7 +115,8 @@ static int asciistamp_init(struct radclock *handle, struct stampsource *source)
 	return 0;
 }
 
-static int asciistamp_get_next(struct radclock *handle, struct stampsource *source, struct stamp_t *stamp)
+static int
+asciistamp_get_next(struct radclock *handle, struct stampsource *source, struct stamp_t *stamp, uint64_t *stamp_id)
 {
 	FILE *stamp_fd = ASCII_DATA(source)->fd;
 
@@ -138,9 +139,9 @@ static int asciistamp_get_next(struct radclock *handle, struct stampsource *sour
 		// TODO: need to detect stamp type, ie, get a better input format
 		stamp->type = STAMP_NTP;
 		stamp->qual_warning = 0;
-		stamp->sPort = 0;
 		source->ntp_stats.ref_count+=2; 
 	}
+	*stamp_id = 0;
 	return 0;
 } 
 
