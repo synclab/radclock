@@ -52,6 +52,11 @@ else
 fi
 
 
+AC_CHECK_HEADER([_ffcounter.h],
+	[AM_CONDITIONAL([HAVE__FFCOUNTER_H], [test 1 = 1])], 
+	[AM_CONDITIONAL([HAVE__FFCOUNTER_H], [test 1 = 0])])
+
+
 AM_CONFIG_HEADER(config.h)
 
 LIBRADCLOCK_LIBS="\$(top_builddir)/libradclock/libradclock.la"
@@ -115,6 +120,7 @@ AC_CHECK_SIZEOF([long long int])
 
 AC_HEADER_TIME
 AC_CHECK_HEADERS(ifaddrs.h)
+
 
 
 
