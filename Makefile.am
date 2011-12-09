@@ -25,6 +25,23 @@ DIST_SUBDIRS = libradclock radclock examples man
 
 EXTRA_DIST = python-module debian redhat
 
+# Extra cscope target
+CSCOPE_DIRS = libradclock radclock
+
+cscope: cscope.out
+cscope.out: $(srcdir)/cscope.files
+	cd $(srcdir); cscope -k -buq -p4
+
+$(srcdir)/cscope.files:
+	cd $(srcdir); \
+	find $(CSCOPE_DIRS) -name "*.[ch]" -a -type f > $(srcdir)/cscope.files
+
+cscope-clean:
+	cd $(srcdir)
+	rm -f cscope.files cscope.out cscope.in.out cscope.po.out
+
+
+
 if HAVE_AUTOTOOLS_DIR
 dist-hook:
 	@echo "Cleaning the sync algo from its comments (radclock/sync_bidir.c)"
