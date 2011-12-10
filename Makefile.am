@@ -30,7 +30,7 @@ CSCOPE_DIRS = libradclock radclock
 
 cscope: cscope.out
 cscope.out: $(srcdir)/cscope.files
-	cd $(srcdir); cscope -k -buq -p4
+	cd $(srcdir); cscope -buq -p4
 
 $(srcdir)/cscope.files:
 	cd $(srcdir); \
