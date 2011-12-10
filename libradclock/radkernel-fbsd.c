@@ -133,46 +133,57 @@ struct bpf_hdr_hack_v2 {
 
 // TODO move out of the library and use IPC call to retrieve the value from
 // radclock if needed ??
-int found_ffwd_kernel_version (void)
+int
+found_ffwd_kernel_version (void)
 {
 	int ret;
-	int	version = -1;
+	int version;
 	size_t size_ctl;
 
 	size_ctl = sizeof(version);
-	ret = sysctlbyname("kern.ffclock.version", &version, &size_ctl, NULL, 0);
-	
-	if ( ret == 0 )
-	{
-		logger(RADLOG_NOTICE, "Feed-Forward kernel support detected (version: %d)", version);
-	}
-	else {
-		/* This is the old way we used before explicit versioning. */
-		ret = sysctlbyname("net.bpf.bpf_radclock_tsmode", &version, &size_ctl, NULL, 0);
-		if (ret == 0) 
-		{
-			logger(RADLOG_NOTICE, "Feed-Forward kernel support detected (version 0)");
-			version = 0;
+
+	/* Sysctl for version 2 and 3*/
+	ret = sysctlbyname("kern.sysclock.ffclock.version", &version, &size_ctl, NULL, 0);
+	if (ret < 0) {
+
+		/* Sysctl for version 1 */
+		ret = sysctlbyname("kern.ffclock.version", &version, &size_ctl, NULL, 0);
+		
+		if (ret < 0) {
+			/* The old way we used before explicit versioning. */
+			ret = sysctlbyname("net.bpf.bpf_radclock_tsmode", &version,
+				&size_ctl, NULL, 0);
+
+			if (ret == 0)
+				version = 0;
+			/* If all the above failed, no kernel support compiled */
+			else
+				version = -1;
 		}
-		else
-			version = -1;
 	}
 
-	/* A quick reminder for the administrator. */	
-	switch ( version )
-	{
-		case 2:
-			break;	
+	if (version == -1)
+		logger(RADLOG_WARNING, "No feed-forward kernel support detected");
+	else
+		logger(RADLOG_NOTICE, "Feed-Forward kernel detected (version: %d)",
+			version);
 
-		case 1:
-		case 0:
-			logger(RADLOG_WARNING, "The Feed-Forward kernel support is a bit old. "
-					"You should update your kernel.");
-			break;
+	/* A quick reminder for the administrator. */
+	switch ( version ) {
+	/* Version 3 is version 2 with the extended BPF header */
+	case 3:
+	case 2:
+		break;
 
-		case -1:
-		default:
-			logger(RADLOG_NOTICE, "No Feed-Forward kernel support detected");
+	case 1:
+	case 0:
+		logger(RADLOG_WARNING, "The Feed-Forward kernel support is a bit old. "
+				"You should update your kernel.");
+		break;
+
+	case -1:
+	default:
+		logger(RADLOG_NOTICE, "No Feed-Forward kernel support detected");
 		break;
 	}
 	return version;
@@ -208,154 +219,150 @@ inline int radclock_get_vcounter_rdtsc(struct radclock *handle, vcounter_t *vcou
 }
 
 
-int radclock_init_vcounter_syscall(struct radclock *handle)
+int
+radclock_init_vcounter_syscall(struct radclock *clock)
 {
-	int err;
 	struct module_stat stat;
+	int err;
 
-	switch ( handle->kernel_version )
-	{
+	switch (clock->kernel_version) {
 
 	case 0:
 	case 1:
 		stat.version = sizeof(stat);
 		err = modstat(modfind("get_vcounter"), &stat);
 		if (err < 0 ) {
-			logger(RADLOG_ERR, "Error on modstat (get_vcounter syscall): %s", strerror(errno));
+			logger(RADLOG_ERR, "Error on modstat (get_vcounter syscall): %s",
+				strerror(errno));
 			logger(RADLOG_ERR, "Is the radclock kernel module loaded?");
-			return -1;
+			return (-1);
 		}
-		handle->syscall_get_vcounter = stat.data.intval;
-		logger(RADLOG_NOTICE, "Registered get_vcounter syscall at %d", handle->syscall_get_vcounter);
+		clock->syscall_get_vcounter = stat.data.intval;
+		logger(RADLOG_NOTICE, "Registered get_vcounter syscall at %d",
+			clock->syscall_get_vcounter);
 		break;
 
+	/* kernel provides ffclock_getcounter through libc */
 	case 2:
-/*
-		stat.version = sizeof(stat);
-		err = modstat(modfind("get_ffcounter"), &stat);
-		if (err < 0 ) {
-			logger(RADLOG_ERR, "Error on modstat (get_ffcounter syscall): %s", strerror(errno));
-			logger(RADLOG_ERR, "Is the radclock kernel module loaded?");
-			return -1;
-		}
-		handle->syscall_get_vcounter = stat.data.intval;
-		logger(RADLOG_NOTICE, "Registered get_ffcounter syscall at %d", handle->syscall_get_vcounter);
-*/
-		// kernel provides ffclock_getcounter through libc
+	case 3:
 		break;
 
 	default:
-		return -1;
+		return (-1);
 	}
-	return 0;
+	return (0);
 }
 
 
-int radclock_get_vcounter_syscall(struct radclock *handle, vcounter_t *vcount)
+int
+radclock_get_vcounter_syscall(struct radclock *handle, vcounter_t *vcount)
 {
 	int ret;
-	if (vcount == NULL)
-		return -1;
 
-	switch ( handle->kernel_version )
-	{
+	if (vcount == NULL)
+		return (-1);
+
+	switch (handle->kernel_version) {
 
 	case 0:
 	case 1:
 		ret = syscall(handle->syscall_get_vcounter, vcount);
 		break;
 	case 2:
+	case 3:
 		ret = ffclock_getcounter(vcount);
 		break;
 	default:
 		ret = -1;
-		break;	
+		break;
 	}
-	
-	
+
 	if ( ret < 0 ) {
 		logger(RADLOG_ERR, "error on syscall get_vcounter: %s", strerror(errno));
-		return -1;
+		return (-1);
 	}
-	return 0;
+
+	return (0);
 }
 
 
 
 
-/* 
+/*
  * Check to see if we can use fast rdtsc() timestamping from userland.
  * Otherwise fall back to syscalls
  */
-int radclock_init_vcounter(struct radclock *handle)
+int
+radclock_init_vcounter(struct radclock *handle)
 {
-	int ret;
-	int	passthrough_counter = 0;
 	size_t size_ctl;
+	int passthrough_counter;
+	int ret;
+
+	passthrough_counter = 0;
 
 	switch (handle->kernel_version) {
 	case 0:
 		passthrough_counter = 0;
 		break;
+
 	case 1:
 		size_ctl = sizeof(passthrough_counter);
 		ret = sysctlbyname("kern.timecounter.passthrough", &passthrough_counter, &size_ctl, NULL, 0);
 		if (ret == -1)
 		{
 			logger(RADLOG_ERR, "Cannot find kern.timecounter.passthrough in sysctl");
-			return -1;
+			return (-1);
 		}
 		break;
+
+// FIXME
+// XXX For these two versions, the sysctl has snicked in the official kernel
+// withouth the backend support. This test is not discrimating!
 	case 2:
+	case 3:
 		size_ctl = sizeof(passthrough_counter);
-		ret = sysctlbyname("kern.ffclock.ffcounter_bypass", &passthrough_counter, &size_ctl, NULL, 0);
-		if (ret == -1)
-		{
-			logger(RADLOG_ERR, "Cannot find kern.ffclock.ffcounter_bypass in sysctl");
-			// XXX TODO XXX
-			// Used to return error here, but easier for kernel dev.
-			// Need to reenable it, once kernel support v2 is released 
+		ret = sysctlbyname("kern.sysclock.ffclock.ffcounter_bypass",
+			&passthrough_counter, &size_ctl, NULL, 0);
+		if (ret == -1) {
+			logger(RADLOG_ERR, "Cannot find kern.sysclock.ffclock.ffcounter_bypass");
 			passthrough_counter = 0;
-			// return -1;
+			return (-1);
 		}
 	}
 
 	size_ctl = sizeof(handle->hw_counter);
-	ret = sysctlbyname("kern.timecounter.hardware", &handle->hw_counter[0], &size_ctl, NULL, 0);
-	if (ret == -1)
-	{
+	ret = sysctlbyname("kern.timecounter.hardware", &handle->hw_counter[0],
+		&size_ctl, NULL, 0);
+	if (ret == -1) {
 		logger(RADLOG_ERR, "Cannot find kern.timecounter.hardware in sysctl");
-		return -1;
+		return (-1);
 	}
 	logger(RADLOG_NOTICE, "Timecounter used is %s", handle->hw_counter);
 
-	if ( passthrough_counter == 0)
-	{
+	if ( passthrough_counter == 0) {
 		handle->get_vcounter = &radclock_get_vcounter_syscall;
 		logger(RADLOG_NOTICE, "Initialising radclock_get_vcounter with syscall.");
-		return 0;
+		return (0);
 	}
 
-	if (strcmp(handle->hw_counter, "TSC") == 0)
-	{
+	if (strcmp(handle->hw_counter, "TSC") == 0) {
 		handle->get_vcounter = &radclock_get_vcounter_rdtsc;
 		logger(RADLOG_NOTICE, "Initialising radclock_get_vcounter using rdtsc(). "
-						"* Make sure TSC is reliable *");
-	}
-	else
-	{
+			"* Make sure TSC is reliable *");
+	} else {
 		handle->get_vcounter = &radclock_get_vcounter_syscall;
 		logger(RADLOG_NOTICE, "Initialising radclock_get_vcounter using syscall.");
 	}
 
 	/* Last, a warning */
-	if ( passthrough_counter == 1)
-	{
-		if ( (strcmp(handle->hw_counter, "TSC") != 0) && (strcmp(handle->hw_counter, "ixen") != 0) )
+	if (passthrough_counter == 1) {
+		if ((strcmp(handle->hw_counter, "TSC") != 0)
+			&& (strcmp(handle->hw_counter, "ixen") != 0))
 			logger(RADLOG_ERR, "Passthrough mode in ON but the timecounter does not support it!!");
 	}
 
-	return 0;
+	return (0);
 }
 
 #ifdef HAVE_SYS_TIMEFFC_H
@@ -419,29 +426,31 @@ int get_kernel_ffclock(struct radclock *handle)
 
 
 
-
-int descriptor_set_tsmode(struct radclock *handle, pcap_t *p_handle, int kmode)
+// FIXME this is kind of a mess, all options need to be double-check for
+// backward compatibility
+int
+descriptor_set_tsmode(struct radclock *handle, pcap_t *p_handle, int kmode)
 {
-	u_int bd_tstamp = 0; 
+	u_int bd_tstamp;
 
-	switch (handle->kernel_version)
-	{
+	bd_tstamp = 0;
+
+	switch (handle->kernel_version) {
 
 	case 0:
 	case 1:
-		if (ioctl(pcap_fileno(p_handle), BIOCSRADCLOCKTSMODE, (caddr_t)&kmode) == -1) 
-		{
+		if (ioctl(pcap_fileno(p_handle), BIOCSRADCLOCKTSMODE, (caddr_t)&kmode) == -1) {
 			logger(LOG_ERR, "Setting capture mode failed");
-			return -1;
+			return (-1);
 		}
 		break;
 
 	case 2:
+	case 3:
 		/* No more Faircompare mode in kernel version 2, it is identical to
 		 * SYSCLOCK
 		 */
-		switch ( kmode )
-		{
+		switch (kmode) {
 			case RADCLOCK_TSMODE_SYSCLOCK:
 			case RADCLOCK_TSMODE_FAIRCOMPARE:
 				bd_tstamp = BPF_T_MICROTIME;
@@ -454,47 +463,51 @@ int descriptor_set_tsmode(struct radclock *handle, pcap_t *p_handle, int kmode)
 				break;
 			default:
 				logger(LOG_ERR, "descriptor_set_tsmode: Unknown timestamping mode.");
-				return -1;
+				return (-1);
 		}
 
 		if (ioctl(pcap_fileno(p_handle), BIOCSTSTAMP, (caddr_t)&bd_tstamp) == -1) 
 		{
 			logger(LOG_ERR, "Setting capture mode failed: %s", strerror(errno));
-			return -1;
+			return (-1);
 		}
 
 		break;
 
 	default:
 		logger(LOG_ERR, "Unknown kernel version");
-		return -1;
+		return (-1);
 
 	}
-	return 0;
+
+	return (0);
 }
 
 
-int descriptor_get_tsmode(struct radclock *handle, pcap_t *p_handle, int *kmode)
+int
+descriptor_get_tsmode(struct radclock *handle, pcap_t *p_handle, int *kmode)
 {
-	u_int bd_tstamp = 0; 
+	u_int bd_tstamp;
 
-	switch (handle->kernel_version)
-	{
+	bd_tstamp = 0;
+
+	switch (handle->kernel_version) {
 
 	case 0:
 	case 1:
 		if (ioctl(pcap_fileno(p_handle), BIOCGRADCLOCKTSMODE, (caddr_t)kmode) == -1)
 		{
 			logger(LOG_ERR, "Getting timestamping mode failed");
-			return -1;
+			return (-1);
 		}
 		break;
 
 	case 2:
+	case 3:
 		if (ioctl(pcap_fileno(p_handle), BIOCGTSTAMP, (caddr_t)(&bd_tstamp)) == -1)
 		{
 			logger(LOG_ERR, "Getting timestamping mode failed: %s", strerror(errno));
-			return -1;
+			return (-1);
 		}
 
 		if ( (bd_tstamp & BPF_T_FFCLOCK) == BPF_T_FFCLOCK)
@@ -505,10 +518,10 @@ int descriptor_get_tsmode(struct radclock *handle, pcap_t *p_handle, int *kmode)
 
 	default:
 		logger(LOG_ERR, "Unknown kernel version");
-		return -1;
+		return (-1);
 	}
 	
-	return 0;
+	return (0);
 }
 
 
@@ -583,7 +596,7 @@ extract_vcount_stamp(pcap_t *p_handle, const struct pcap_pkthdr *header,
 
 	/* Check we are running live */
 	if (pcap_fileno(p_handle) < 0)
-		return -1;
+		return (-1);
 
 	/*
 	 * Find the beginning of the hacked header starting from the MAC header.
@@ -618,7 +631,7 @@ extract_vcount_stamp_v2(pcap_t *p_handle, const struct pcap_pkthdr *header,
 
 	/* Check we are running live */
 	if (pcap_fileno(p_handle) < 0)
-		return -1;
+		return (-1);
 
 	/*
 	 * Find the beginning of the hacked header starting from the MAC header.

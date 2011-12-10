@@ -113,6 +113,7 @@ void fill_rawdata_ntp(u_char *c_handle, const struct pcap_pkthdr *pcap_hdr, cons
 			packet_data, &(RD_NTP(rdb)->vcount));
 		break;
 	case 2:
+	case 3:
 		err = extract_vcount_stamp_v2(clock_handle->pcap_handle, pcap_hdr,
 			packet_data, &(RD_NTP(rdb)->vcount));
 		break;

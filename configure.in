@@ -239,14 +239,22 @@ case "$target_os" in
 
 	freebsd*)
 		osversion=$(uname -r | sed -e 's/\([0-9]*.[0-9]*\)-.*/\1/')
-		ffsupportversion=`sysctl -n kern.ffclock.version`
+
+		# Version 2 and 3
+		ffsupportversion=`sysctl -n kern.sysclock.ffclock.version`
 		if test $ffsupportversion ; then
 			tscexts=yes
 		else
-			ext=`sysctl -n net.bpf.bpf_radclock_tsmode`
-			if test $ext ; then
+			# Version 1 
+			ffsupportversion=`sysctl -n kern.ffclock.version`
+			if test $ffsupportversion ; then
 				tscexts=yes
-				ffsupportversion=0
+			else
+				ext=`sysctl -n net.bpf.bpf_radclock_tsmode`
+				if test $ext ; then
+					tscexts=yes
+					ffsupportversion=0
+				fi
 			fi
 		fi
 		;;

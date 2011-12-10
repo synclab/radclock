@@ -85,20 +85,9 @@ int init_kernel_support(struct radclock *handle)
 		PRIV_DATA(handle)->dev_fd = fd;
 		break;
 
+	/* ffclock_setestimate syscall offered by kernel through libc */
 	case 2:
-		/* Use radclock module syscall to update clock data */
-/*
-		stat.version = sizeof(stat);
-		err = modstat(modfind("set_ffclock"), &stat);
-		if (err < 0 ) {
-			verbose(LOG_ERR, "Error on modstat (set_ffclock syscall): %s", strerror(errno));
-			verbose(LOG_ERR, "Is the radclock kernel module loaded?");
-			return -1;
-		}
-		handle->syscall_set_ffclock = stat.data.intval;
-		verbose(LOG_NOTICE, "Registered set_ffclock syscall at %d", handle->syscall_set_ffclock);
-*/
-		// ffclock_setestimate syscall offered by kernel through libc
+	case 3:
 		break;
 
 
@@ -124,11 +113,13 @@ int has_vm_vcounter(struct radclock *handle)
 	size_t size_ctl;
 
 	switch (handle->kernel_version) {
+// FIXME : sysctl is there but no xen backend in official kernel yet
+	case 3:
 	case 2:
 		size_ctl = sizeof(passthrough_counter);
-		ret = sysctlbyname("kern.ffclock.ffcounter_bypass", &passthrough_counter, &size_ctl, NULL, 0);
+		ret = sysctlbyname("kern.sysclock.ffclock.ffcounter_bypass", &passthrough_counter, &size_ctl, NULL, 0);
 		if (ret == -1) {
-			verbose(LOG_ERR, "Cannot find kern.ffclock.ffcounter_bypass in sysctl");
+			verbose(LOG_ERR, "Cannot find kern.sysclock.ffclock.ffcounter_bypass in sysctl");
 			return 0;
 		}
 		break;
@@ -219,7 +210,8 @@ set_kernel_fixedpoint(struct radclock *handle, struct radclock_fixedpoint *fpdat
 		break;
 
 	case 2:	
-		verbose(LOG_ERR, "set_kernel_fixedpoint but kernel version 2!!");
+	case 3:	
+		verbose(LOG_ERR, "set_kernel_fixedpoint but kernel version 2 or higher!!");
 		return -1;
 
 	default:
@@ -307,6 +299,7 @@ set_kernel_ffclock(struct radclock *clock)
 		err = syscall(clock->syscall_set_ffclock, &cest);
 		break;
 	case 2:
+	case 3:
 		err = ffclock_setestimate(&cest);
 		break;
 	default:
