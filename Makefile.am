@@ -19,11 +19,14 @@
 # 02110-1301, USA.
 
 
-SUBDIRS = libradclock radclock examples man
 
 DIST_SUBDIRS = libradclock radclock examples man
 
 EXTRA_DIST = python-module debian redhat
+
+
+SUBDIRS = $(DIST_SUBDIRS) 
+SUBDIRS += tests
 
 # Extra cscope target
 CSCOPE_DIRS = libradclock radclock
