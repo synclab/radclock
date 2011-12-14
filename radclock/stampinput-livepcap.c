@@ -568,7 +568,7 @@ static int livepcapstamp_init(struct radclock *handle, struct stampsource *sourc
 		free(LIVEPCAP_DATA(source));
 		return -1;
 	}
-	
+
 	source->priv_data = malloc(sizeof(struct livepcap_data));
 	JDEBUG_MEMORY(JDBG_MALLOC, source->priv_data);
 	if (!LIVEPCAP_DATA(source)) {
@@ -577,8 +577,7 @@ static int livepcapstamp_init(struct radclock *handle, struct stampsource *sourc
 		return -1;
 	}
 	strcpy(LIVEPCAP_DATA(source)->src_ipaddr,"");
-	
-		
+
 	LIVEPCAP_DATA(source)->live_input = 
 				open_live(handle, LIVEPCAP_DATA(source)->src_ipaddr);
 	if (!LIVEPCAP_DATA(source)->live_input) {
@@ -589,7 +588,7 @@ static int livepcapstamp_init(struct radclock *handle, struct stampsource *sourc
 		return -1;
 	}
 	// TODO that could be written in a more simpler way once we clean the sources 
-	handle->pcap_handle = LIVEPCAP_DATA(source)->live_input; 
+	handle->pcap_handle = LIVEPCAP_DATA(source)->live_input;
 
 	/* Set the timestamping mode of the pcap handle for the radclock
 	 * It should be RADCLOCK_TSMODE_SYSCLOCK !
@@ -602,6 +601,7 @@ static int livepcapstamp_init(struct radclock *handle, struct stampsource *sourc
 	//if (radclock_set_tsmode(handle, LIVEPCAP_DATA(source)->live_input, RADCLOCK_TSMODE_SYSCLOCK)){
 	if (radclock_set_tsmode(handle, LIVEPCAP_DATA(source)->live_input, RADCLOCK_TSMODE_RADCLOCK)){
 		verbose(LOG_WARNING, "Could not set RADclock timestamping mode");
+		return (-1);
 	}
 
 	/* Let's check we did things right */

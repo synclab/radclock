@@ -35,6 +35,7 @@
 #include <sys/socket.h>
 
 #include <net/ethernet.h>	// ETHER_HDR_LEN
+#include <net/bpf.h>
 #include <pcap.h>
 
 #include <stdio.h>
@@ -69,6 +70,13 @@
 #endif
 
 
+/* Kernel patches version 2 set the timestamping mode with new IOCTL calls.
+ * This is based on CURRENT, but should be standard soon for standard header
+ * inclusion, and avoid repeating everything in here.
+ */
+
+
+
 #ifndef HAVE_SYS_TIMEFFC_H
 int ffclock_getcounter(vcounter_t *vcount)
 {
@@ -76,59 +84,6 @@ int ffclock_getcounter(vcounter_t *vcount)
 	return EINVAL;
 }
 #endif
-
-
-/* Kernel patches version 2 set the timestamping mode with new IOCTL calls.
- * This is based on CURRENT, but should be standard soon for standard header
- * inclusion, and avoid repeating everything in here.
- */
-//#ifndef BIOCGTSTAMP
-#define	BIOCGTSTAMP	_IOR('B', 131, u_int)
-#define	BIOCSTSTAMP	_IOW('B', 132, u_int)
-
-
-// XXX conditionnally include sys/bpf.h instead?
-#define	BPF_T_MICROTIME		0x0000
-#define	BPF_T_NANOTIME		0x0001
-#define	BPF_T_BINTIME		0x0002
-#define	BPF_T_NONE			0x0003
-#define	BPF_T_FFCOUNTER		0x0004
-#define	BPF_T_NORMAL		0x0000
-#define	BPF_T_FAST			0x0100
-#define	BPF_T_MONOTONIC		0x0200
-#define	BPF_T_MONOTONIC_FAST	(BPF_T_FAST | BPF_T_MONOTONIC)
-#define	BPF_T_FFCLOCK		0x2000
-//#endif
-
-
-
-/* XXX Can we clean that ??
- * Redefinition of the BPF header as in bpf.h Just to avoid to have to include
- * the file again and define the RADCLOCK symbol at compilation time.  Changed
- * name to avoid redefinition problem. pcap.h includes bpf.h but without the
- * vcount field.
- */
-
-struct bpf_hdr_hack_v1 {
-	struct timeval bh_tstamp;	/* time stamp */
-	bpf_u_int32 bh_caplen;		/* length of captured portion */
-	bpf_u_int32 bh_datalen;		/* original length of packet */
-	u_short bh_hdrlen;			/* length of bpf header (this struct plus alignment padding) */
-	u_short padding;			/* padding to align the fields */
-	vcounter_t vcount;			/* raw vcount value for this packet */
-};
-
-struct bpf_hdr_hack_v2 {
-	union {
-		struct timeval bh_tstamp;	/* time stamp */
-		vcounter_t vcount;
-	} bh_ustamp;
-	bpf_u_int32 bh_caplen;		/* length of captured portion */
-	bpf_u_int32 bh_datalen;		/* original length of packet */
-	u_short bh_hdrlen;			/* length of bpf header (this struct plus alignment padding) */
-//	u_short padding;			/* padding to align the fields */
-//	vcounter_t vcount;			/* raw vcount value for this packet */
-};
 
 
 // TODO move out of the library and use IPC call to retrieve the value from
@@ -458,7 +413,8 @@ descriptor_set_tsmode(struct radclock *handle, pcap_t *p_handle, int kmode)
 			case RADCLOCK_TSMODE_RADCLOCK:
 				// TODO this is not very clean, need to do better management of
 				// the format flag
-				bd_tstamp = BPF_T_FFCOUNTER | BPF_T_FFCLOCK;
+				bd_tstamp = BPF_T_FFCOUNTER;
+//				bd_tstamp = BPF_T_FFCOUNTER | BPF_T_FFCLOCK;
 //				bd_tstamp = BPF_T_MICROTIME | BPF_T_FFCLOCK | BPF_T_MONOTONIC;
 				break;
 			default:
@@ -504,16 +460,42 @@ descriptor_get_tsmode(struct radclock *handle, pcap_t *p_handle, int *kmode)
 
 	case 2:
 	case 3:
-		if (ioctl(pcap_fileno(p_handle), BIOCGTSTAMP, (caddr_t)(&bd_tstamp)) == -1)
-		{
+		if (ioctl(pcap_fileno(p_handle), BIOCGTSTAMP, (caddr_t)(&bd_tstamp)) == -1) {
 			logger(LOG_ERR, "Getting timestamping mode failed: %s", strerror(errno));
 			return (-1);
 		}
 
-		if ( (bd_tstamp & BPF_T_FFCLOCK) == BPF_T_FFCLOCK)
-			*kmode = RADCLOCK_TSMODE_RADCLOCK;
-		else
+		// FIXME: loosy output for debugging 
+		switch (bd_tstamp & BPF_T_FORMAT_MASK) {
+		case BPF_T_MICROTIME:
+			logger(LOG_ERR, "PCAP capture format is MICROTIME");
+			break;
+		case BPF_T_NANOTIME:
+			logger(LOG_ERR, "PCAP capture format is NANOTIME");
+			break;
+		case BPF_T_BINTIME:
+			logger(LOG_ERR, "PCAP capture format is BINTIME");
+			break;
+		case BPF_T_FFCOUNTER:
+			logger(LOG_ERR, "PCAP capture format is FFCOUNTER");
+			break;
+		
+		}
+
+		switch (bd_tstamp & BPF_T_CLOCK_MASK) {
+		case BPF_T_SYSCLOCK:
+		// FIXME: need to retrieve sysctl clock active
+		
+		case BPF_T_FBCLOCK:
+			logger(LOG_ERR, "Capture clock is SYSCLOCK");
 			*kmode = RADCLOCK_TSMODE_SYSCLOCK;
+			break;
+
+		case BPF_T_FFCLOCK:
+			logger(LOG_ERR, "Capture clock is RADCLOCK");
+			*kmode = RADCLOCK_TSMODE_RADCLOCK;
+			break;
+		}
 		break;
 
 	default:
@@ -566,6 +548,24 @@ descriptor_get_tsmode(struct radclock *handle, pcap_t *p_handle, int *kmode)
 // pretty ugly and not optimised
 
 
+
+
+/* XXX Can we clean that ??
+ * Redefinition of the BPF header as in bpf.h Just to avoid to have to include
+ * the file again and define the RADCLOCK symbol at compilation time.  Changed
+ * name to avoid redefinition problem. pcap.h includes bpf.h but without the
+ * vcount field.
+ */
+
+struct bpf_hdr_hack_v1 {
+	struct timeval bh_tstamp;	/* time stamp */
+	bpf_u_int32 bh_caplen;		/* length of captured portion */
+	bpf_u_int32 bh_datalen;		/* original length of packet */
+	u_short bh_hdrlen;			/* length of bpf header (this struct plus alignment padding) */
+	u_short padding;			/* padding to align the fields */
+	vcounter_t vcount;			/* raw vcount value for this packet */
+};
+
 /*
  * Also make sure we compute the padding inside the hacked bpf header the same
  * way as in the kernel to avoid different behaviour accross compilers.
@@ -578,13 +578,6 @@ descriptor_get_tsmode(struct radclock *handle, pcap_t *p_handle, int *kmode)
 
 #define BPF_HDR_LEN_v1		\
 	(BPF_WORDALIGN(SIZEOF_BPF_HDR_v1(struct bpf_hdr_hack_v1) + ETHER_HDR_LEN)	- ETHER_HDR_LEN)
-
-#define SIZEOF_BPF_HDR_v2(type)	\
-	(offsetof(type, bh_hdrlen) + sizeof(((type *)0)->bh_hdrlen))
-
-#define BPF_HDR_LEN_v2		\
-	(BPF_WORDALIGN(SIZEOF_BPF_HDR_v2(struct bpf_hdr_hack_v2) + ETHER_HDR_LEN)	- ETHER_HDR_LEN)
-
 
 // FIXME inline should be in a header file, d'oh...
 // FIXME should convert to void, make these tests once and not on each packet
@@ -621,6 +614,18 @@ extract_vcount_stamp(pcap_t *p_handle, const struct pcap_pkthdr *header,
 
 
 
+
+/* XXX this one is based off pcap_pkthdr */
+struct bpf_hdr_hack_v2 {
+	union {
+		struct timeval tv;	/* time stamp */
+		vcounter_t vcount;
+	} bh_ustamp;
+	bpf_u_int32 caplen;		/* length of captured portion */
+	bpf_u_int32 len;		/* original length of packet */
+};
+
+
 // FIXME inline should be in a header file, d'oh...
 // FIXME should convert to void, make these tests once and not on each packet
 inline int
@@ -633,24 +638,13 @@ extract_vcount_stamp_v2(pcap_t *p_handle, const struct pcap_pkthdr *header,
 	if (pcap_fileno(p_handle) < 0)
 		return (-1);
 
-	/*
-	 * Find the beginning of the hacked header starting from the MAC header.
-	 * Useful for checking we are doing the right thing.
-	 */
-	hack = (struct bpf_hdr_hack_v2 *) (packet - BPF_HDR_LEN_v2);
+	hack = (struct bpf_hdr_hack_v2 *)header;
+	*vcount = hack->bh_ustamp.vcount;
 
-	/* Check we did the right thing by comparing hack and pcap header pointer */
-	// TODO: it may be that BPF_FFCOUNTER was not defined in the kernel.
-	// it is not a bug anymore, but a new case to handle
-	if ((hack->bh_hdrlen != BPF_HDR_LEN_v2)
-		|| (memcmp(hack, header, sizeof(struct pcap_pkthdr)) != 0))
-	{
-		logger(RADLOG_ERR, "Either modified kernel not installed, "
-				"or bpf interface has changed");
-		return (-1);
-	}
+	logger(RADLOG_ERR, "Header = %llu", (long long unsigned) (header->ts.tv_sec));
+	logger(RADLOG_ERR, "Header = %llu", (long long unsigned) (header->ts.tv_usec));
+	logger(RADLOG_ERR, "Extract vcount = %llu", (long long unsigned)*vcount);
 
-	*vcount= hack->bh_ustamp.vcount;
 	return (0);
 }
 

@@ -103,7 +103,7 @@ void fill_rawdata_ntp(u_char *c_handle, const struct pcap_pkthdr *pcap_hdr, cons
 	assert(RD_NTP(rdb)->buf);
 
 	/* Copy data of interest into the raw data bundle */
-	RD_NTP(rdb)->vcount = 0;	
+	RD_NTP(rdb)->vcount = 0;
 
 	// FIXME : need a function pointer to the correct extract_vcount function
 	switch (clock_handle->kernel_version) {
@@ -124,7 +124,7 @@ void fill_rawdata_ntp(u_char *c_handle, const struct pcap_pkthdr *pcap_hdr, cons
 
 	if (err < 0) {
 		verbose(LOG_ERR, "Cannot extract vcounter from packet timestamped: %ld.%ld",
-			pcap_hdr->ts.tv_sec, pcap_hdr->ts.tv_usec); 	
+			pcap_hdr->ts.tv_sec, pcap_hdr->ts.tv_usec); 
 	}
 
 	memcpy( &(RD_NTP(rdb)->pcap_hdr), pcap_hdr, sizeof(struct pcap_pkthdr));

@@ -137,10 +137,10 @@ struct stampsource *create_source(struct radclock *clock_handle)
 	}
 
 	/* Now that we've worked out the type of input source, init it */
-	if (INPUT_OPS(src)->init(clock_handle, src))
+	if (INPUT_OPS(src)->init(clock_handle, src) == -1)
 		goto child_err;
 
-	/* Initialise ntp_stats, common to all sources */	
+	/* Initialise ntp_stats, common to all sources */
 	memset(&src->ntp_stats, 0 ,sizeof(struct timeref_stats));
 	
 	return src;
