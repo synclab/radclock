@@ -616,35 +616,41 @@ extract_vcount_stamp(pcap_t *p_handle, const struct pcap_pkthdr *header,
 
 
 /* XXX this one is based off pcap_pkthdr */
-struct bpf_hdr_hack_v2 {
-	union {
-		struct timeval tv;	/* time stamp */
-		vcounter_t vcount;
-	} bh_ustamp;
-	bpf_u_int32 caplen;		/* length of captured portion */
-	bpf_u_int32 len;		/* original length of packet */
-};
+// TODO Clean me !!
+//struct bpf_hdr_hack_v2 {
+//	union {
+//		struct timeval tv;	/* time stamp */
+//		vcounter_t vcount;
+//	} bh_ustamp;
+//	bpf_u_int32 caplen;		/* length of captured portion */
+//	bpf_u_int32 len;		/* original length of packet */
+//};
 
 
 // FIXME inline should be in a header file, d'oh...
-// FIXME should convert to void, make these tests once and not on each packet
+// FIXME should convert to void, make these tests once and not on each packet to
+// improve perfs
 inline int
 extract_vcount_stamp_v2(pcap_t *p_handle, const struct pcap_pkthdr *header,
 		const unsigned char *packet, vcounter_t *vcount)
 {
-	struct bpf_hdr_hack_v2 *hack;
+//	struct bpf_hdr_hack_v2 *hack;
+	
+	vcounter_t *hack;
 
 	/* Check we are running live */
 	if (pcap_fileno(p_handle) < 0)
 		return (-1);
 
-	hack = (struct bpf_hdr_hack_v2 *)header;
-	*vcount = hack->bh_ustamp.vcount;
+	hack = (vcounter_t*) &(header->ts);
+	*vcount = *hack;
 
+/*
+ * // TODO Clean me !!
 	logger(RADLOG_ERR, "Header = %llu", (long long unsigned) (header->ts.tv_sec));
 	logger(RADLOG_ERR, "Header = %llu", (long long unsigned) (header->ts.tv_usec));
 	logger(RADLOG_ERR, "Extract vcount = %llu", (long long unsigned)*vcount);
-
+*/
 	return (0);
 }
 
