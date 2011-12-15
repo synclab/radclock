@@ -53,6 +53,8 @@
 
 
 
+
+
 /* XXX Deprecated
  * Old kernel patches for feed-forward support versions 0 and 1.
  * Used to add more IOCTL to the BPF device. The actual IOCTL number depends on
@@ -75,8 +77,6 @@
  * inclusion, and avoid repeating everything in here.
  */
 
-
-
 #ifndef HAVE_SYS_TIMEFFC_H
 int ffclock_getcounter(vcounter_t *vcount)
 {
@@ -84,6 +84,38 @@ int ffclock_getcounter(vcounter_t *vcount)
 	return EINVAL;
 }
 #endif
+
+#ifndef BPF_T_MICROTIME
+/* Deprecated.
+ * Time stamping functions from net/bpf.h.
+ * This is useful for compiling code on old kernel (most likely feed forward
+ * kernel support versions 0 and 1) 
+ * FreeBSD 9.1 and above should have these defines in net/bpf.h
+ */
+#define	BPF_T_MICROTIME		0x0000
+#define	BPF_T_NANOTIME		0x0001
+#define	BPF_T_BINTIME		0x0002
+#define	BPF_T_NONE		0x0003
+#define	BPF_T_FFCOUNTER		0x0004
+#define	BPF_T_FORMAT_MAX	0x0004
+#define	BPF_T_FORMAT_MASK	0x0007
+#define	BPF_T_NORMAL		0x0000
+#define	BPF_T_MONOTONIC		0x0100
+#define	BPF_T_FLAG_MASK		0x0100
+#define	BPF_T_SYSCLOCK		0x0000
+#define	BPF_T_FBCLOCK		0x1000
+#define	BPF_T_FFCLOCK		0x2000
+#define	BPF_T_CLOCK_MAX		0x2000
+#define	BPF_T_CLOCK_MASK	0x3000
+#define	BPF_T_FORMAT(t)		((t) & BPF_T_FORMAT_MASK)
+#define	BPF_T_FLAG(t)		((t) & BPF_T_FLAG_MASK)
+#define	BPF_T_CLOCK(t)		((t) & BPF_T_CLOCK_MASK)
+
+/* Same as above for these 2 ioctl */
+#define	BIOCGTSTAMP	_IOR('B', 131, u_int)
+#define	BIOCSTSTAMP	_IOW('B', 132, u_int)
+#endif
+
 
 
 // TODO move out of the library and use IPC call to retrieve the value from
