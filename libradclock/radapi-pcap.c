@@ -117,7 +117,7 @@ void kernelclock_routine(u_char *user, const struct pcap_pkthdr *phdr, const u_c
 	memcpy(data->header, phdr, sizeof(struct pcap_pkthdr));
 	data->packet = (unsigned char*)pdata;
 	memcpy(data->ts, &phdr->ts, sizeof(struct timeval));
-	data->ret = extract_vcount_stamp(data->p_handle, phdr, pdata, data->vcount);
+	data->ret = extract_vcount_stamp(data->handle, data->p_handle, phdr, pdata, data->vcount);
 }
 
 

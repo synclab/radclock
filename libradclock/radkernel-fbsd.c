@@ -59,7 +59,7 @@
  * Old kernel patches for feed-forward support versions 0 and 1.
  * Used to add more IOCTL to the BPF device. The actual IOCTL number depends on
  * the OS version, detected in configure script.
- */ 
+ */
 
 /* for setting radclock timestamping mode */
 #ifndef BIOCSRADCLOCKTSMODE
@@ -613,15 +613,11 @@ struct bpf_hdr_hack_v1 {
 
 // FIXME inline should be in a header file, d'oh...
 // FIXME should convert to void, make these tests once and not on each packet
-inline int
-extract_vcount_stamp(pcap_t *p_handle, const struct pcap_pkthdr *header,
+static inline int
+extract_vcount_stamp_v1(pcap_t *p_handle, const struct pcap_pkthdr *header,
 		const unsigned char *packet, vcounter_t *vcount)
 {
 	struct bpf_hdr_hack_v1 *hack;
-
-	/* Check we are running live */
-	if (pcap_fileno(p_handle) < 0)
-		return (-1);
 
 	/*
 	 * Find the beginning of the hacked header starting from the MAC header.
@@ -662,18 +658,11 @@ extract_vcount_stamp(pcap_t *p_handle, const struct pcap_pkthdr *header,
 // FIXME inline should be in a header file, d'oh...
 // FIXME should convert to void, make these tests once and not on each packet to
 // improve perfs
-inline int
+static inline int
 extract_vcount_stamp_v2(pcap_t *p_handle, const struct pcap_pkthdr *header,
 		const unsigned char *packet, vcounter_t *vcount)
 {
-//	struct bpf_hdr_hack_v2 *hack;
-	
 	vcounter_t *hack;
-
-	/* Check we are running live */
-	if (pcap_fileno(p_handle) < 0)
-		return (-1);
-
 	hack = (vcounter_t*) &(header->ts);
 	*vcount = *hack;
 
@@ -685,6 +674,45 @@ extract_vcount_stamp_v2(pcap_t *p_handle, const struct pcap_pkthdr *header,
 */
 	return (0);
 }
+
+
+int
+extract_vcount_stamp(struct radclock *clock, pcap_t *p_handle,
+		const struct pcap_pkthdr *header, const unsigned char *packet,
+		vcounter_t *vcount)
+{
+	int err;
+
+	/* Check we are running live */
+	if (pcap_fileno(p_handle) < 0)
+		return (-1);
+
+	// FIXME : need a function pointer to the correct extract_vcount function
+	switch (clock->kernel_version) {
+	case 0:
+	case 1:
+		err = extract_vcount_stamp_v1(clock->pcap_handle, pcap_hdr,
+			packet_data, &(RD_NTP(rdb)->vcount));
+		break;
+	case 2:
+	case 3:
+		err = extract_vcount_stamp_v2(clock->pcap_handle, pcap_hdr,
+			packet_data, &(RD_NTP(rdb)->vcount));
+		break;
+	default:
+		err = -1;
+		break;
+	}
+
+	if (err < 0) {
+		verbose(LOG_ERR, "Cannot extract vcounter from packet timestamped: %ld.%ld",
+			pcap_hdr->ts.tv_sec, pcap_hdr->ts.tv_usec);
+	}
+
+	return (-1);
+}
+
+
 
 
 #endif

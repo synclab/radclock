@@ -89,7 +89,7 @@ void fill_rawdata_ntp(u_char *c_handle, const struct pcap_pkthdr *pcap_hdr, cons
 {
 	JDEBUG
 
-	struct radclock *clock_handle = (struct radclock *) c_handle;
+	struct radclock *clock = (struct radclock *) c_handle;
 	struct raw_data_bundle *rdb;
 	int err;
 
@@ -105,27 +105,8 @@ void fill_rawdata_ntp(u_char *c_handle, const struct pcap_pkthdr *pcap_hdr, cons
 	/* Copy data of interest into the raw data bundle */
 	RD_NTP(rdb)->vcount = 0;
 
-	// FIXME : need a function pointer to the correct extract_vcount function
-	switch (clock_handle->kernel_version) {
-	case 0:
-	case 1:
-		err = extract_vcount_stamp(clock_handle->pcap_handle, pcap_hdr,
-			packet_data, &(RD_NTP(rdb)->vcount));
-		break;
-	case 2:
-	case 3:
-		err = extract_vcount_stamp_v2(clock_handle->pcap_handle, pcap_hdr,
-			packet_data, &(RD_NTP(rdb)->vcount));
-		break;
-	default:
-		err = -1;
-		break;
-	}
-
-	if (err < 0) {
-		verbose(LOG_ERR, "Cannot extract vcounter from packet timestamped: %ld.%ld",
-			pcap_hdr->ts.tv_sec, pcap_hdr->ts.tv_usec); 
-	}
+	err = extract_vcount_stamp(clock, clock->pcap_handle, pcap_hdr,
+		packet_data, &(RD_NTP(rdb)->vcount));
 
 	memcpy( &(RD_NTP(rdb)->pcap_hdr), pcap_hdr, sizeof(struct pcap_pkthdr));
 	memcpy( RD_NTP(rdb)->buf, packet_data, pcap_hdr->caplen * sizeof(char) );
@@ -135,7 +116,7 @@ void fill_rawdata_ntp(u_char *c_handle, const struct pcap_pkthdr *pcap_hdr, cons
 	rdb->type = RD_NTP_PACKET;
 
 	/* Insert the new bundle in the linked list */
-	insert_rdb_in_list(clock_handle, rdb);
+	insert_rdb_in_list(clock, rdb);
 }
 
 

@@ -312,17 +312,11 @@ int descriptor_set_tsmode(struct radclock *handle, pcap_t *p_handle, int kmode);
  * System specific call for getting the capture mode on the pcap capture device.
  */
 int extract_vcount_stamp(
+		struct radclock *clock,
 		pcap_t *p_handle, 
 		const struct pcap_pkthdr *header, 
 		const unsigned char *packet,
 		vcounter_t *vcount);
-
-// FIXME: try to get rid of this via, function pointer
-int
-extract_vcount_stamp_v2( pcap_t *p_handle, const struct pcap_pkthdr *header,
-	const unsigned char *packet, vcounter_t *vcount);
-
-
 
 
 int init_virtual_machine_mode(struct radclock *clock_handle);

@@ -450,8 +450,10 @@ int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 	
 	/* Check hardware counter has not changed */
 	// XXX TODO this is freebsd specific, should be put with arch specific code
+#ifdef WITH_RADKERNEL_FBSD
 	char hw_counter[32];
 	size_t size_ctl;
+#endif
 
 	/* Generic call for creating the stamps depending on the type of the 
 	 * input source.
@@ -512,6 +514,8 @@ int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 			if (HAS_STATUS(clock_handle, STARAD_UNSYNC))
 				return 0;
 
+// XXX Out of whack, need cleaning when make next version linux support
+#ifdef WITH_RADKERNEL_FBSD
 			/* If hardware counter has changed, restart over again */
 			size_ctl = sizeof(hw_counter);
 			err = sysctlbyname("kern.timecounter.hardware", &hw_counter[0], &size_ctl, NULL, 0);
@@ -529,9 +533,9 @@ int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 				clock_handle->server_data->burst = NTP_BURST;
 				strcpy(clock_handle->hw_counter, hw_counter);
 // XXX TODO: Reinitialise the stats structure as well?
-
 				return 0;
 			}
+#endif
 
 			set_kernel_ffclock(clock_handle);
 			verbose(VERB_DEBUG, "Feed-forward kernel clock has been set.");
