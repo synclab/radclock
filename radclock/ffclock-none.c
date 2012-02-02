@@ -53,7 +53,6 @@ inline int set_kernel_fixedpoint(struct radclock *handle, struct radclock_fixedp
 	return -ENOENT;
 }
 
-
 inline int set_kernel_ffclock(struct radclock *clock_handle)
 {
 	return -ENOENT;

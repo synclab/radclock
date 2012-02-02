@@ -495,10 +495,9 @@ set_kernel_ffclock(struct radclock *clock)
 //	uint64_t frac;
 //
 	verbose(LOG_ERR, "Not yet setting ffclock data in the kernel");
-	if (clock->kernel_version < 2)
-	{
+	if (clock->kernel_version < 2) {
 		verbose(LOG_ERR, "set_kernel_ffclock with unfit kernel!");
-		return -1;
+		return (-1);
 	}
 
 //
@@ -539,7 +538,7 @@ set_kernel_ffclock(struct radclock *clock)
 //		return -1;
 //	}
 //
-//	return 0;
+	return (0);
 }
 
 

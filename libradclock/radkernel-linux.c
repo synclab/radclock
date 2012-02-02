@@ -263,6 +263,18 @@ int radclock_init_vcounter(struct radclock *handle)
 	return 0;
 }
 
+// TODO the set_kernel_ffclock should be in the library too?
+int
+get_kernel_ffclock(struct radclock *clock)
+{
+	logger(RADLOG_ERR, "Not yet getting ffclock data in the kernel");
+	if (clock->kernel_version < 2) {
+		logger(RADLOG_ERR, "get_kernel_ffclock with unfit kernel!");
+		return (-1);
+	}
+
+	return (0);
+}
 
 
 int descriptor_set_tsmode(struct radclock *handle, pcap_t *p_handle, int kmode)
@@ -304,11 +316,10 @@ int descriptor_get_tsmode(struct radclock *handle, pcap_t *p_handle, int *kmode)
  */
 #if defined(TPACKET_HDRLEN) && defined (HAVE_PCAP_ACTIVATE) 
 
-inline int extract_vcount_stamp(
-			pcap_t *p_handle, 
-			const struct pcap_pkthdr *header, 
-			const unsigned char *packet,
-			vcounter_t *vcount)
+inline int
+extract_vcount_stamp(struct radclock *clock, pcap_t *p_handle,
+		const struct pcap_pkthdr *header, const unsigned char *packet,
+		vcounter_t *vcount)
 {
 	char * bp;
 	bp = (char*)packet - sizeof(vcounter_t);
@@ -318,11 +329,10 @@ inline int extract_vcount_stamp(
 
 #else
 
-inline int extract_vcount_stamp(
-			pcap_t *p_handle, 
-			const struct pcap_pkthdr *header, 
-			const unsigned char *packet,
-			vcounter_t *vcount)
+inline int
+extract_vcount_stamp(struct radclock *clock, pcap_t *p_handle,
+		const struct pcap_pkthdr *header, const unsigned char *packet,
+		vcounter_t *vcount)
 {
 	if (ioctl(pcap_fileno(p_handle), SIOCGRADCLOCKSTAMP, vcount))
 	{

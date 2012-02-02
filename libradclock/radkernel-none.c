@@ -72,6 +72,12 @@ int radclock_init_vcounter(struct radclock *handle)
 }
 
 
+inline int get_kernel_ffclock(struct radclock *clock_handle)
+{
+	return -ENOENT;
+}
+
+
 int descriptor_set_tsmode(struct radclock *handle, pcap_t *p_handle, int kmode)
 {
 	return -ENOENT;
