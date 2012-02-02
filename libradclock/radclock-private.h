@@ -94,6 +94,19 @@ struct radclock_data {
 	vcounter_t valid_till;
 };
 
+/*
+ * Structure representing radclock data and exposed to system processes via IPC
+ * shared memory.
+ */
+struct radclock_data_shm {
+	int version;
+	int status;
+	int clockid;
+	unsigned int gen;
+	struct radclock_data *new;
+	struct radclock_data *old;
+	struct radclock_data raddata[2];
+};
 
 
 /* TODO: split it in 2, clock errors and peer clock tracking, recompose with
@@ -168,8 +181,10 @@ struct radclock
 	/* Protol related stuff (NTP, 1588, ...) */
 	struct radclock_ntpserver_data *server_data;
 	
-	/* IPC request bound */
-	int ipc_requests;
+	/* IPC socket and shared memory */
+	int ipc_requests;	// request bound. TODO cleanup?
+	int ipc_shm_id;
+	void *ipc_shm;
 
 	/* Description of current counter */
 	char hw_counter[32];
@@ -246,6 +261,7 @@ struct radclock
 
 /* Socket for IPC used by the gb_pthread */
 #define RADCLOCK_RUN_DIRECTORY		"/var/run/radclock"
+#define IPC_SHARED_MEMORY			( RADCLOCK_RUN_DIRECTORY "/radclock.shm" )
 #define IPC_SOCKET_SERVER			( RADCLOCK_RUN_DIRECTORY "/radclock.socket" )
 #define IPC_SOCKET_CLIENT			"/tmp/radclock-client"
 

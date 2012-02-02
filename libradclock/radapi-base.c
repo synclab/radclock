@@ -84,6 +84,8 @@ struct radclock * radclock_create(void)
 	clock->run_mode 			= RADCLOCK_SYNC_NOTSET;
 	clock->ipc_mode 			= RADCLOCK_IPC_CLIENT;
 	clock->ipc_requests			= 0;
+	clock->ipc_shm_id			= 0;
+	clock->ipc_shm				= NULL;
 
 	/* Network Protocol related stuff */
 	clock->client_data 	= NULL;

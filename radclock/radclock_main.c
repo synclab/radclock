@@ -22,20 +22,11 @@
 
 
 // TODO we probably don't need all these includes anymore
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <getopt.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/time.h>
-#include <sys/socket.h>
-#include <signal.h>
-#include <sched.h>
-
-#include <syslog.h>
-#include <fcntl.h>
+#include <sys/shm.h>
 #include <sys/stat.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#include <sys/socket.h>
 
 #include <net/if.h>
 #include <netinet/in_systm.h>
@@ -45,9 +36,18 @@
 #include <net/ethernet.h>
 #include <arpa/inet.h>
 
-#include <string.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <getopt.h>
 #include <math.h> 
+#include <sched.h>
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <syslog.h>
 #include <time.h> 
+#include <unistd.h>
 
 #include "../config.h"
 #include "radclock.h"
@@ -344,8 +344,11 @@ static void signal_handler(int sig)
 
 
 
-/** Function that fork the process and creates the running daemon */
-static int daemonize(const char* lockfile, int *daemon_pid_fd) 
+/*
+ * Function that fork the process and creates the running daemon
+ */
+static int
+daemonize(const char* lockfile, int *daemon_pid_fd) 
 {
 	/* Scheduler */
 	struct sched_param sched;
@@ -425,7 +428,90 @@ static int daemonize(const char* lockfile, int *daemon_pid_fd)
 
 	JDEBUG_MEMORY(JDBG_FREE, str);
 	free(str);
-	return 1;
+
+	return (1);
+}
+
+
+/*
+ * Create and or initialise IPC shared memory to pass radclock data to system
+ * processes.
+ * TODO: May want to move all these init functions in a separate file.
+ */
+static int
+init_raddata_shm_writer(struct radclock *clock)
+{
+	struct shmid_ds shm_ctl;
+	struct radclock_data_shm *data;
+	key_t shm_key;
+	unsigned int perm_flags;
+	int shm_fd;
+	int just_created;
+
+	/*
+	 * Create shm key (file created if it does not already exist)
+	 */
+	shm_fd = open(IPC_SHARED_MEMORY, O_RDWR|O_CREAT, 0644);
+	close(shm_fd);
+
+	shm_key = ftok(IPC_SHARED_MEMORY, 'a');
+	if (shm_key == -1) {
+		verbose(LOG_ERR, "ftok: %s\n", strerror(errno));
+		return (1);
+	}
+
+	/*
+	 * Create shared memory segment. IPC_EXCL will make this call fail if the
+	 * memory segment already exists.
+	 * May not be a bad thing, since a former instance of radclock that has
+	 * created it. However, cannot be sure the creator is the last one that has
+	 * updated it, and if that guy is still alive. Hard to do here, use pid
+	 * lockfile instead.
+	 */ 
+	just_created = 0;
+	perm_flags = SHM_R | SHM_W | (SHM_R>>3) | (SHM_R>>6);
+	clock->ipc_shm_id = shmget(shm_key, sizeof(struct radclock_data_shm),
+			IPC_CREAT | IPC_EXCL | perm_flags);
+	if (clock->ipc_shm_id < 0) {
+		switch(errno) {
+		case (EEXIST):
+			clock->ipc_shm_id = shmget(shm_key, sizeof(struct radclock_data_shm), 0);
+			shmctl(clock->ipc_shm_id, IPC_STAT, &shm_ctl);
+			shm_ctl.shm_perm.mode |= perm_flags;
+			shmctl(clock->ipc_shm_id, IPC_SET, &shm_ctl);
+			just_created = 1;
+			verbose(LOG_NOTICE, "IPC Shared Memory exists with %u processes "
+					"attached\n", shm_ctl.shm_nattch);
+			break;
+
+		default:
+			verbose(LOG_ERR, "shmget failed: %s\n", strerror(errno));
+			return (1);
+		}
+	} else {
+		// TODO: need to init version number, clockid etc.
+		verbose(LOG_NOTICE, "IPC Shared Memory created\n");
+	}
+
+	/*
+	 * Attach the process to the memory segment. Round it to kernel page size.
+	 */
+	clock->ipc_shm = shmat(clock->ipc_shm_id, NULL, SHM_RND);
+	if (clock->ipc_shm == (void *) -1) {
+		verbose(LOG_ERR, "shmat failed: %s\n", strerror(errno));
+		return (1);
+	}
+
+	/* Zero the segment and init the buffer pointers */ 
+	if (just_created) {
+		memset(clock->ipc_shm, 0, sizeof(struct radclock_data_shm));
+		data = (struct radclock_data_shm *) clock->ipc_shm;
+		data->new = &(data->raddata[0]);
+		data->old = &(data->raddata[1]);
+		// TODO: need to init version number, clockid etc.
+	}
+
+	return (0);
 }
 
 
@@ -434,7 +520,8 @@ static int daemonize(const char* lockfile, int *daemon_pid_fd)
 /*
  * radclock process specific init of the clock_handle
  */
-static int radclock_init_specific (struct radclock *clock_handle)
+static int
+radclock_init_specific (struct radclock *clock_handle)
 {
 	/* Input source */
 	struct stampsource *stamp_source;
@@ -466,6 +553,7 @@ static int radclock_init_specific (struct radclock *clock_handle)
 	}
 	
 	/* Create directory to store pid lock file and ipc socket */
+	// TODO: this has to be removed once the Shared Memory code is functional?
 	if (  (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER) 
 				|| (clock_handle->is_daemon) ) 
 		{
@@ -479,6 +567,16 @@ static int radclock_init_specific (struct radclock *clock_handle)
 		}
 	}
 
+	/*
+	 * Initialise IPC shared memory segment
+	 */
+	if ((clock_handle->ipc_mode == RADCLOCK_IPC_SERVER) 
+				|| (clock_handle->is_daemon)) {
+		err = init_raddata_shm_writer(clock_handle);
+			if (err)
+				return (1);
+	}
+	
 	/* Open input file from which to read TS data */   
 	stamp_source = create_source(clock_handle);
 	if (!stamp_source)
@@ -1040,6 +1138,18 @@ int main(int argc, char *argv[])
 		}
 		/* End of thread while loop */
 	} /* End of run live case */
+
+
+	/*
+	 * Detach IPC shared memory if were running as IPC server.
+	 * Not that the shared memory segment is actually destroyed when the last
+	 * attached process detaches from it.
+	 */
+	if (clock_handle->conf->server_ipc == BOOL_ON) {
+		shmdt(clock_handle->ipc_shm);
+		shmctl(clock_handle->ipc_shm_id, IPC_RMID, NULL);
+	}
+
 
 	// TODO: look into making the stats a separate structure. Could be much
 	// TODO: easier to manage 

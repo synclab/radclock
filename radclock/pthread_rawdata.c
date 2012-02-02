@@ -74,6 +74,31 @@ int update_system_clock(struct radclock *clock_handle) { return 0; }
 #endif
 
 
+/*
+ * Update IPC shared memory segment.
+ * Swap pointers and bump generation number to ensure consistency.
+ */
+static int
+update_ipc_shared_memory(struct radclock *clock)
+{
+	struct radclock_data_shm *data;
+	struct radclock_data *tmp;
+	unsigned int generation;
+
+	data = (struct radclock_data_shm *) clock->ipc_shm;
+	memcpy(data->old, &clock->rad_data, sizeof(struct radclock_data));
+	generation = data->gen;
+	data->gen = 0;
+	tmp = data->new;
+	data->new = data->old;
+	data->old = tmp;
+	if (generation++ == 0)
+		generation = 1;
+	data->gen = generation;
+
+	return (0);
+}
+
 
 
 /* Report back to back timestamps of RADclock and system clock */
@@ -498,6 +523,13 @@ int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 	if ( (clock_handle->run_mode == RADCLOCK_SYNC_LIVE) 
 			&& (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER) )
 	{
+		/*
+		 * Update IPC shared memory segment for all processes to get accurate
+		 * clock parameters
+		 */
+		if (~HAS_STATUS(clock_handle, STARAD_UNSYNC))
+			update_ipc_shared_memory(clock_handle);
+
 		if ( clock_handle->kernel_version < 2 )
 		{	
 			update_kernel_fixed(clock_handle);
