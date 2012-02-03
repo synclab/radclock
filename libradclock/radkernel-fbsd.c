@@ -691,13 +691,11 @@ extract_vcount_stamp(struct radclock *clock, pcap_t *p_handle,
 	switch (clock->kernel_version) {
 	case 0:
 	case 1:
-		err = extract_vcount_stamp_v1(clock->pcap_handle, pcap_hdr,
-			packet_data, &(RD_NTP(rdb)->vcount));
+		err = extract_vcount_stamp_v1(clock->pcap_handle, header, packet, vcount);
 		break;
 	case 2:
 	case 3:
-		err = extract_vcount_stamp_v2(clock->pcap_handle, pcap_hdr,
-			packet_data, &(RD_NTP(rdb)->vcount));
+		err = extract_vcount_stamp_v2(clock->pcap_handle, header, packet, vcount);
 		break;
 	default:
 		err = -1;
@@ -705,8 +703,8 @@ extract_vcount_stamp(struct radclock *clock, pcap_t *p_handle,
 	}
 
 	if (err < 0) {
-		verbose(LOG_ERR, "Cannot extract vcounter from packet timestamped: %ld.%ld",
-			pcap_hdr->ts.tv_sec, pcap_hdr->ts.tv_usec);
+		logger(RADLOG_ERR, "Cannot extract vcounter from packet timestamped: %ld.%ld",
+			header->ts.tv_sec, header->ts.tv_usec);
 	}
 
 	return (-1);
