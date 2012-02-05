@@ -242,7 +242,6 @@ struct radclock
 #define CLIENT_DATA(x) (x->client_data)
 #define SERVER_DATA(x) (x->server_data)
 #define RAD_DATA(x) (&(x->rad_data))
-#define GLOBAL_DATA(x) (&(x->rad_data))  // TODO: deprecate me ...
 #define RAD_ERROR(x) (&(x->rad_error))
 #define RAD_VM(x) (&(x->rad_vm))
 

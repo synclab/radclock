@@ -367,7 +367,7 @@ int trigger_work(struct radclock *clock_handle)
 	if ( err < 0 )
 		return err;
 
-	if ((vcount - RAD_DATA(clock_handle)->last_changed)*GLOBAL_DATA(clock_handle)->phat > OUT_SKM / 2) 
+	if ((vcount - RAD_DATA(clock_handle)->last_changed)*RAD_DATA(clock_handle)->phat > OUT_SKM / 2) 
 	{
 		/* Data is quite old */
 		if ( ! HAS_STATUS(clock_handle, STARAD_STARVING ))
