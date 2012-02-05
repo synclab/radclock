@@ -31,6 +31,7 @@
 #include "radclock-private.h"
 #include "ffclock.h"
 #include "fixedpoint.h"
+#include "misc.h"
 #include "verbose.h"
 #include "proto_ntp.h"
 #include "stampinput.h"
@@ -108,6 +109,7 @@ read_clocks(struct radclock *clock_handle, struct timeval *sys_tv,
 {
 	vcounter_t before;
 	vcounter_t after;
+	long double time;
 	int i;
 
 	/*
@@ -129,7 +131,8 @@ read_clocks(struct radclock *clock_handle, struct timeval *sys_tv,
 		(after - before) * RAD_DATA(clock_handle)->phat * 1e6 );
 
 	*counter = (vcounter_t) ((before + after)/2);
-	radclock_vcount_to_abstime(clock_handle, counter, rad_tv);
+	counter_to_time(clock_handle, counter, &time);
+	timeld_to_timeval(&time, rad_tv);
 }
 
 
@@ -164,6 +167,7 @@ subtract_tv(struct timeval *delta, struct timeval tv1, struct timeval tv2)
  */
 int update_system_clock(struct radclock *clock)
 {
+	long double time;
 	vcounter_t vcount;
 	struct timeval rad_tv;
 	struct timeval sys_tv;
@@ -171,11 +175,11 @@ int update_system_clock(struct radclock *clock)
 	struct timex tx;
 	double offset; 		/* [sec] */
 	double freq; 		/* [PPM] */
-	int err;
 	static vcounter_t sys_init;
 	static struct timeval sys_init_tv;
 	static int next_stamp;
 	int poll_period;
+	int err;
 
 	memset(&tx, 0, sizeof(struct timex));
 
@@ -194,7 +198,9 @@ int update_system_clock(struct radclock *clock)
 	 */
 	if ( ((struct bidir_output*)clock->algo_output)->n_stamps == NTP_BURST )
 	{
-		radclock_gettimeofday(clock, &rad_tv);
+		radclock_get_vcounter(clock, &vcount);
+		counter_to_time(clock, &vcount, &time);
+		timeld_to_timeval(&time, &rad_tv);
 		err = settimeofday(&rad_tv, NULL);
 		if ( err < 0 )
 			verbose(LOG_WARNING, "System clock update failed on settimeofday()");
@@ -600,17 +606,17 @@ int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 	if (VERB_LEVEL &&   ( (OUTPUT(clock_handle, n_stamps) < 10)
 					|| !(OUTPUT(clock_handle, n_stamps) % ((int)(3600*6/poll_period))) )) 
 	{
-		radclock_vcount_to_abstime_fp(clock_handle, &(RAD_DATA(clock_handle)->last_changed), &currtime);
-		radclock_get_min_RTT(clock_handle, &min_RTT);
+		counter_to_time(clock_handle, &(RAD_DATA(clock_handle)->last_changed), &currtime);
+		min_RTT = RAD_ERROR(clock_handle)->min_RTT;
 		timediff = (double) (currtime - (long double) BST(&stamp)->Te);
 
 		verbose(VERB_CONTROL, "i=%ld: NTPserver stamp %.6Lf, RAD - NTPserver = %.3f [ms], RTT/2 = %.3f [ms]",
 				((struct bidir_output*)clock_handle->algo_output)->n_stamps - 1,
 				BST(&stamp)->Te, timediff * 1000, min_RTT / 2 * 1000);
 
-		radclock_get_clockerror_bound(clock_handle, &error_bound);
-		radclock_get_clockerror_bound_avg(clock_handle, &error_bound_avg);
-		radclock_get_clockerror_bound_std(clock_handle, &error_bound_std);
+		error_bound = RAD_ERROR(clock_handle)->error_bound;
+		error_bound_avg = RAD_ERROR(clock_handle)->error_bound_avg;
+		error_bound_std = RAD_ERROR(clock_handle)->error_bound_std;
 		verbose(VERB_CONTROL, "i=%ld: Clock Error Bound (cur,avg,std) %.6f %.6f %.6f [ms]",
 				((struct bidir_output*)clock_handle->algo_output)->n_stamps - 1,
 				error_bound * 1000, error_bound_avg * 1000, error_bound_std * 1000);

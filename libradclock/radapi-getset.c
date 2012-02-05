@@ -70,6 +70,7 @@ radclock_get_autoupdate(struct radclock *handle, radclock_autoupdate_t *update_m
 }
 
 
+// TODO: should kill this? plocal is always used.
 int
 radclock_set_local_period_mode(struct radclock *handle,
 		radclock_local_period_t *local_period_mode)

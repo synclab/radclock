@@ -54,6 +54,8 @@
 #include "stampinput_int.h"
 #include "ntohll.h"
 #include "rawdata.h"
+#include "radclock.h"
+#include "misc.h"
 #include "jdebug.h"
 
 

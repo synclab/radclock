@@ -34,6 +34,7 @@
 #include "../config.h"
 #include "radclock.h"
 #include "radclock-private.h"
+#include "misc.h"
 #include "sync_algo.h"
 #include "config_mgr.h"
 #include "verbose.h"
@@ -112,6 +113,7 @@ void verbose(int facility, const char* format, ...)
 	va_list arg;
 	char ctime_buf[27]	= "";
 	long double currtime;
+	vcounter_t vcount;
 	time_t currsec;
 	struct tm *t;
 	
@@ -205,7 +207,8 @@ void verbose(int facility, const char* format, ...)
 		}
 		else
 		{
-			radclock_gettimeofday_fp(verbose_data.clock, &currtime);
+			radclock_get_vcounter(verbose_data.clock, &vcount);
+			counter_to_time(verbose_data.clock, &vcount, &currtime);
 			/* The cast should 'floor' currtime */
 			currsec = (time_t) currtime;      
 			t = localtime(&currsec);
