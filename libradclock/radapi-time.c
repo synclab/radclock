@@ -50,29 +50,62 @@ if ( ts < data->last_changed || ts - data->last_changed * data->phat > 10000 )
 /* Build the time using the absolute clock plus the local relative rate
  * correction (has no effect if not running plocal).
  */ 
-static inline long double radclock_vcount_to_ld(
-		const struct radclock *handle, vcounter_t vcount)
+static inline int 
+radclock_vcount_to_ld(const struct radclock *clock, vcounter_t vcount,
+		long double *time)
 {
-	long double base_time = (long double) vcount * (long double) RAD_DATA(handle)->phat 
-		+ RAD_DATA(handle)->ca;
+	struct radclock_data_shm *data;
+	vcounter_t valid, last;
+	double phat;
+	int generation;
 
-	if ( (handle->local_period_mode == RADCLOCK_LOCAL_PERIOD_ON)
-		&& ((RAD_DATA(handle)->status & STARAD_WARMUP) != STARAD_WARMUP) )
-	{
-		base_time+= 
-			(long double)(vcount - RAD_DATA(handle)->last_changed) * 
-			(long double)(RAD_DATA(handle)->phat_local - RAD_DATA(handle)->phat);
-	}
-	return base_time;
+	data = (struct radclock_data_shm *) clock->ipc_shm;
+	do {
+		/* Quality ingredients */
+		generation = data->gen;
+		valid = data->new->valid_till;
+		last  = data->new->last_changed;
+		phat  = data->new->phat;
+
+		*time = (long double) vcount * (long double) phat + data->new->ca;
+
+		if ( (clock->local_period_mode == RADCLOCK_LOCAL_PERIOD_ON)
+			&& ((data->new->status & STARAD_WARMUP) != STARAD_WARMUP) )
+		{
+			*time += (long double)(vcount - last) * 
+				(long double)(data->new->phat_local - phat);
+		}
+	} while (generation != data->gen || !data->gen);
+
+	return raddata_quality(vcount, last, valid, phat);
 }
 
 /* Build a delay using the difference clock.
  * This function does not fail, SKM model should be checked before call
  */
-static inline long double radclock_delay_to_ld(
-		const struct radclock_data *data, vcounter_t from_vcount, vcounter_t till_vcount)
+static inline int
+radclock_delay_to_ld(struct radclock *clock, vcounter_t from_vcount,
+		vcounter_t till_vcount, long double *time)
 {
-		return (long double) ((till_vcount-from_vcount) * data->phat_local);
+	struct radclock_data_shm *data;
+	vcounter_t now, valid, last;
+	double phat;
+	int generation;
+
+	// TODO Stupid performance penalty, but needs more thought
+	if (radclock_get_vcounter(clock, &now))
+		return (1);
+
+	data = (struct radclock_data_shm *) clock->ipc_shm;
+	do {
+		generation = data->gen;
+		valid = data->new->valid_till;
+		last  = data->new->last_changed;
+		phat  = data->new->phat;
+		*time = (long double) ((till_vcount-from_vcount) * data->new->phat_local);
+	} while (generation != data->gen || !data->gen);
+
+	return raddata_quality(now, last, valid, phat);
 }
 
 
@@ -86,22 +119,28 @@ static inline long double radclock_delay_to_ld(
 // 		- the value of the SKM scale is hard coded ... but otherwise?
 // 		- Validity of the global data
 // 		- error code(s) to return
-static inline int in_skm(struct radclock *handle, const vcounter_t *past_count, const vcounter_t *vc) 
+static inline int
+in_skm(struct radclock *clock, const vcounter_t *past_count, const vcounter_t *vc) 
 {
+	struct radclock_data_shm *data;
 	vcounter_t now;
+
 	if ( !vc )
-		radclock_get_vcounter(handle, &now);
+		radclock_get_vcounter(clock, &now);
 	now = *vc;
 
-	if ( (now - *past_count) * RAD_DATA(handle)->phat < 1024 )
+	data = (struct radclock_data_shm *) clock->ipc_shm;
+	if ( (now - *past_count) * data->new->phat < 1024 )
 		return 1;
 	else
 		return 0;
 }
 
-
-/* The generic timeval constructor */
-static inline void radclock_ld_to_tv(long double time, struct timeval *tv)
+/*
+ * The generic timeval constructor
+ */
+static inline void
+radclock_ld_to_tv(long double time, struct timeval *tv)
 {
 	tv->tv_sec  = (uint32_t) time;   
 	tv->tv_usec = (uint32_t) (1000000*(time - tv->tv_sec) + 0.5); 
@@ -110,185 +149,209 @@ static inline void radclock_ld_to_tv(long double time, struct timeval *tv)
 
 
 
-int radclock_gettimeofday(struct radclock *handle , struct timeval *abstime_tv) 
+int
+radclock_gettimeofday(struct radclock *clock , struct timeval *abstime_tv) 
 {
 	vcounter_t vcount;
-	int data_quality = 0;
+	long double time;
+	int quality;
 
 	/* Check for critical bad input */ 
-	if ( !handle )
+	if ( !clock )
 		return 1;
 
 	/* Make sure we can get a raw timestamp */	
-	if ( radclock_get_vcounter(handle, &vcount) < 0 )
+	if ( radclock_get_vcounter(clock, &vcount) < 0 )
 		return 1;
 	
 	/* Retrieve clock data */
-	if ( !RAD_DATA(handle) || !abstime_tv)
+	if ( !clock->ipc_shm || !abstime_tv)
 		return 1;
 
-	data_quality = radclock_check_outdated(handle, &vcount, IPC_REQ_RAD_DATA);
-	radclock_ld_to_tv(radclock_vcount_to_ld(handle, vcount), abstime_tv);
-	return data_quality;
+	quality = radclock_vcount_to_ld(clock, vcount, &time);
+	radclock_ld_to_tv(time, abstime_tv);
+	return quality;
 }
 
 
-int radclock_gettimeofday_fp(struct radclock *handle, long double *abstime_fp) 
+int
+radclock_gettimeofday_fp(struct radclock *clock, long double *abstime_fp) 
 {
 	vcounter_t vcount;
-	int data_quality = 0;
+	int quality;
 
 	/* Check for critical bad input */ 
-	if ( !handle )
+	if ( !clock )
 		return 1;
 
 	/* Make sure we can get a raw timestamp */	
-	if ( radclock_get_vcounter(handle, &vcount) < 0 )
+	if ( radclock_get_vcounter(clock, &vcount) < 0 )
 		return 1;
 	
 	/* Retrieve clock data */
-	if ( !RAD_DATA(handle) || !abstime_fp)
+	if ( !clock->ipc_shm || !abstime_fp)
 		return 1;
 
-	data_quality = radclock_check_outdated(handle, &vcount, IPC_REQ_RAD_DATA);
-	*abstime_fp = radclock_vcount_to_ld(handle, vcount);
-	return data_quality;
+	quality = radclock_vcount_to_ld(clock, vcount, abstime_fp);
+	return quality;
 }
 
 
-int radclock_vcount_to_abstime(struct radclock *handle, const vcounter_t *vcount, struct timeval *abstime_tv) 
+int
+radclock_vcount_to_abstime(struct radclock *clock, const vcounter_t *vcount,
+		struct timeval *abstime_tv) 
 {     
-	int data_quality = 0;
+	long double time;
+	int quality;
 
 	/* Check for critical bad input */ 
-	if ( !handle || !RAD_DATA(handle) || !vcount || !abstime_tv)
+	if ( !clock || !clock->ipc_shm || !vcount || !abstime_tv)
 		return 1;
 
-	data_quality = radclock_check_outdated(handle, NULL, IPC_REQ_RAD_DATA);
-	radclock_ld_to_tv(radclock_vcount_to_ld(handle, *vcount), abstime_tv);
-	return data_quality;
+	quality = radclock_vcount_to_ld(clock, *vcount, &time);
+	radclock_ld_to_tv(time, abstime_tv);
+	return quality;
 }
 
 
-int radclock_vcount_to_abstime_fp(struct radclock *handle, const vcounter_t *vcount, long double *abstime_fp)
+int
+radclock_vcount_to_abstime_fp(struct radclock *clock, const vcounter_t *vcount,
+		long double *abstime_fp)
 {
-	int data_quality = 0;
+	int quality;
 
 	/* Check for critical bad input */ 
-	if ( !handle || !RAD_DATA(handle) || !vcount || !abstime_fp)
+	if ( !clock || !clock->ipc_shm || !vcount || !abstime_fp)
 		return 1;
 
-	data_quality = radclock_check_outdated(handle, NULL, IPC_REQ_RAD_DATA);
-	*abstime_fp = radclock_vcount_to_ld(handle, *vcount);
-	return data_quality;
+	quality = radclock_vcount_to_ld(clock, *vcount, abstime_fp);
+	return quality;
 }
 
 
-int radclock_elapsed(struct radclock *handle, const vcounter_t *from_vcount, struct timeval *duration_tv)
+int
+radclock_elapsed(struct radclock *clock, const vcounter_t *from_vcount,
+		struct timeval *duration_tv)
 {
+	long double time;
 	vcounter_t vcount;
-	int data_quality = 0;
+	int quality;
 
 	/* Check for critical bad input */ 
-	if ( !handle )
+	if ( !clock )
 		return 1;
 
 	/* Make sure we can get a raw timestamp */	
-	if ( radclock_get_vcounter(handle, &vcount) < 0 )
+	if ( radclock_get_vcounter(clock, &vcount) < 0 )
 		return 1;
 	
 	/* Retrieve clock data */
-	if ( !RAD_DATA(handle) || !from_vcount || !duration_tv)
+	if ( !clock->ipc_shm || !from_vcount || !duration_tv)
 		return 1;
 
-	data_quality = radclock_check_outdated(handle, &vcount, IPC_REQ_RAD_DATA);
-// TODO is this the  good behaviour, we should request the clock data associated to from_vcount? maybe not
-	if ( !in_skm(handle, from_vcount, &vcount) )
+	time = 0;
+	quality = radclock_delay_to_ld(clock, *from_vcount, vcount, &time);
+	radclock_ld_to_tv(time, duration_tv);
+
+// TODO is this the  good behaviour, we should request the clock data associated
+// to from_vcount? maybe not
+	if (!in_skm(clock, from_vcount, &vcount))
 		return 1;
 
-	radclock_ld_to_tv(radclock_delay_to_ld(RAD_DATA(handle), *from_vcount, vcount), duration_tv);
-	return data_quality;
+	return quality;
 }
 
 
-int radclock_elapsed_fp(struct radclock *handle, const vcounter_t *from_vcount, long double *duration_fp)
+int
+radclock_elapsed_fp(struct radclock *clock, const vcounter_t *from_vcount,
+		long double *duration_fp)
 {
 	vcounter_t vcount;
-	int data_quality = 0;
+	int quality = 0;
 
 	/* Check for critical bad input */ 
-	if ( !handle )
+	if ( !clock )
 		return 1;
 
 	/* Make sure we can get a raw timestamp */	
-	if ( radclock_get_vcounter(handle, &vcount) < 0 )
+	if ( radclock_get_vcounter(clock, &vcount) < 0 )
 		return 1;
 	
 	/* Retrieve clock data */
-	if ( !RAD_DATA(handle) || !from_vcount || !duration_fp)
+	if ( !clock->ipc_shm || !from_vcount || !duration_fp)
 		return 1;
 
-	data_quality = radclock_check_outdated(handle, &vcount, IPC_REQ_RAD_DATA);
-// TODO is this the  good behaviour, we should request the clock data associated to from_vcount? maybe not
-	if ( !in_skm(handle, from_vcount, &vcount) )
+	quality = radclock_delay_to_ld(clock, *from_vcount, vcount, duration_fp);
+
+// TODO is this the  good behaviour, we should request the clock data associated
+// to from_vcount? maybe not
+	if (!in_skm(clock, from_vcount, &vcount))
 		return 1;
 
-	*duration_fp = radclock_delay_to_ld(RAD_DATA(handle), *from_vcount, vcount);
-	return data_quality;
+	return quality;
 }
 
 
-int radclock_duration(struct radclock *handle, const vcounter_t *from_vcount, const vcounter_t *till_vcount, struct timeval *duration_tv)
+int
+radclock_duration(struct radclock *clock, const vcounter_t *from_vcount,
+		const vcounter_t *till_vcount, struct timeval *duration_tv)
 {
+	long double time;
 	vcounter_t vcount;
-	int data_quality = 0;
+	int quality = 0;
 
 	/* Check for critical bad input */ 
-	if ( !handle )
+	if ( !clock )
 		return 1;
 
 	/* Make sure we can get a raw timestamp */	
-	if ( radclock_get_vcounter(handle, &vcount) < 0 )
+	if ( radclock_get_vcounter(clock, &vcount) < 0 )
 		return 1;
 	
 	/* Retrieve clock data */
-	if ( !RAD_DATA(handle) || !from_vcount || !till_vcount || !duration_tv)
+	if ( !clock->ipc_shm || !from_vcount || !till_vcount || !duration_tv)
 		return 1;
 
-	data_quality = radclock_check_outdated(handle, &vcount, IPC_REQ_RAD_DATA);
-// TODO is this the  good behaviour, we should request the clock data associated to from_vcount? maybe not
-	if ( !in_skm(handle, from_vcount, &vcount) )
+	time = 0;
+	quality = radclock_delay_to_ld(clock, *from_vcount, *till_vcount, &time);
+	radclock_ld_to_tv(time, duration_tv);
+
+// TODO is this the  good behaviour, we should request the clock data associated
+// to from_vcount? maybe not
+	if (!in_skm(clock, from_vcount, &vcount))
 		return 1;
 
-	radclock_ld_to_tv(radclock_delay_to_ld(RAD_DATA(handle), *from_vcount, *till_vcount), duration_tv);
-	return data_quality;
+	return quality;
 }
 
 
-int radclock_duration_fp(struct radclock *handle, const vcounter_t *from_vcount, const vcounter_t *till_vcount, long double *duration_fp)
+int
+radclock_duration_fp(struct radclock *clock, const vcounter_t *from_vcount,
+		const vcounter_t *till_vcount, long double *duration_fp)
 {
 	vcounter_t vcount;
-	int data_quality = 0;
+	int quality = 0;
 
 	/* Check for critical bad input */ 
-	if ( !handle )
+	if ( !clock )
 		return 1;
 
 	/* Make sure we can get a raw timestamp */	
-	if ( radclock_get_vcounter(handle, &vcount) < 0 )
+	if ( radclock_get_vcounter(clock, &vcount) < 0 )
 		return 1;
 	
 	/* Retrieve clock data */
-	if ( !RAD_DATA(handle) || !from_vcount || !till_vcount || !duration_fp)
+	if ( !clock->ipc_shm || !from_vcount || !till_vcount || !duration_fp)
 		return 1;
 
-	data_quality = radclock_check_outdated(handle, &vcount, IPC_REQ_RAD_DATA);
-// TODO is this the  good behaviour, we should request the clock data associated to from_vcount? maybe not
-	if ( !in_skm(handle, from_vcount, &vcount) )
+	quality = radclock_delay_to_ld(clock, *from_vcount, *till_vcount, duration_fp);
+
+// TODO is this the  good behaviour, we should request the clock data associated
+// to from_vcount? maybe not
+	if (!in_skm(clock, from_vcount, &vcount))
 		return 1;
 
-	*duration_fp = radclock_delay_to_ld(RAD_DATA(handle), *from_vcount, *till_vcount);
-	return data_quality;
+	return quality;
 }
 
 

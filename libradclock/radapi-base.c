@@ -131,6 +131,7 @@ struct radclock * radclock_create(void)
 
 
 
+// TODO Nuke this one when IPC is relying on SHM only. 
 /*
  * Should open a socket for the client when using IPC communication
  * The socket is configure to block until its timeout expires. This should limit
@@ -314,6 +315,7 @@ void radclock_destroy(struct radclock *handle)
 
 
 
+// TODO Nuke this one when IPC is relying on SHM only. 
 /* Read global clock data 
  * This should be called by processes else than the radclock_algo
  */
@@ -401,7 +403,8 @@ int radclock_read_IPCclock(struct radclock *handle, int req_type)
 }
 
 
-
+// TODO Nuke this one when IPC is relying on SHM only. 
+// But may be kept a little bit for historic reason
 int radclock_check_outdated(struct radclock* handle, vcounter_t *vc, int req_type)
 {
 	int err;
@@ -501,5 +504,42 @@ int radclock_check_outdated(struct radclock* handle, vcounter_t *vc, int req_typ
 
 	return 0;
 }	
+
+/*
+ * Inspect data to get an idea about the quality.
+ * TODO: error codes should be fixed
+ * TODO: other stuff to take into account in composing quality estimate? Needed
+ * or clock status and clock error take care of it?
+ * TODO: massive problem with thread synchronisation ...
+ */
+int
+raddata_quality(vcounter_t now, vcounter_t last, vcounter_t valid, double phat)
+{
+	/* 
+	 * Something really bad is happening:
+	 * - counter is going backward (should never happen)
+	 * - virtual machine read H/W counter then migrated, things are out of whack
+	 * - ...?
+	 */
+// XXX FIXME XXX THIS IS WRONG
+// can read counter, then data updated, then compare ... BOOM!
+	if (now < last)
+		return 3;
+
+	/*
+	 * Several scenarios again:
+	 * - the data is really old, clock status should say the same
+	 * - virtual machine migrated, but cannot be sure. Mark data as very bad.
+	 * TODO hard coded value !Y
+	 */
+	if (phat * (now - valid) > 1024)
+		return 3;
+
+	/* The data is old, but still in SKM_SCALE */
+	if (now > valid)
+		return 2;
+
+	return 0;
+}
 
 

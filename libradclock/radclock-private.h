@@ -312,6 +312,10 @@ int get_kernel_ffclock(struct radclock *handle);
 int radclock_check_outdated(struct radclock *handle, vcounter_t *vc, int req_type);
 
 
+/* TODO add comments */
+int raddata_quality(vcounter_t now, vcounter_t last, vcounter_t valid, double phat);
+
+
 /**
  * System specific call for getting the capture mode on the pcap capture device.
  */
