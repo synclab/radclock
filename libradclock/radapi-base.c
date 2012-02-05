@@ -290,6 +290,9 @@ int radclock_init(struct radclock *clock_handle)
 
 void radclock_destroy(struct radclock *handle) 
 {
+
+// TODO all this IPC thing should go.
+
 	/* Close the IPC socket */
 	if (handle->ipc_socket > 0)
 		close(handle->ipc_socket);
@@ -300,12 +303,6 @@ void radclock_destroy(struct radclock *handle)
 		if ( unlink(handle->ipc_socket_path) < 0 )
 			logger(RADLOG_ERR, "Cleaning IPC socket Unlink: %s", strerror(errno));
 	}
-
-	/* Clear thread stuff */
-	pthread_mutex_destroy(&(handle->globaldata_mutex));
-	pthread_mutex_destroy(&(handle->wakeup_mutex));
-	pthread_cond_destroy(&(handle->wakeup_cond));
-	pthread_mutex_destroy(&(handle->rdb_mutex));
 
 	/* Free the clock and set to NULL, useful for partner software */
 	free(handle);

@@ -1182,6 +1182,14 @@ int main(int argc, char *argv[])
 	
         // TODO:  all the destructors have to be re-written
 	destroy_source(clock_handle, (struct stampsource *)(clock_handle->stamp_source));
+
+
+	/* Clear thread stuff */
+	pthread_mutex_destroy(&(clock_handle->globaldata_mutex));
+	pthread_mutex_destroy(&(clock_handle->wakeup_mutex));
+	pthread_cond_destroy(&(clock_handle->wakeup_cond));
+	pthread_mutex_destroy(&(clock_handle->rdb_mutex));
+
 	radclock_destroy(clock_handle);
 	
 	exit(EXIT_SUCCESS);
