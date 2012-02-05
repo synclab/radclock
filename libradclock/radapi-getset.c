@@ -112,7 +112,7 @@ radclock_get_local_period_mode(struct radclock *handle,
 int
 radclock_get_last_stamp(struct radclock *clock, vcounter_t *last_vcount)
 {
-	struct radclock_data_shm *data;
+	struct radclock_data_shm *shm;
 	int generation;
 
 	if (!clock || !last_vcount)
@@ -121,11 +121,11 @@ radclock_get_last_stamp(struct radclock *clock, vcounter_t *last_vcount)
 	if (!clock->ipc_shm)
 		return (1);
 
-	data = (struct radclock_data_shm *) clock->ipc_shm;
+	shm = (struct radclock_data_shm *) clock->ipc_shm;
 	do {
-		generation = data->gen;
-		*last_vcount = data->new->last_changed;
-	} while (generation != data->gen || !data->gen);
+		generation = shm->gen;
+		*last_vcount = SHM_DATA(shm)->last_changed;
+	} while (generation != shm->gen || !shm->gen);
 
 	return (0); 
 }
@@ -134,7 +134,7 @@ radclock_get_last_stamp(struct radclock *clock, vcounter_t *last_vcount)
 int
 radclock_get_till_stamp(struct radclock *clock, vcounter_t *till_vcount)
 {
-	struct radclock_data_shm *data;
+	struct radclock_data_shm *shm;
 	int generation;
 
 	if (!clock || !till_vcount)
@@ -143,11 +143,11 @@ radclock_get_till_stamp(struct radclock *clock, vcounter_t *till_vcount)
 	if (!clock->ipc_shm)
 		return (1);
 
-	data = (struct radclock_data_shm *) clock->ipc_shm;
+	shm = (struct radclock_data_shm *) clock->ipc_shm;
 	do {
-		generation = data->gen;
-		*till_vcount = data->new->valid_till;
-	} while (generation != data->gen || !data->gen);
+		generation = shm->gen;
+		*till_vcount = SHM_DATA(shm)->valid_till;
+	} while (generation != shm->gen || !shm->gen);
 
 	return (0); 
 }
@@ -156,7 +156,7 @@ radclock_get_till_stamp(struct radclock *clock, vcounter_t *till_vcount)
 int
 radclock_get_period(struct radclock *clock, double *period)
 {
-	struct radclock_data_shm *data;
+	struct radclock_data_shm *shm;
 	int generation;
 
 	if (!clock || !period)
@@ -165,11 +165,11 @@ radclock_get_period(struct radclock *clock, double *period)
 	if (!clock->ipc_shm)
 		return (1);
 
-	data = (struct radclock_data_shm *) clock->ipc_shm;
+	shm = (struct radclock_data_shm *) clock->ipc_shm;
 	do {
-		generation = data->gen;
-		*period = data->new->phat;
-	} while (generation != data->gen || !data->gen);
+		generation = shm->gen;
+		*period = SHM_DATA(shm)->phat;
+	} while (generation != shm->gen || !shm->gen);
 
 	return (0); 
 }
@@ -178,7 +178,7 @@ radclock_get_period(struct radclock *clock, double *period)
 int
 radclock_get_offset(struct radclock *clock, long double *offset)
 {
-	struct radclock_data_shm *data;
+	struct radclock_data_shm *shm;
 	int generation;
 
 	if (!clock || !offset)
@@ -187,11 +187,11 @@ radclock_get_offset(struct radclock *clock, long double *offset)
 	if (!clock->ipc_shm)
 		return (1);
 
-	data = (struct radclock_data_shm *) clock->ipc_shm;
+	shm = (struct radclock_data_shm *) clock->ipc_shm;
 	do {
-		generation = data->gen;
-		*offset = data->new->ca;
-	} while (generation != data->gen || !data->gen);
+		generation = shm->gen;
+		*offset = SHM_DATA(shm)->ca;
+	} while (generation != shm->gen || !shm->gen);
 
 	return (0); 
 }
@@ -200,7 +200,7 @@ radclock_get_offset(struct radclock *clock, long double *offset)
 int
 radclock_get_period_error(struct radclock *clock, double *err_period)
 {
-	struct radclock_data_shm *data;
+	struct radclock_data_shm *shm;
 	int generation;
 
 	if (!clock || !err_period)
@@ -209,11 +209,11 @@ radclock_get_period_error(struct radclock *clock, double *err_period)
 	if (!clock->ipc_shm)
 		return (1);
 
-	data = (struct radclock_data_shm *) clock->ipc_shm;
+	shm = (struct radclock_data_shm *) clock->ipc_shm;
 	do {
-		generation = data->gen;
-		*err_period = data->new->phat_err;
-	} while (generation != data->gen || !data->gen);
+		generation = shm->gen;
+		*err_period = SHM_DATA(shm)->phat_err;
+	} while (generation != shm->gen || !shm->gen);
 
 	return (0); 
 }
@@ -222,7 +222,7 @@ radclock_get_period_error(struct radclock *clock, double *err_period)
 int
 radclock_get_offset_error(struct radclock *clock, double *err_offset)
 {
-	struct radclock_data_shm *data;
+	struct radclock_data_shm *shm;
 	int generation;
 
 	if (!clock || !err_offset)
@@ -231,11 +231,11 @@ radclock_get_offset_error(struct radclock *clock, double *err_offset)
 	if (!clock->ipc_shm)
 		return (1);
 
-	data = (struct radclock_data_shm *) clock->ipc_shm;
+	shm = (struct radclock_data_shm *) clock->ipc_shm;
 	do {
-		generation = data->gen;
-		*err_offset = data->new->ca_err;
-	} while (generation != data->gen || !data->gen);
+		generation = shm->gen;
+		*err_offset = SHM_DATA(shm)->ca_err;
+	} while (generation != shm->gen || !shm->gen);
 
 	return (0); 
 }
@@ -244,7 +244,7 @@ radclock_get_offset_error(struct radclock *clock, double *err_offset)
 int
 radclock_get_status(struct radclock *clock, unsigned int *status)
 {
-	struct radclock_data_shm *data;
+	struct radclock_data_shm *shm;
 	int generation;
 
 	if (!clock || !status)
@@ -253,11 +253,11 @@ radclock_get_status(struct radclock *clock, unsigned int *status)
 	if (!clock->ipc_shm)
 		return (1);
 
-	data = (struct radclock_data_shm *) clock->ipc_shm;
+	shm = (struct radclock_data_shm *) clock->ipc_shm;
 	do {
-		generation = data->gen;
-		*status = data->new->status;
-	} while (generation != data->gen || !data->gen);
+		generation = shm->gen;
+		*status = SHM_DATA(shm)->status;
+	} while (generation != shm->gen || !shm->gen);
 
 	return (0); 
 }
@@ -266,7 +266,7 @@ radclock_get_status(struct radclock *clock, unsigned int *status)
 int
 radclock_get_clockerror_bound(struct radclock *clock, double *error_bound)
 {
-	struct radclock_data_shm *data;
+	struct radclock_data_shm *shm;
 	int generation;
 
 	if (!clock || !error_bound)
@@ -275,12 +275,11 @@ radclock_get_clockerror_bound(struct radclock *clock, double *error_bound)
 	if (!clock->ipc_shm)
 		return (1);
 
-	data = (struct radclock_data_shm *) clock->ipc_shm;
+	shm = (struct radclock_data_shm *) clock->ipc_shm;
 	do {
-		generation = data->gen;
-		//TODO XXX FIXME ERROR not in SHM
-		*error_bound = RAD_ERROR(clock)->error_bound; 
-	} while (generation != data->gen || !data->gen);
+		generation = shm->gen;
+		*error_bound = SHM_ERROR(shm)->error_bound; 
+	} while (generation != shm->gen || !shm->gen);
 
 	return (0); 
 }
@@ -289,7 +288,7 @@ radclock_get_clockerror_bound(struct radclock *clock, double *error_bound)
 int
 radclock_get_clockerror_bound_avg(struct radclock *clock, double *error_bound_avg)
 {
-	struct radclock_data_shm *data;
+	struct radclock_data_shm *shm;
 	int generation;
 
 	if (!clock || !error_bound_avg)
@@ -298,12 +297,11 @@ radclock_get_clockerror_bound_avg(struct radclock *clock, double *error_bound_av
 	if (!clock->ipc_shm)
 		return (1);
 
-	data = (struct radclock_data_shm *) clock->ipc_shm;
+	shm = (struct radclock_data_shm *) clock->ipc_shm;
 	do {
-		generation = data->gen;
-		//TODO XXX FIXME ERROR not in SHM
-		*error_bound_avg = RAD_ERROR(clock)->error_bound_avg; 
-	} while (generation != data->gen || !data->gen);
+		generation = shm->gen;
+		*error_bound_avg = SHM_ERROR(shm)->error_bound_avg; 
+	} while (generation != shm->gen || !shm->gen);
 
 	return (0); 
 }
@@ -312,7 +310,7 @@ radclock_get_clockerror_bound_avg(struct radclock *clock, double *error_bound_av
 int
 radclock_get_clockerror_bound_std(struct radclock *clock, double *error_bound_std)
 {
-	struct radclock_data_shm *data;
+	struct radclock_data_shm *shm;
 	int generation;
 
 	if (!clock || !error_bound_std)
@@ -321,12 +319,11 @@ radclock_get_clockerror_bound_std(struct radclock *clock, double *error_bound_st
 	if (!clock->ipc_shm)
 		return (1);
 
-	data = (struct radclock_data_shm *) clock->ipc_shm;
+	shm = (struct radclock_data_shm *) clock->ipc_shm;
 	do {
-		generation = data->gen;
-		//TODO XXX FIXME ERROR not in SHM
-		*error_bound_std = RAD_ERROR(clock)->error_bound_std;
-	} while (generation != data->gen || !data->gen);
+		generation = shm->gen;
+		*error_bound_std = SHM_ERROR(shm)->error_bound_std;
+	} while (generation != shm->gen || !shm->gen);
 
 	return (0); 
 }
@@ -334,7 +331,7 @@ radclock_get_clockerror_bound_std(struct radclock *clock, double *error_bound_st
 int
 radclock_get_min_RTT(struct radclock *clock, double *min_RTT)
 {
-	struct radclock_data_shm *data;
+	struct radclock_data_shm *shm;
 	int generation;
 
 	if (!clock || !min_RTT)
@@ -343,12 +340,11 @@ radclock_get_min_RTT(struct radclock *clock, double *min_RTT)
 	if (!clock->ipc_shm)
 		return (1);
 
-	data = (struct radclock_data_shm *) clock->ipc_shm;
+	shm = (struct radclock_data_shm *) clock->ipc_shm;
 	do {
-		generation = data->gen;
-		//TODO XXX FIXME ERROR not in SHM
-		*min_RTT = RAD_ERROR(clock)->min_RTT;
-	} while (generation != data->gen || !data->gen);
+		generation = shm->gen;
+		*min_RTT = SHM_ERROR(shm)->min_RTT;
+	} while (generation != shm->gen || !shm->gen);
 
 	return (0); 
 }

@@ -442,7 +442,7 @@ static int
 init_raddata_shm_writer(struct radclock *clock)
 {
 	struct shmid_ds shm_ctl;
-	struct radclock_data_shm *data;
+	struct radclock_data_shm *shm;
 	key_t shm_key;
 	unsigned int perm_flags;
 	int shm_fd;
@@ -505,9 +505,11 @@ init_raddata_shm_writer(struct radclock *clock)
 	/* Zero the segment and init the buffer pointers */ 
 	if (just_created) {
 		memset(clock->ipc_shm, 0, sizeof(struct radclock_data_shm));
-		data = (struct radclock_data_shm *) clock->ipc_shm;
-		data->new = &(data->raddata[0]);
-		data->old = &(data->raddata[1]);
+		shm = (struct radclock_data_shm *) clock->ipc_shm;
+		shm->data = &(shm->bufdata[0]);
+		shm->data_old = &(shm->bufdata[1]);
+		shm->error = &(shm->buferr[0]);
+		shm->error_old = &(shm->buferr[1]);
 		// TODO: need to init version number, clockid etc.
 	}
 

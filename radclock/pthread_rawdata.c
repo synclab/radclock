@@ -82,20 +82,27 @@ int update_system_clock(struct radclock *clock_handle) { return 0; }
 static int
 update_ipc_shared_memory(struct radclock *clock)
 {
-	struct radclock_data_shm *data;
-	struct radclock_data *tmp;
+	struct radclock_data_shm *shm;
+	struct radclock_data *data_tmp;
+	struct radclock_error *error_tmp;
 	unsigned int generation;
 
-	data = (struct radclock_data_shm *) clock->ipc_shm;
-	memcpy(data->old, &clock->rad_data, sizeof(struct radclock_data));
-	generation = data->gen;
-	data->gen = 0;
-	tmp = data->new;
-	data->new = data->old;
-	data->old = tmp;
+	shm = (struct radclock_data_shm *) clock->ipc_shm;
+	memcpy(shm->data_old, &clock->rad_data, sizeof(struct radclock_data));
+	memcpy(shm->error_old, &clock->rad_data, sizeof(struct radclock_error));
+	generation = shm->gen;
+	shm->gen = 0;
+
+	data_tmp = shm->data;
+	shm->data = shm->data_old;
+	shm->data_old = data_tmp;
+	error_tmp = shm->error;
+	shm->error = shm->error_old;
+	shm->error_old = error_tmp;
+
 	if (generation++ == 0)
 		generation = 1;
-	data->gen = generation;
+	shm->gen = generation;
 
 	return (0);
 }

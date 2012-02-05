@@ -54,28 +54,28 @@ static inline int
 radclock_vcount_to_ld(const struct radclock *clock, vcounter_t vcount,
 		long double *time)
 {
-	struct radclock_data_shm *data;
+	struct radclock_data_shm *shm;
 	vcounter_t valid, last;
 	double phat;
 	int generation;
 
-	data = (struct radclock_data_shm *) clock->ipc_shm;
+	shm = (struct radclock_data_shm *) clock->ipc_shm;
 	do {
 		/* Quality ingredients */
-		generation = data->gen;
-		valid = data->new->valid_till;
-		last  = data->new->last_changed;
-		phat  = data->new->phat;
+		generation = shm->gen;
+		valid = SHM_DATA(shm)->valid_till;
+		last  = SHM_DATA(shm)->last_changed;
+		phat  = SHM_DATA(shm)->phat;
 
-		*time = (long double) vcount * (long double) phat + data->new->ca;
+		*time = (long double) vcount * (long double) phat + SHM_DATA(shm)->ca;
 
 		if ( (clock->local_period_mode == RADCLOCK_LOCAL_PERIOD_ON)
-			&& ((data->new->status & STARAD_WARMUP) != STARAD_WARMUP) )
+			&& ((SHM_DATA(shm)->status & STARAD_WARMUP) != STARAD_WARMUP))
 		{
 			*time += (long double)(vcount - last) * 
-				(long double)(data->new->phat_local - phat);
+				(long double)(SHM_DATA(shm)->phat_local - phat);
 		}
-	} while (generation != data->gen || !data->gen);
+	} while (generation != shm->gen || !shm->gen);
 
 	return raddata_quality(vcount, last, valid, phat);
 }
@@ -87,7 +87,7 @@ static inline int
 radclock_delay_to_ld(struct radclock *clock, vcounter_t from_vcount,
 		vcounter_t till_vcount, long double *time)
 {
-	struct radclock_data_shm *data;
+	struct radclock_data_shm *shm;
 	vcounter_t now, valid, last;
 	double phat;
 	int generation;
@@ -96,14 +96,14 @@ radclock_delay_to_ld(struct radclock *clock, vcounter_t from_vcount,
 	if (radclock_get_vcounter(clock, &now))
 		return (1);
 
-	data = (struct radclock_data_shm *) clock->ipc_shm;
+	shm = (struct radclock_data_shm *) clock->ipc_shm;
 	do {
-		generation = data->gen;
-		valid = data->new->valid_till;
-		last  = data->new->last_changed;
-		phat  = data->new->phat;
-		*time = (long double) ((till_vcount-from_vcount) * data->new->phat_local);
-	} while (generation != data->gen || !data->gen);
+		generation = shm->gen;
+		valid = SHM_DATA(shm)->valid_till;
+		last  = SHM_DATA(shm)->last_changed;
+		phat  = SHM_DATA(shm)->phat;
+		*time = (long double) ((till_vcount-from_vcount) * SHM_DATA(shm)->phat_local);
+	} while (generation != shm->gen || !shm->gen);
 
 	return raddata_quality(now, last, valid, phat);
 }
@@ -122,15 +122,15 @@ radclock_delay_to_ld(struct radclock *clock, vcounter_t from_vcount,
 static inline int
 in_skm(struct radclock *clock, const vcounter_t *past_count, const vcounter_t *vc) 
 {
-	struct radclock_data_shm *data;
+	struct radclock_data_shm *shm;
 	vcounter_t now;
 
 	if ( !vc )
 		radclock_get_vcounter(clock, &now);
 	now = *vc;
 
-	data = (struct radclock_data_shm *) clock->ipc_shm;
-	if ( (now - *past_count) * data->new->phat < 1024 )
+	shm = (struct radclock_data_shm *) clock->ipc_shm;
+	if ( (now - *past_count) * SHM_DATA(shm)->phat < 1024 )
 		return 1;
 	else
 		return 0;

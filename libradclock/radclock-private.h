@@ -94,21 +94,6 @@ struct radclock_data {
 	vcounter_t valid_till;
 };
 
-/*
- * Structure representing radclock data and exposed to system processes via IPC
- * shared memory.
- */
-struct radclock_data_shm {
-	int version;
-	int status;
-	int clockid;
-	unsigned int gen;
-	struct radclock_data *new;
-	struct radclock_data *old;
-	struct radclock_data raddata[2];
-};
-
-
 /* TODO: split it in 2, clock errors and peer clock tracking, recompose with
  * others for per peer algo
  */ 
@@ -127,6 +112,26 @@ struct radclock_error
 	double cumsum_hwin;
 	double sq_cumsum_hwin;
 };
+
+/*
+ * Structure representing radclock data and exposed to system processes via IPC
+ * shared memory.
+ */
+struct radclock_data_shm {
+	int version;
+	int status;
+	int clockid;
+	unsigned int gen;
+	struct radclock_data *data;
+	struct radclock_data *data_old;
+	struct radclock_error *error;
+	struct radclock_error *error_old;
+	struct radclock_data bufdata[2];
+	struct radclock_error buferr[2];
+};
+
+#define SHM_DATA(x)		(x->data)
+#define SHM_ERROR(x)	(x->error)
 
 
 /*
