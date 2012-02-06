@@ -219,8 +219,8 @@ void* thread_fixedpoint(void *c_handle)
 
 
 
-
-
+// TODO remove
+/*
 int start_thread_IPC_SERV(struct radclock *clock_handle) 
 {
 	int err;
@@ -235,7 +235,7 @@ int start_thread_IPC_SERV(struct radclock *clock_handle)
 		verbose(LOG_ERR, "pthread_create() returned error number %d", err);
 	 return err;
 }
-
+*/
 
 int start_thread_NTP_SERV(struct radclock *clock_handle) 
 {

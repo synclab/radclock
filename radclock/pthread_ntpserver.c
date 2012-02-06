@@ -322,9 +322,12 @@ void* thread_ntp_server(void *c_handle)
 		}
 
 		/* Someone told us to die ... sniff */
+// TODO cleanup
+/*
 		if ( clock_handle->ipc_mode == RADCLOCK_IPC_NONE)
 			break;
 			//pthread_exit(NULL);
+*/
 	}
 
 	/* Thread exit */

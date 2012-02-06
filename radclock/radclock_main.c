@@ -89,6 +89,7 @@ struct rusage jdbg_rusage;
 
 
 
+static int init_raddata_shm_writer(struct radclock *clock);
 
 
 
@@ -137,8 +138,8 @@ static void usage(void) {
  * Reparse the configuration file when receiving SIGHUP 
  * Reason for most of the global variables
  */
-static int rehash_daemon(struct radclock *clock_handle, 
-				         u_int32_t param_mask) 
+static int
+rehash_daemon(struct radclock *clock_handle, uint32_t param_mask) 
 {
 	/* The update of the following parameters either requires no action, 
 	 * or it has to be handled by the algo only: 
@@ -188,20 +189,26 @@ static int rehash_daemon(struct radclock *clock_handle,
 		CLEAR_UPDATE(param_mask, UPDMASK_SYNC_IN_ASCII);
 	}
 
+
+// TODO this needs to be fixed?
 	if ( HAS_UPDATE(param_mask, UPDMASK_SERVER_IPC) ) {
 		switch ( conf->server_ipc ) {
 			case BOOL_ON:
 				/* We start serving global data */
-				clock_handle->ipc_mode = RADCLOCK_IPC_SERVER;
-				start_thread_IPC_SERV(clock_handle);
+// TODO clean up
+//				clock_handle->ipc_mode = RADCLOCK_IPC_SERVER;
+//				start_thread_IPC_SERV(clock_handle);
+				init_raddata_shm_writer(clock_handle);
 				break;
 			case BOOL_OFF:
 				/* We stop serving global data */
-				clock_handle->ipc_mode = RADCLOCK_IPC_NONE;
-				clock_handle->pthread_flag_stop |= PTH_IPC_SERV_STOP; 
+// TODO clean up
+//				clock_handle->ipc_mode = RADCLOCK_IPC_NONE;
+//				clock_handle->pthread_flag_stop |= PTH_IPC_SERV_STOP; 
 	//TODO should we join the thread in here ... requires testing
 		//	pthread_join(clock_handle->threads[PTH_IPC_SERV], &thread_status);
-				close(clock_handle->ipc_socket);
+		//		close(clock_handle->ipc_socket);
+				shmdt(clock_handle->ipc_shm);
 				break;
 		}
 	}
@@ -444,11 +451,19 @@ init_raddata_shm_writer(struct radclock *clock)
 {
 	struct shmid_ds shm_ctl;
 	struct radclock_shm *shm;
+	struct stat sb;
 	key_t shm_key;
 	unsigned int perm_flags;
 	int shm_fd, is_new_shm;
 
 	is_new_shm = 0;
+
+	if (stat(RADCLOCK_RUN_DIRECTORY, &sb) < 0) {
+		if (mkdir(RADCLOCK_RUN_DIRECTORY, 0755) < 0) { 
+			verbose(LOG_ERR, "Cannot create %s directory", RADCLOCK_RUN_DIRECTORY);
+			return (1);
+		}
+	}
 
 	/*
 	 * Create shm key (file created if it does not already exist)
@@ -560,7 +575,8 @@ radclock_init_specific (struct radclock *clock_handle)
 	
 	/* Create directory to store pid lock file and ipc socket */
 	// TODO: this has to be removed once the Shared Memory code is functional?
-	if (  (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER) 
+/*
+ 	if (  (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER) 
 				|| (clock_handle->is_daemon) ) 
 		{
 		struct stat sb;
@@ -572,12 +588,14 @@ radclock_init_specific (struct radclock *clock_handle)
 			}
 		}
 	}
+*/
 
 	/*
 	 * Initialise IPC shared memory segment
 	 */
-	if ((clock_handle->ipc_mode == RADCLOCK_IPC_SERVER) 
-				|| (clock_handle->is_daemon)) {
+//	if (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER) {
+//	TODO clean up
+	if (clock_handle->conf->adjust_sysclock == BOOL_ON) {
 		err = init_raddata_shm_writer(clock_handle);
 		if (err)
 			return (1);
@@ -614,7 +632,7 @@ int main(int argc, char *argv[])
 	int ch;
 	
 	/* Mask variable used to know which parameter to update */
-	u_int32_t param_mask	= 0;
+	uint32_t param_mask = 0;
 
 	/* PID lock file for daemon */
 	int daemon_pid_fd 		= 0;
@@ -936,11 +954,12 @@ int main(int argc, char *argv[])
 		/* Manually signal we are the radclock algo and that we have to serve global data to the
 		 * kernel and other processes throught the IPC socket.
 		 */
+/*
 		if (clock_handle->conf->server_ipc)
 			clock_handle->ipc_mode = RADCLOCK_IPC_SERVER;
 		else
 			clock_handle->ipc_mode = RADCLOCK_IPC_NONE;
-
+*/
 		// XXX Does the following matters for the radclock?
 		clock_handle->autoupdate_mode = RADCLOCK_UPDATE_ALWAYS;
 	}
@@ -1043,12 +1062,13 @@ int main(int argc, char *argv[])
 			/* Are we serving some data to other processes and update the
 			 * clock globaldata in the kernel?
 			 */
+/*
 			if (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER) 
 			{
 				err = start_thread_IPC_SERV(clock_handle);
 				if (err < 0) 	return 1;
 			}
-			
+*/			
 			/* Are we running an NTP server for network clients ? */
 			switch (clock_handle->conf->server_ntp) {
 				case BOOL_ON:
@@ -1070,7 +1090,8 @@ int main(int argc, char *argv[])
 			 * should be removed in the future
 			 */
 			if ( (clock_handle->run_mode == RADCLOCK_SYNC_LIVE) 
-					&& (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER)
+// TODO remove this
+//					&& (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER)
 			  		&& (clock_handle->kernel_version < 2) )
 			{
 				err = start_thread_FIXEDPOINT(clock_handle);
@@ -1110,10 +1131,15 @@ int main(int argc, char *argv[])
 				pthread_join(clock_handle->threads[PTH_NTP_SERV], &thread_status);
 				verbose(LOG_NOTICE, "NTP server thread is dead.");
 			}
+
+// TODO Remove
+/*
 			if (clock_handle->conf->server_ipc == BOOL_ON) {
 				pthread_join(clock_handle->threads[PTH_IPC_SERV], &thread_status);
 				verbose(LOG_NOTICE, "IPC thread is dead.");
 			}
+*/
+
 			pthread_join(clock_handle->threads[PTH_TRIGGER], &thread_status);
 			verbose(LOG_NOTICE, "Trigger thread is dead.");
 

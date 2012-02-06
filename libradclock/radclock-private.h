@@ -39,7 +39,8 @@
 
 // TODO : should provide methods for modify this? 
 typedef enum { RADCLOCK_SYNC_NOTSET, RADCLOCK_SYNC_DEAD, RADCLOCK_SYNC_LIVE } radclock_runmode_t;
-typedef enum { RADCLOCK_IPC_CLIENT, RADCLOCK_IPC_SERVER, RADCLOCK_IPC_NONE} radclock_IPC_mode_t;
+// TODO remove this one?
+//typedef enum { RADCLOCK_IPC_CLIENT, RADCLOCK_IPC_SERVER, RADCLOCK_IPC_NONE} radclock_IPC_mode_t;
 typedef enum { RADCLOCK_UNIDIR, RADCLOCK_BIDIR} radclock_syncalgo_mode_t;
 
 
@@ -165,12 +166,14 @@ struct radclock
 	/* Common data for the daemon */
 	// TODO some cleanup in this
 	int is_daemon;
-	int ipc_socket;
-	char *ipc_socket_path;
+//	int ipc_socket;
+//	char *ipc_socket_path;
 	radclock_autoupdate_t 	autoupdate_mode;
 	radclock_local_period_t	local_period_mode;
 	radclock_runmode_t 		run_mode;
-	radclock_IPC_mode_t 	ipc_mode;
+// TODO remove this one?
+//	radclock_IPC_mode_t 	ipc_mode;
+//	int ipc_requests;	// request bound. TODO cleanup?
 
 	/* Protocol related stuff on the client side (NTP, 1588, ...) */
 	struct radclock_client_data *client_data;
@@ -179,7 +182,6 @@ struct radclock
 	struct radclock_ntpserver_data *server_data;
 	
 	/* IPC socket and shared memory */
-	int ipc_requests;	// request bound. TODO cleanup?
 	int ipc_shm_id;
 	void *ipc_shm;
 
@@ -258,8 +260,11 @@ struct radclock
 /* Socket for IPC used by the gb_pthread */
 #define RADCLOCK_RUN_DIRECTORY		"/var/run/radclock"
 #define IPC_SHARED_MEMORY			( RADCLOCK_RUN_DIRECTORY "/radclock.shm" )
-#define IPC_SOCKET_SERVER			( RADCLOCK_RUN_DIRECTORY "/radclock.socket" )
-#define IPC_SOCKET_CLIENT			"/tmp/radclock-client"
+//#define IPC_SOCKET_SERVER			( RADCLOCK_RUN_DIRECTORY "/radclock.socket" )
+//#define IPC_SOCKET_CLIENT			"/tmp/radclock-client"
+
+// TODO: Check to see if this should be kept / reused for Virtual machine
+// network communication.
 
 #define IPC_MAGIC_NUMBER		31051978
 #define IPC_REQ_RAD_DATA		1
@@ -305,7 +310,7 @@ int get_kernel_ffclock(struct radclock *handle);
  * @param  req_type Type of IPC request 
  * @return 0 on success, non-zero on failure
  */ 
-int radclock_check_outdated(struct radclock *handle, vcounter_t *vc, int req_type);
+//int radclock_check_outdated(struct radclock *handle, vcounter_t *vc, int req_type);
 
 
 /* TODO add comments */

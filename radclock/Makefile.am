@@ -50,7 +50,6 @@ radclock_SOURCES = sync_bidir.c \
 		   config_mgr.c \
 		   rawdata.c \
 		   pthread_mgr.c \
-		   pthread_ipcserver.c \
 		   pthread_ntpserver.c \
 		   pthread_rawdata.c \
 		   pthread_trigger.c \

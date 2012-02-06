@@ -539,10 +539,12 @@ int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 	/* To improve data accuracy, we kick a fixed point data update just after we
 	 * have preocessed a new stamp. Locking is handled by the kernel so we should
 	 * not have concurrency issue with the two threads updating the data
-	 */ 	
-	if ( (clock_handle->run_mode == RADCLOCK_SYNC_LIVE) 
-			&& (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER) )
-	{
+	 */
+// TODO clean up
+//	if ( (clock_handle->run_mode == RADCLOCK_SYNC_LIVE) 
+//			&& (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER) )
+  	if ((clock_handle->run_mode == RADCLOCK_SYNC_LIVE) &&
+			(clock_handle->conf->adjust_sysclock == BOOL_ON)) {
 		/*
 		 * Update IPC shared memory segment for all processes to get accurate
 		 * clock parameters
@@ -591,7 +593,10 @@ int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 	}
 
 	/* Update any virtual machine store if configured */
-	if ( (clock_handle->run_mode == RADCLOCK_SYNC_LIVE) && (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER) ) 
+// TODO clean up
+//	if ( (clock_handle->run_mode == RADCLOCK_SYNC_LIVE) && (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER) ) 
+  	if ((clock_handle->run_mode == RADCLOCK_SYNC_LIVE) &&
+			(clock_handle->conf->adjust_sysclock == BOOL_ON))
 	{
 		RAD_VM(clock_handle)->push_data(clock_handle);
 	}
