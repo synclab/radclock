@@ -18,11 +18,16 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
 # 02110-1301, USA.
 
-INCLUDES = -I$(top_srcdir)/libradclock/ -I$(top_srcdir)/radclock/ -I$(ADD_INCLS)
+#INCLUDES = -I$(top_srcdir)/libradclock/ -I$(top_srcdir)/radclock/ -I$(ADD_INCLS)
+INCLUDES = -I$(top_srcdir)/libradclock/ -I$(top_srcdir)/radclock/
 
-check_PROGRAMS = test_timestamping 
+check_PROGRAMS = test_timestamping test_shared_memory 
 
 test_timestamping_SOURCES = test_timestamping.c
 test_timestamping_LDADD = @LIBRADCLOCK_LIBS@
 test_timestamping_LDFLAGS = -static
+
+test_shared_memory_SOURCES = test_shared_memory.c
+test_shared_memory_LDADD = @LIBRADCLOCK_LIBS@
+test_shared_memory_LDFLAGS = -static
 
