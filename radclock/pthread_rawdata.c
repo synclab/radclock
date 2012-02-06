@@ -82,23 +82,30 @@ int update_system_clock(struct radclock *clock_handle) { return 0; }
 static int
 update_ipc_shared_memory(struct radclock *clock)
 {
-	struct radclock_data_shm *shm;
-	struct radclock_data *data_tmp;
-	struct radclock_error *error_tmp;
+	JDEBUG
+
+	struct radclock_shm *shm;
+	size_t offset_tmp;	
 	unsigned int generation;
 
-	shm = (struct radclock_data_shm *) clock->ipc_shm;
-	memcpy(shm->data_old, &clock->rad_data, sizeof(struct radclock_data));
-	memcpy(shm->error_old, &clock->rad_data, sizeof(struct radclock_error));
+	shm = (struct radclock_shm *) clock->ipc_shm;
+
+	memcpy((void *)shm + shm->data_off_old, &clock->rad_data,
+			sizeof(struct radclock_data));
+	memcpy((void *)shm + shm->error_off_old, &clock->rad_data,
+			sizeof(struct radclock_error));
 	generation = shm->gen;
+
 	shm->gen = 0;
 
-	data_tmp = shm->data;
-	shm->data = shm->data_old;
-	shm->data_old = data_tmp;
-	error_tmp = shm->error;
-	shm->error = shm->error_old;
-	shm->error_old = error_tmp;
+	/* Swap current and old buffer offsets in the mapped SHM */
+	offset_tmp = shm->data_off;
+	shm->data_off = shm->data_off_old;
+	shm->data_off_old = offset_tmp;
+
+	offset_tmp = shm->error_off;
+	shm->error_off = shm->error_off_old;
+	shm->error_off_old = offset_tmp;
 
 	if (generation++ == 0)
 		generation = 1;
@@ -540,7 +547,7 @@ int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 		 * Update IPC shared memory segment for all processes to get accurate
 		 * clock parameters
 		 */
-		if (~HAS_STATUS(clock_handle, STARAD_UNSYNC))
+		if (!HAS_STATUS(clock_handle, STARAD_UNSYNC))
 			update_ipc_shared_memory(clock_handle);
 
 		if ( clock_handle->kernel_version < 2 )

@@ -117,21 +117,21 @@ struct radclock_error
  * Structure representing radclock data and exposed to system processes via IPC
  * shared memory.
  */
-struct radclock_data_shm {
+struct radclock_shm {
 	int version;
 	int status;
 	int clockid;
 	unsigned int gen;
-	struct radclock_data *data;
-	struct radclock_data *data_old;
-	struct radclock_error *error;
-	struct radclock_error *error_old;
+	size_t data_off;
+	size_t data_off_old;
+	size_t error_off;
+	size_t error_off_old;
 	struct radclock_data bufdata[2];
 	struct radclock_error buferr[2];
 };
 
-#define SHM_DATA(x)		(x->data)
-#define SHM_ERROR(x)	(x->error)
+#define SHM_DATA(x)		((struct radclock_data *)((void *)x + x->data_off))
+#define SHM_ERROR(x)	((struct radclock_error *)((void *)x + x->error_off))
 
 
 /*

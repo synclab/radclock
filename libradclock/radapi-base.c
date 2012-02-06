@@ -21,14 +21,17 @@
 
 
 #include "../config.h"
+
+#include <sys/shm.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
 //#include <signal.h>
-#include <pthread.h>
+#include <pthread.h>	// TODO create and init to move in radclock code
 #include <unistd.h>
-#include <sys/socket.h>
-#include <sys/un.h>
 #include <string.h>
 
 #include <radclock.h>
@@ -128,6 +131,39 @@ struct radclock * radclock_create(void)
 	return clock;
 }
 
+
+/*
+ * Initialise shared memory segment.
+ * IPC mechanism to access radclock updated clock parameters and error
+ * estimates.
+ */
+int
+init_shm_reader(struct radclock *clock)
+{
+	key_t shm_key;
+
+	logger(RADLOG_ERR, "Enter init_shm_reader");
+
+	shm_key = ftok(IPC_SHARED_MEMORY, 'a');
+	if (shm_key == -1) {
+		logger(RADLOG_ERR, "ftok: %s", strerror(errno));
+		return (1);
+	}
+
+	clock->ipc_shm_id = shmget(shm_key, sizeof(struct radclock_shm), 0);
+	if (clock->ipc_shm_id < 0) {
+		logger(RADLOG_ERR, "shmget: %s", strerror(errno));
+		return (1);
+	}
+
+	clock->ipc_shm = shmat(clock->ipc_shm_id, NULL, SHM_RDONLY);
+	if (clock->ipc_shm == (void *) -1) {
+		logger(RADLOG_ERR, "shmat: %s", strerror(errno));
+		return (1);
+	}
+
+	return 0;
+}
 
 
 
@@ -263,27 +299,32 @@ int radclock_init(struct radclock *clock_handle)
 	if ( err < 0 )
 		return -1;
 
-	switch ( clock_handle->ipc_mode) 
-	{
-		/* If we are a client we only need to connect to the server socket */
-		case RADCLOCK_IPC_CLIENT:
-			clock_handle->ipc_requests = 0;
+	/*
+	 * libradclock only
+	 */
+	if (clock_handle->ipc_mode == RADCLOCK_IPC_CLIENT) {
+//		case RADCLOCK_IPC_CLIENT:
+			err = init_shm_reader(clock_handle);
+			if (err)
+				return (-1);
+/*			clock_handle->ipc_requests = 0;
 			err = radclock_IPC_client_connect(clock_handle);
 			if ( err )
 				return -1;
 			break;
-
+*/
 			/* We are a radclock daemon and we are asked to serve data. Need to
 			 * init some kernel related data structure.
 			 */
+/*
 		case RADCLOCK_IPC_NONE:
 		case RADCLOCK_IPC_SERVER:
 			return 0;
 		default:
 			logger(RADLOG_ERR, "Got something really wrong, unknown IPC run mode");
 			return -1;
+*/
 	}
-
 	return 0;
 }
 
@@ -303,6 +344,9 @@ void radclock_destroy(struct radclock *handle)
 		if ( unlink(handle->ipc_socket_path) < 0 )
 			logger(RADLOG_ERR, "Cleaning IPC socket Unlink: %s", strerror(errno));
 	}
+
+	/* Detach IPC shared memory */
+	shmdt(handle->ipc_shm);
 
 	/* Free the clock and set to NULL, useful for partner software */
 	free(handle);

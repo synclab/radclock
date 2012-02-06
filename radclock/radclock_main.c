@@ -42,6 +42,7 @@
 #include <math.h> 
 #include <sched.h>
 #include <signal.h>
+#include <stddef.h>		// offsetof
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -442,11 +443,12 @@ static int
 init_raddata_shm_writer(struct radclock *clock)
 {
 	struct shmid_ds shm_ctl;
-	struct radclock_data_shm *shm;
+	struct radclock_shm *shm;
 	key_t shm_key;
 	unsigned int perm_flags;
-	int shm_fd;
-	int just_created;
+	int shm_fd, is_new_shm;
+
+	is_new_shm = 0;
 
 	/*
 	 * Create shm key (file created if it does not already exist)
@@ -456,7 +458,7 @@ init_raddata_shm_writer(struct radclock *clock)
 
 	shm_key = ftok(IPC_SHARED_MEMORY, 'a');
 	if (shm_key == -1) {
-		verbose(LOG_ERR, "ftok: %s\n", strerror(errno));
+		verbose(LOG_ERR, "ftok: %s", strerror(errno));
 		return (1);
 	}
 
@@ -468,50 +470,52 @@ init_raddata_shm_writer(struct radclock *clock)
 	 * updated it, and if that guy is still alive. Hard to do here, use pid
 	 * lockfile instead.
 	 */ 
-	just_created = 0;
 	perm_flags = SHM_R | SHM_W | (SHM_R>>3) | (SHM_R>>6);
-	clock->ipc_shm_id = shmget(shm_key, sizeof(struct radclock_data_shm),
+	clock->ipc_shm_id = shmget(shm_key, sizeof(struct radclock_shm),
 			IPC_CREAT | IPC_EXCL | perm_flags);
 	if (clock->ipc_shm_id < 0) {
 		switch(errno) {
 		case (EEXIST):
-			clock->ipc_shm_id = shmget(shm_key, sizeof(struct radclock_data_shm), 0);
+			clock->ipc_shm_id = shmget(shm_key, sizeof(struct radclock_shm), 0);
 			shmctl(clock->ipc_shm_id, IPC_STAT, &shm_ctl);
 			shm_ctl.shm_perm.mode |= perm_flags;
 			shmctl(clock->ipc_shm_id, IPC_SET, &shm_ctl);
-			just_created = 1;
 			verbose(LOG_NOTICE, "IPC Shared Memory exists with %u processes "
-					"attached\n", shm_ctl.shm_nattch);
+					"attached", shm_ctl.shm_nattch);
 			break;
 
 		default:
 			verbose(LOG_ERR, "shmget failed: %s\n", strerror(errno));
 			return (1);
 		}
-	} else {
-		// TODO: need to init version number, clockid etc.
-		verbose(LOG_NOTICE, "IPC Shared Memory created\n");
 	}
+	else
+		is_new_shm = 1;
 
 	/*
 	 * Attach the process to the memory segment. Round it to kernel page size.
 	 */
-	clock->ipc_shm = shmat(clock->ipc_shm_id, NULL, SHM_RND);
-	if (clock->ipc_shm == (void *) -1) {
+	clock->ipc_shm = shmat(clock->ipc_shm_id, (void *)0, 0);
+	if (clock->ipc_shm == (char *) -1) {
 		verbose(LOG_ERR, "shmat failed: %s\n", strerror(errno));
 		return (1);
 	}
+	shm = (struct radclock_shm *) clock->ipc_shm;
 
-	/* Zero the segment and init the buffer pointers */ 
-	if (just_created) {
-		memset(clock->ipc_shm, 0, sizeof(struct radclock_data_shm));
-		shm = (struct radclock_data_shm *) clock->ipc_shm;
-		shm->data = &(shm->bufdata[0]);
-		shm->data_old = &(shm->bufdata[1]);
-		shm->error = &(shm->buferr[0]);
-		shm->error_old = &(shm->buferr[1]);
-		// TODO: need to init version number, clockid etc.
+	/* Zero the segment and init the buffer pointers if new. */ 
+	if (is_new_shm) {
+		memset(shm, 0, sizeof(struct radclock_shm));
+		shm->data_off = offsetof(struct radclock_shm, bufdata);
+		shm->data_off_old = shm->data_off + sizeof(struct radclock_data);
+		shm->error_off = offsetof(struct radclock_shm, buferr);
+		shm->error_off_old = shm->error_off + sizeof(struct radclock_error);
+		shm->gen = 1;
 	}
+
+	// TODO: need to init version number, clockid, valid / invalid status.
+	shm->version = 1;
+
+	verbose(LOG_NOTICE, "IPC Shared Memory ready");
 
 	return (0);
 }
@@ -575,8 +579,8 @@ radclock_init_specific (struct radclock *clock_handle)
 	if ((clock_handle->ipc_mode == RADCLOCK_IPC_SERVER) 
 				|| (clock_handle->is_daemon)) {
 		err = init_raddata_shm_writer(clock_handle);
-			if (err)
-				return (1);
+		if (err)
+			return (1);
 	}
 	
 	/* Open input file from which to read TS data */   
@@ -1142,17 +1146,6 @@ int main(int argc, char *argv[])
 	} /* End of run live case */
 
 
-	/*
-	 * Detach IPC shared memory if were running as IPC server.
-	 * Not that the shared memory segment is actually destroyed when the last
-	 * attached process detaches from it.
-	 */
-	if (clock_handle->conf->server_ipc == BOOL_ON) {
-		shmdt(clock_handle->ipc_shm);
-		shmctl(clock_handle->ipc_shm_id, IPC_RMID, NULL);
-	}
-
-
 	// TODO: look into making the stats a separate structure. Could be much
 	// TODO: easier to manage 
 	long int n_stamp;
@@ -1192,8 +1185,24 @@ int main(int argc, char *argv[])
 	pthread_cond_destroy(&(clock_handle->wakeup_cond));
 	pthread_mutex_destroy(&(clock_handle->rdb_mutex));
 
-	radclock_destroy(clock_handle);
-	
+	/* Detach IPC shared memory if were running as IPC server. */
+	if (clock_handle->conf->server_ipc == BOOL_ON) {
+		shmdt(clock_handle->ipc_shm);
+		/* 
+		 * Do not issue an IPC_RMID. Looked like a good idea, but it is not.
+		 * Processes still running will be attached to old shared memory segment
+		 * and won't catch updates from the new instance of the daemon (the new
+		 * segment would have a new id).
+		 * Best is to have the shared memory created once, reused and never
+		 * deleted.
+		 */
+		/* shmctl(clock_handle->ipc_shm_id, IPC_RMID, NULL); */
+	}
+
+	/* Free the clock structure. All done. */
+	free(clock_handle);
+	clock_handle = NULL;
+
 	exit(EXIT_SUCCESS);
 }
 

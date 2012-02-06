@@ -54,12 +54,12 @@ static inline int
 radclock_vcount_to_ld(const struct radclock *clock, vcounter_t vcount,
 		long double *time)
 {
-	struct radclock_data_shm *shm;
+	struct radclock_shm *shm;
 	vcounter_t valid, last;
 	double phat;
 	int generation;
 
-	shm = (struct radclock_data_shm *) clock->ipc_shm;
+	shm = (struct radclock_shm *) clock->ipc_shm;
 	do {
 		/* Quality ingredients */
 		generation = shm->gen;
@@ -87,7 +87,7 @@ static inline int
 radclock_delay_to_ld(struct radclock *clock, vcounter_t from_vcount,
 		vcounter_t till_vcount, long double *time)
 {
-	struct radclock_data_shm *shm;
+	struct radclock_shm *shm;
 	vcounter_t now, valid, last;
 	double phat;
 	int generation;
@@ -96,7 +96,7 @@ radclock_delay_to_ld(struct radclock *clock, vcounter_t from_vcount,
 	if (radclock_get_vcounter(clock, &now))
 		return (1);
 
-	shm = (struct radclock_data_shm *) clock->ipc_shm;
+	shm = (struct radclock_shm *) clock->ipc_shm;
 	do {
 		generation = shm->gen;
 		valid = SHM_DATA(shm)->valid_till;
@@ -122,14 +122,14 @@ radclock_delay_to_ld(struct radclock *clock, vcounter_t from_vcount,
 static inline int
 in_skm(struct radclock *clock, const vcounter_t *past_count, const vcounter_t *vc) 
 {
-	struct radclock_data_shm *shm;
+	struct radclock_shm *shm;
 	vcounter_t now;
 
 	if ( !vc )
 		radclock_get_vcounter(clock, &now);
 	now = *vc;
 
-	shm = (struct radclock_data_shm *) clock->ipc_shm;
+	shm = (struct radclock_shm *) clock->ipc_shm;
 	if ( (now - *past_count) * SHM_DATA(shm)->phat < 1024 )
 		return 1;
 	else
