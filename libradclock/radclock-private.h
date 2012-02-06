@@ -94,8 +94,8 @@ struct radclock_data {
 	vcounter_t valid_till;
 };
 
-/* TODO: split it in 2, clock errors and peer clock tracking, recompose with
- * others for per peer algo
+/* 
+ * Visible error metrics 
  */ 
 struct radclock_error
 {
@@ -103,14 +103,6 @@ struct radclock_error
 	double error_bound_avg;
 	double error_bound_std;
 	double min_RTT;
-	// ---------------- //
-	double Ebound_min_last;
-	long nerror;
-	double cumsum;
-	double sq_cumsum;
-	long nerror_hwin;
-	double cumsum_hwin;
-	double sq_cumsum_hwin;
 };
 
 /*

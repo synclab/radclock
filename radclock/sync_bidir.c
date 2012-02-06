@@ -379,6 +379,15 @@ void init_peer( struct radclock *clock_handle, struct radclock_phyparam *phypara
 	peer->thetahat = th_naive;
 	history_add(&peer->thnaive_hist, peer->stamp_i, &th_naive);
 
+	/* Peer error metrics */
+	PEER_ERROR(peer)->Ebound_min_last	= 0;
+	PEER_ERROR(peer)->nerror 			= 0;
+	PEER_ERROR(peer)->cumsum 			= 0;
+	PEER_ERROR(peer)->sq_cumsum 		= 0;
+	PEER_ERROR(peer)->nerror_hwin 		= 0;
+	PEER_ERROR(peer)->cumsum_hwin 		= 0;
+	PEER_ERROR(peer)->sq_cumsum_hwin 	= 0;
+
 	/* Peer statistics */
 	peer->stats_sd[0] = 0;
 	peer->stats_sd[1] = 0;
@@ -1439,7 +1448,7 @@ void process_thetahat_warmup (struct bidir_peer* peer, struct radclock* clock_ha
 			 * Also need to track last time we updated theta to do proper aging of
 			 * clock error bound in warmup
 			 */
-			RAD_ERROR(clock_handle)->Ebound_min_last = Ebound_min;
+			PEER_ERROR(peer)->Ebound_min_last = Ebound_min;
 			copystamp(stamp, &peer->thetastamp);
 		}
 		/* if result looks insane, give warning */
@@ -1764,7 +1773,7 @@ void process_thetahat_full (struct bidir_peer* peer, struct radclock* clock_hand
 // TODO check the logic of this branch, why thetahat update not in here as well 			
 			copystamp(stamp, &peer->thetastamp);
 			/* Record last good estimate of error bound after sanity check */ 
-			RAD_ERROR(clock_handle)->Ebound_min_last = Ebound_min;
+			PEER_ERROR(peer)->Ebound_min_last = Ebound_min;
 		}
 //		DEL_STATUS(clock_handle, STARAD_OFFSET_QUALITY);
 		DEL_STATUS(clock_handle, STARAD_OFFSET_SANITY);
@@ -1995,9 +2004,9 @@ int process_bidir_stamp(struct radclock *clock_handle, struct bidir_peer *peer, 
 		peer->Ep_qual /= 10;
 
 		/* Background error bounds reinitialisation */
-		RAD_ERROR(clock_handle)->cumsum_hwin 	= 0;
-		RAD_ERROR(clock_handle)->sq_cumsum_hwin = 0;
-		RAD_ERROR(clock_handle)->nerror_hwin 	= 0;
+		PEER_ERROR(peer)->cumsum_hwin 	= 0;
+		PEER_ERROR(peer)->sq_cumsum_hwin = 0;
+		PEER_ERROR(peer)->nerror_hwin 	= 0;
 
 		verbose(VERB_CONTROL, "Adjusting history window before normal processing of stamp %lu. "
 				"FIRST 1/2 window reached", peer->stamp_i);
@@ -2030,12 +2039,12 @@ int process_bidir_stamp(struct radclock *clock_handle, struct bidir_peer *peer, 
 		copystamp(stamp, &peer->next_pstamp);
 
 		/* Background error bounds taking over and restart all over again */
-		RAD_ERROR(clock_handle)->cumsum 		= RAD_ERROR(clock_handle)->cumsum_hwin;
-		RAD_ERROR(clock_handle)->sq_cumsum 		= RAD_ERROR(clock_handle)->sq_cumsum_hwin;
-		RAD_ERROR(clock_handle)->nerror 		= RAD_ERROR(clock_handle)->nerror_hwin;
-		RAD_ERROR(clock_handle)->cumsum_hwin 	= 0;
-		RAD_ERROR(clock_handle)->sq_cumsum_hwin = 0;
-		RAD_ERROR(clock_handle)->nerror_hwin 	= 0;
+		PEER_ERROR(peer)->cumsum 	= PEER_ERROR(peer)->cumsum_hwin;
+		PEER_ERROR(peer)->sq_cumsum	= PEER_ERROR(peer)->sq_cumsum_hwin;
+		PEER_ERROR(peer)->nerror 	= PEER_ERROR(peer)->nerror_hwin;
+		PEER_ERROR(peer)->cumsum_hwin 		= 0;
+		PEER_ERROR(peer)->sq_cumsum_hwin	= 0;
+		PEER_ERROR(peer)->nerror_hwin 		= 0;
 
 
 		verbose(VERB_CONTROL, "Total number of sanity events:  phat: %u, plocal: %u, Offset: %u ",
@@ -2190,27 +2199,30 @@ output_results:
 	 * TODO put that in a function ...
 	 */
 	if (peer->stamp_i > 1) {
-		error_bound	= RAD_ERROR(clock_handle)->Ebound_min_last 
-					+ peer->phat * (double)(stamp->Tf - peer->thetastamp.Tf) * phyparam->RateErrBOUND;
+		error_bound = PEER_ERROR(peer)->Ebound_min_last +
+			peer->phat * (double)(stamp->Tf - peer->thetastamp.Tf) *
+			phyparam->RateErrBOUND;
 
-		RAD_ERROR(clock_handle)->cumsum_hwin 	= RAD_ERROR(clock_handle)->cumsum_hwin + error_bound;
-		RAD_ERROR(clock_handle)->sq_cumsum_hwin = RAD_ERROR(clock_handle)->sq_cumsum_hwin + ( error_bound * error_bound ) ;
-		RAD_ERROR(clock_handle)->nerror_hwin 	= RAD_ERROR(clock_handle)->nerror_hwin + 1;
+		PEER_ERROR(peer)->cumsum_hwin = PEER_ERROR(peer)->cumsum_hwin + error_bound;
+		PEER_ERROR(peer)->sq_cumsum_hwin = PEER_ERROR(peer)->sq_cumsum_hwin +
+			(error_bound * error_bound) ;
+		PEER_ERROR(peer)->nerror_hwin = PEER_ERROR(peer)->nerror_hwin + 1;
 
-		cumsum 		= RAD_ERROR(clock_handle)->cumsum + error_bound;
-		sq_cumsum 	= RAD_ERROR(clock_handle)->sq_cumsum + ( error_bound * error_bound );
-		nerror 		= RAD_ERROR(clock_handle)->nerror + 1;
+		cumsum		= PEER_ERROR(peer)->cumsum + error_bound;
+		sq_cumsum	= PEER_ERROR(peer)->sq_cumsum + (error_bound * error_bound);
+		nerror		= PEER_ERROR(peer)->nerror + 1;
 
 		RAD_ERROR(clock_handle)->error_bound 		= error_bound;
 		if ( nerror > 2 )
 		{
-			RAD_ERROR(clock_handle)->error_bound_avg 	= cumsum / nerror;
-			RAD_ERROR(clock_handle)->error_bound_std 	= sqrt((sq_cumsum - ( cumsum*cumsum / nerror )) / (nerror - 1));
+			RAD_ERROR(clock_handle)->error_bound_avg = cumsum / nerror;
+			RAD_ERROR(clock_handle)->error_bound_std = sqrt((sq_cumsum -
+						(cumsum * cumsum / nerror)) / (nerror - 1));
 		}
-		RAD_ERROR(clock_handle)->cumsum				= cumsum; 
-		RAD_ERROR(clock_handle)->sq_cumsum			= sq_cumsum; 
-		RAD_ERROR(clock_handle)->nerror				= nerror;
-		RAD_ERROR(clock_handle)->min_RTT			= peer->RTThat * peer->phat;
+		PEER_ERROR(peer)->cumsum	= cumsum;
+		PEER_ERROR(peer)->sq_cumsum	= sq_cumsum;
+		PEER_ERROR(peer)->nerror	= nerror;
+		RAD_ERROR(clock_handle)->min_RTT = peer->RTThat * peer->phat;
 	}
 
 	/* We don't want the leapsecond to create a jump in post processing of data,

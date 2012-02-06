@@ -63,13 +63,6 @@ struct radclock * radclock_create(void)
 	RAD_ERROR(clock)->error_bound_avg 	= 0;
 	RAD_ERROR(clock)->error_bound_std 	= 0;
 	RAD_ERROR(clock)->min_RTT 			= 0;
-	RAD_ERROR(clock)->Ebound_min_last	= 0;
-	RAD_ERROR(clock)->nerror 			= 0;
-	RAD_ERROR(clock)->cumsum 			= 0;
-	RAD_ERROR(clock)->sq_cumsum 		= 0;
-	RAD_ERROR(clock)->nerror_hwin 		= 0;
-	RAD_ERROR(clock)->cumsum_hwin 		= 0;
-	RAD_ERROR(clock)->sq_cumsum_hwin 	= 0;
 	
 	/* Virtual machine stuff */
 	RAD_VM(clock)->push_data = NULL; 
