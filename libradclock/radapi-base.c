@@ -40,8 +40,10 @@
 
 
 
-
-struct radclock * radclock_create(void)
+// TODO split structure to have a minimal library version, and a radclock daemon
+// one. Will really clean up the library code.
+struct radclock *
+radclock_create(void)
 {
 	struct radclock *clock = (struct radclock*) malloc(sizeof(struct radclock));
 	if (!clock) 
@@ -156,7 +158,8 @@ init_shm_reader(struct radclock *clock)
 /*
  * Initialise what is common to radclock and other apps that have a clock handle
  */
-int radclock_init(struct radclock *clock_handle) 
+int
+radclock_init(struct radclock *clock_handle) 
 {
 	/* Few branching to depending we are: 
 	 * - (1) a client process, 
@@ -208,7 +211,8 @@ int radclock_init(struct radclock *clock_handle)
 }
 
 
-void radclock_destroy(struct radclock *handle) 
+void
+radclock_destroy(struct radclock *handle) 
 {
 
 	/* Detach IPC shared memory */
@@ -246,9 +250,8 @@ raddata_quality(vcounter_t now, vcounter_t last, vcounter_t valid, double phat)
 	 * Several scenarios again:
 	 * - the data is really old, clock status should say the same
 	 * - virtual machine migrated, but cannot be sure. Mark data as very bad.
-	 * TODO hard coded value !Y
 	 */
-	if (phat * (now - valid) > 1024)
+	if (phat * (now - valid) > OUT_SKM)
 		return 3;
 
 	/* The data is old, but still in SKM_SCALE */

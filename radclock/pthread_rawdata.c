@@ -179,7 +179,8 @@ subtract_tv(struct timeval *delta, struct timeval tv1, struct timeval tv2)
  *	The code in here is in packets chronological order, could have made it
  *	prettier with a little state machine.
  */
-int update_system_clock(struct radclock *clock)
+int
+update_system_clock(struct radclock *clock)
 {
 	long double time;
 	vcounter_t vcount;
@@ -474,7 +475,8 @@ int insane_bidir_stamp(struct stamp_t *stamp, struct stamp_t *laststamp)
 /**
  * XXX TODO: so far we suppose bidir paradigm only and a single source at a time!!
  */
-int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
+int
+process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 {
 	JDEBUG
 
