@@ -28,32 +28,30 @@
  * Check we have enough space allocated in radclock structure
  * for the pthread IDs
  */
-#define PTH_IPC_SERV	0
+#define PTH_NONE		0
 #define PTH_DATA_PROC	1
 #define PTH_TRIGGER		2
-#define PTH_FIXEDPOINT	3
-#define PTH_NTP_SERV	4
+#define PTH_NTP_SERV	3
+#define PTH_FIXEDPOINT	4
 
 
 /**
  * Flags to signal threads they have to commit suicide
  */
-#define PTH_IPC_SERV_STOP	0x00001
-#define PTH_DATA_PROC_STOP	0x00010
-#define PTH_TRIGGER_STOP	0x00100
+#define PTH_DATA_PROC_STOP	0x00001
+#define PTH_TRIGGER_STOP	0x00010
+#define PTH_NTP_SERV_STOP	0x00100
 #define PTH_FIXEDPOINT_STOP	0x01000
-#define PTH_NTP_SERV_STOP	0x10000
-#define PTH_STOP_ALL		(PTH_IPC_SERV_STOP|PTH_DATA_PROC_STOP|PTH_TRIGGER_STOP|PTH_FIXEDPOINT_STOP|PTH_NTP_SERV_STOP)
+#define PTH_STOP_ALL		(PTH_DATA_PROC_STOP|PTH_TRIGGER_STOP|PTH_FIXEDPOINT_STOP|PTH_NTP_SERV_STOP)
 
 
 /**
  *  Threads starters
  */
-int start_thread_IPC_SERV(struct radclock *clock_handle);
 int start_thread_DATA_PROC(struct radclock *clock_handle);
 int start_thread_TRIGGER(struct radclock *clock_handle);
-int start_thread_FIXEDPOINT(struct radclock *clock_handle);
 int start_thread_NTP_SERV(struct radclock *clock_handle);
+int start_thread_FIXEDPOINT(struct radclock *clock_handle);
 
 
 /**
@@ -61,7 +59,6 @@ int start_thread_NTP_SERV(struct radclock *clock_handle);
  */
 void* thread_data_processing(void *c_handle);
 void* thread_trigger(void *c_handle);
-void* thread_ipc_server(void *c_handle);
 void* thread_ntp_server(void *c_handle);
 
 int trigger_work(struct radclock *clock_handle); 

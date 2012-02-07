@@ -39,8 +39,6 @@
 
 // TODO : should provide methods for modify this? 
 typedef enum { RADCLOCK_SYNC_NOTSET, RADCLOCK_SYNC_DEAD, RADCLOCK_SYNC_LIVE } radclock_runmode_t;
-// TODO remove this one?
-//typedef enum { RADCLOCK_IPC_CLIENT, RADCLOCK_IPC_SERVER, RADCLOCK_IPC_NONE} radclock_IPC_mode_t;
 typedef enum { RADCLOCK_UNIDIR, RADCLOCK_BIDIR} radclock_syncalgo_mode_t;
 
 
@@ -57,12 +55,13 @@ struct radclock_impl_linux {
 };
 
 
-/* Protocol related stuff on the client side */
+/* (NTP) Protocol related stuff on the client side */
 struct radclock_client_data {
 	int socket;
 	struct sockaddr_in s_to;
 	struct sockaddr_in s_from;
 };
+
 
 /**
  * NTP protocol specifics for being a server
@@ -164,16 +163,9 @@ struct radclock
 	unsigned int unix_signal;
 
 	/* Common data for the daemon */
-	// TODO some cleanup in this
 	int is_daemon;
-//	int ipc_socket;
-//	char *ipc_socket_path;
-	radclock_autoupdate_t 	autoupdate_mode;
 	radclock_local_period_t	local_period_mode;
 	radclock_runmode_t 		run_mode;
-// TODO remove this one?
-//	radclock_IPC_mode_t 	ipc_mode;
-//	int ipc_requests;	// request bound. TODO cleanup?
 
 	/* Protocol related stuff on the client side (NTP, 1588, ...) */
 	struct radclock_client_data *client_data;
@@ -181,7 +173,7 @@ struct radclock
 	/* Protol related stuff (NTP, 1588, ...) */
 	struct radclock_ntpserver_data *server_data;
 	
-	/* IPC socket and shared memory */
+	/* IPC shared memory */
 	int ipc_shm_id;
 	void *ipc_shm;
 
@@ -251,38 +243,11 @@ struct radclock
 #define HAS_STATUS(x,y) ((RAD_DATA(x)->status & y ) == y ) 
 
 
-/* IPC using datagram UNIX sockets
- * Types and messages for communication with the thread serving global data 
- * We can imagine several messages in the future ...
+/*
+ * IPC using shared memory 
  */
-// TODO: somewhere else if not running as a daemon with root access?
-
-/* Socket for IPC used by the gb_pthread */
 #define RADCLOCK_RUN_DIRECTORY		"/var/run/radclock"
 #define IPC_SHARED_MEMORY			( RADCLOCK_RUN_DIRECTORY "/radclock.shm" )
-//#define IPC_SOCKET_SERVER			( RADCLOCK_RUN_DIRECTORY "/radclock.socket" )
-//#define IPC_SOCKET_CLIENT			"/tmp/radclock-client"
-
-// TODO: Check to see if this should be kept / reused for Virtual machine
-// network communication.
-
-#define IPC_MAGIC_NUMBER		31051978
-#define IPC_REQ_RAD_DATA		1
-#define IPC_REQ_RAD_ERROR		2
-
-struct ipc_request {
-	unsigned int magic_number;
-	unsigned int request_type;
-};
-
-struct ipc_reply {
-	unsigned int reply_type;
-	union {
-		struct radclock_data rad_data;
-		struct radclock_error rad_error;
-	};
-};
-
 
 
 /**
@@ -298,19 +263,6 @@ int found_ffwd_kernel_version(void);
  * @return 0 on success, non-zero on failure
  */
 int get_kernel_ffclock(struct radclock *handle);
-
-
-/**
- * Check if the parameters in the userland clock handle are outdated and update
- * them if it is the case.
- * The outdated criterion relies on the comparison of the vcount stamps stored in
- * the global data structure.
- * @param  handle The private handle for accessing global data
- * @param  vc A pointer to the current timestamp, or NULL 
- * @param  req_type Type of IPC request 
- * @return 0 on success, non-zero on failure
- */ 
-//int radclock_check_outdated(struct radclock *handle, vcounter_t *vc, int req_type);
 
 
 /* TODO add comments */

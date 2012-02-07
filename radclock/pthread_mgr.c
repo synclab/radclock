@@ -182,7 +182,8 @@ void* thread_data_processing(void *c_handle)
 }
 
 
-void* thread_fixedpoint(void *c_handle)
+void *
+thread_fixedpoint(void *c_handle)
 {
 	JDEBUG
 
@@ -216,28 +217,8 @@ void* thread_fixedpoint(void *c_handle)
 }
 
 
-
-
-
-// TODO remove
-/*
-int start_thread_IPC_SERV(struct radclock *clock_handle) 
-{
-	int err;
-	pthread_attr_t thread_attr;
-	pthread_attr_init(&thread_attr);
-	pthread_attr_setdetachstate(&thread_attr, PTHREAD_CREATE_JOINABLE);
-
-	verbose(LOG_NOTICE, "Starting IPC thread");
-	err = pthread_create(&(clock_handle->threads[PTH_IPC_SERV]), &thread_attr, 
-			thread_ipc_server, (void *)(clock_handle));
-	if (err) 
-		verbose(LOG_ERR, "pthread_create() returned error number %d", err);
-	 return err;
-}
-*/
-
-int start_thread_NTP_SERV(struct radclock *clock_handle) 
+int
+start_thread_NTP_SERV(struct radclock *clock_handle) 
 {
 	int err;
 	pthread_attr_t thread_attr;

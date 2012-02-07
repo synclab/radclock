@@ -190,24 +190,15 @@ rehash_daemon(struct radclock *clock_handle, uint32_t param_mask)
 	}
 
 
-// TODO this needs to be fixed?
+// TODO The old naming convention for server IPC could be changed for clarity.
+// Would require an update of config file parsing. 
 	if ( HAS_UPDATE(param_mask, UPDMASK_SERVER_IPC) ) {
 		switch ( conf->server_ipc ) {
 			case BOOL_ON:
-				/* We start serving global data */
-// TODO clean up
-//				clock_handle->ipc_mode = RADCLOCK_IPC_SERVER;
-//				start_thread_IPC_SERV(clock_handle);
 				init_raddata_shm_writer(clock_handle);
 				break;
 			case BOOL_OFF:
-				/* We stop serving global data */
-// TODO clean up
-//				clock_handle->ipc_mode = RADCLOCK_IPC_NONE;
-//				clock_handle->pthread_flag_stop |= PTH_IPC_SERV_STOP; 
-	//TODO should we join the thread in here ... requires testing
-		//	pthread_join(clock_handle->threads[PTH_IPC_SERV], &thread_status);
-		//		close(clock_handle->ipc_socket);
+				/* Detach for SHM segment, but do not destroy it */
 				shmdt(clock_handle->ipc_shm);
 				break;
 		}
@@ -222,7 +213,7 @@ rehash_daemon(struct radclock *clock_handle, uint32_t param_mask)
 			case BOOL_OFF:
 				/* We stop the NTP server */
 				clock_handle->pthread_flag_stop |= PTH_NTP_SERV_STOP; 
-	//TODO should we join the thread in here ... requires testing
+	// TODO should we join the thread in here ... requires testing
 	//			pthread_join(clock_handle->threads[PTH_NTP_SERV], &thread_status);
 				break;
 		}
@@ -568,34 +559,14 @@ radclock_init_specific (struct radclock *clock_handle)
 	/* Initial status words */
 	// TODO there should be more of them set in here, some are for live and dead
 	// runs, but not all!
-	if (clock_handle->run_mode == RADCLOCK_SYNC_LIVE)
-	{
+	if (clock_handle->run_mode == RADCLOCK_SYNC_LIVE) {
 		ADD_STATUS(clock_handle, STARAD_STARVING);
 	}
 	
-	/* Create directory to store pid lock file and ipc socket */
-	// TODO: this has to be removed once the Shared Memory code is functional?
-/*
- 	if (  (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER) 
-				|| (clock_handle->is_daemon) ) 
-		{
-		struct stat sb;
-		if (stat(RADCLOCK_RUN_DIRECTORY, &sb) < 0) {
-			if (mkdir(RADCLOCK_RUN_DIRECTORY, 0755) < 0) { 
-				verbose(LOG_ERR, "Cannot create %s directory. Run as root or (!daemon && !server)",
-					   	RADCLOCK_RUN_DIRECTORY);
-				return 1;
-			}
-		}
-	}
-*/
-
 	/*
 	 * Initialise IPC shared memory segment
 	 */
-//	if (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER) {
-//	TODO clean up
-	if (clock_handle->conf->adjust_sysclock == BOOL_ON) {
+	if (clock_handle->conf->server_ipc == BOOL_ON) {
 		err = init_raddata_shm_writer(clock_handle);
 		if (err)
 			return (1);
@@ -941,41 +912,20 @@ int main(int argc, char *argv[])
 	 * shared global data on the system or open a BPF. This define input to the
 	 * init of the radclock handle
 	 */
-	if (!is_live_source(clock_handle)) 
-	{
+	if (!is_live_source(clock_handle))
 		clock_handle->run_mode = RADCLOCK_SYNC_DEAD;
-		clock_handle->autoupdate_mode = RADCLOCK_UPDATE_NEVER;
-	}
-	else {
-
-		/* Passed kernel support and version check */
+	else
 		clock_handle->run_mode = RADCLOCK_SYNC_LIVE;
 
-		/* Manually signal we are the radclock algo and that we have to serve global data to the
-		 * kernel and other processes throught the IPC socket.
-		 */
-/*
-		if (clock_handle->conf->server_ipc)
-			clock_handle->ipc_mode = RADCLOCK_IPC_SERVER;
-		else
-			clock_handle->ipc_mode = RADCLOCK_IPC_NONE;
-*/
-		// XXX Does the following matters for the radclock?
-		clock_handle->autoupdate_mode = RADCLOCK_UPDATE_ALWAYS;
-	}
-
 	/* Init clock handle and private data */
-	if (clock_handle->run_mode == RADCLOCK_SYNC_LIVE)
-	{ 
-		if (radclock_init(clock_handle))
-		{
+	if (clock_handle->run_mode == RADCLOCK_SYNC_LIVE) { 
+		if (radclock_init(clock_handle)) {
 			verbose(LOG_ERR, "Could not initialise the RADclock");
 			return 1;
 		}
 
 		/* Make sure we are doing the right thing */
-		if (clock_handle->kernel_version < 0)
-		{
+		if (clock_handle->kernel_version < 0) {
 			verbose(LOG_ERR, "The RADclock does not run live without "
 						"Feed-Forward kernel support");
 			return 1;
@@ -983,8 +933,7 @@ int main(int argc, char *argv[])
 	}
 	
 	/* Init radclock specific stuff */
-	if (radclock_init_specific(clock_handle))
-	{
+	if (radclock_init_specific(clock_handle)) {
 		verbose(LOG_ERR, "Radclock process specific init failed.");
 		return 1;
 	}
@@ -1059,16 +1008,6 @@ int main(int argc, char *argv[])
 					return 1;
 			}
 			
-			/* Are we serving some data to other processes and update the
-			 * clock globaldata in the kernel?
-			 */
-/*
-			if (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER) 
-			{
-				err = start_thread_IPC_SERV(clock_handle);
-				if (err < 0) 	return 1;
-			}
-*/			
 			/* Are we running an NTP server for network clients ? */
 			switch (clock_handle->conf->server_ntp) {
 				case BOOL_ON:
@@ -1090,8 +1029,6 @@ int main(int argc, char *argv[])
 			 * should be removed in the future
 			 */
 			if ( (clock_handle->run_mode == RADCLOCK_SYNC_LIVE) 
-// TODO remove this
-//					&& (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER)
 			  		&& (clock_handle->kernel_version < 2) )
 			{
 				err = start_thread_FIXEDPOINT(clock_handle);
@@ -1131,14 +1068,6 @@ int main(int argc, char *argv[])
 				pthread_join(clock_handle->threads[PTH_NTP_SERV], &thread_status);
 				verbose(LOG_NOTICE, "NTP server thread is dead.");
 			}
-
-// TODO Remove
-/*
-			if (clock_handle->conf->server_ipc == BOOL_ON) {
-				pthread_join(clock_handle->threads[PTH_IPC_SERV], &thread_status);
-				verbose(LOG_NOTICE, "IPC thread is dead.");
-			}
-*/
 
 			pthread_join(clock_handle->threads[PTH_TRIGGER], &thread_status);
 			verbose(LOG_NOTICE, "Trigger thread is dead.");

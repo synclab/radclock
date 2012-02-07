@@ -320,14 +320,6 @@ void* thread_ntp_server(void *c_handle)
 		if (sendto(s_server, (char*)pkt_out, LEN_PKT_NOMAC, 0, (struct sockaddr *)&sin_client, len) < 0) {
 			verbose(LOG_ERR, "NTP Socket send() error: %s", strerror(errno));
 		}
-
-		/* Someone told us to die ... sniff */
-// TODO cleanup
-/*
-		if ( clock_handle->ipc_mode == RADCLOCK_IPC_NONE)
-			break;
-			//pthread_exit(NULL);
-*/
 	}
 
 	/* Thread exit */

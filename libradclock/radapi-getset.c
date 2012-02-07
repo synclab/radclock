@@ -31,45 +31,6 @@
 #include "logger.h"
 
 
-
-// TODO check this is still needed with the IPC SHM, or if should be rebranded
-// in virtual machine world?
-int
-radclock_set_autoupdate(struct radclock *handle, radclock_autoupdate_t *update_mode)
-{
-	switch (*update_mode) {  
-		case RADCLOCK_UPDATE_ALWAYS:
-		case RADCLOCK_UPDATE_NEVER:
-		case RADCLOCK_UPDATE_AUTO:
-			break;
-		default:
-			logger(RADLOG_ERR, "Unknown autoupdate mode");
-			return (1);
-	}
-
-	if ( handle && RAD_DATA(handle)) {
-		handle->autoupdate_mode = *update_mode; 
-		return (0);
-	}
-	else
-		return (1);
-}
-
-
-// TODO check this is still needed with the IPC SHM, or if should be rebranded
-// in virtual machine world?
-int
-radclock_get_autoupdate(struct radclock *handle, radclock_autoupdate_t *update_mode)
-{
-	if ( handle && RAD_DATA(handle)) {
-		*update_mode = handle->autoupdate_mode; 
-		return (0);
-	}
-	else
-		return (1);
-}
-
-
 // TODO: should kill this? plocal is always used.
 int
 radclock_set_local_period_mode(struct radclock *handle,

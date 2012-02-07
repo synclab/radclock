@@ -533,26 +533,23 @@ int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 	/* Update calibration using new stamp */ 
 	process_bidir_stamp(clock_handle, peer, BST(&stamp), stamp.qual_warning);
 
+	/*
+	 * Update IPC shared memory segment for all processes to get accurate
+	 * clock parameters
+	 */
+  	if ((clock_handle->run_mode == RADCLOCK_SYNC_LIVE) &&
+			(clock_handle->conf->server_ipc == BOOL_ON)) {
+		if (!HAS_STATUS(clock_handle, STARAD_UNSYNC))
+			update_ipc_shared_memory(clock_handle);
+	}
 
-// TODO: may have to kill the fixedpoint thread altogether with newer versions
-// of the kernel, need to make it conditional on version ...
 	/* To improve data accuracy, we kick a fixed point data update just after we
 	 * have preocessed a new stamp. Locking is handled by the kernel so we should
 	 * not have concurrency issue with the two threads updating the data
 	 */
-// TODO clean up
-//	if ( (clock_handle->run_mode == RADCLOCK_SYNC_LIVE) 
-//			&& (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER) )
   	if ((clock_handle->run_mode == RADCLOCK_SYNC_LIVE) &&
 			(clock_handle->conf->adjust_sysclock == BOOL_ON)) {
-		/*
-		 * Update IPC shared memory segment for all processes to get accurate
-		 * clock parameters
-		 */
-		if (!HAS_STATUS(clock_handle, STARAD_UNSYNC))
-			update_ipc_shared_memory(clock_handle);
-
-		if ( clock_handle->kernel_version < 2 )
+			if ( clock_handle->kernel_version < 2 )
 		{	
 			update_kernel_fixed(clock_handle);
 			verbose(VERB_DEBUG, "Sync pthread updated fixed point data to kernel.");
@@ -562,7 +559,6 @@ int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 			 * may be better than ours after the very first stamp. Let's make sure we do
 			 * not push something too stupid
 			 */
-//			if ( OUTPUT(clock_handle, n_stamps) < NTP_BURST )
 			if (HAS_STATUS(clock_handle, STARAD_UNSYNC))
 				return 0;
 
@@ -593,8 +589,6 @@ int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 	}
 
 	/* Update any virtual machine store if configured */
-// TODO clean up
-//	if ( (clock_handle->run_mode == RADCLOCK_SYNC_LIVE) && (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER) ) 
   	if ((clock_handle->run_mode == RADCLOCK_SYNC_LIVE) &&
 			(clock_handle->conf->adjust_sysclock == BOOL_ON))
 	{

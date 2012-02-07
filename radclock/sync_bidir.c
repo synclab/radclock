@@ -2162,8 +2162,10 @@ output_results:
 
 /* TODO: minET is not the correct thetahat error. Should provide a better estimate */
 
-	/* We lock the global data to avoid sending partially updated to client 
-	 * through the IPC socket. Also we lock the matlab output data at the same time
+	/* We lock the global data to to ensure data consistency. Do not want shared
+	 * memory segment be half updated and 3rd party processes get bad data.
+	 * // TODO comment below is as clear as mud
+	 * Also we lock the matlab output data at the same time
 	 * to ensure consistency for live captures.
 	 */
 	pthread_mutex_lock(&clock_handle->globaldata_mutex);
