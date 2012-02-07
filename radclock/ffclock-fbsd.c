@@ -42,6 +42,7 @@
 #include "radclock-private.h"
 #include "ffclock.h"
 #include "fixedpoint.h"
+#include "misc.h"
 #include "sync_algo.h"		// To be able to access boottime 'C' from sync output. TODO add C into radclock_data structure?
 #include "verbose.h"
 #include "jdebug.h"
@@ -266,9 +267,7 @@ set_kernel_ffclock(struct radclock *clock)
 	 */
 
 	/* Convert vcount to long double time and to bintime */
-	if (radclock_vcount_to_abstime_fp(clock, &vcount, &time))
-		verbose(LOG_ERR, "Error calculating time");
-
+	counter_to_time(clock, &vcount, &time);
 	cest.update_time.sec = (time_t) time;
 	frac = (time - (time_t) time) * (1LLU << 63);
 	cest.update_time.frac = frac << 1;

@@ -38,6 +38,7 @@
 #include <sys/resource.h>
 #include <pthread.h>
 #include "radclock-private.h"
+#include "pthread_mgr.h"
 
 extern struct radclock *clock_handle;
 
@@ -47,15 +48,6 @@ pthread_id()
 	pthread_t pth_id;
 	pth_id = pthread_self();
 
-/* XXX from pthread_mgr.h */
-#define PTH_IPC_SERV	0
-#define PTH_DATA_PROC	1
-#define PTH_TRIGGER		2
-#define PTH_FIXEDPOINT	3
-#define PTH_NTP_SERV	4
-
-	if (clock_handle->threads[PTH_IPC_SERV] == pth_id)
-	   return "Thread IPC ";	
 	if (clock_handle->threads[PTH_DATA_PROC] == pth_id)
 	   return "Thread DATA";	
 	if (clock_handle->threads[PTH_TRIGGER] == pth_id)

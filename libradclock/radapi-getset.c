@@ -31,41 +31,10 @@
 #include "logger.h"
 
 
-
-
-int radclock_set_autoupdate(struct radclock *handle, radclock_autoupdate_t *update_mode)
-{
-	switch (*update_mode) {  
-		case RADCLOCK_UPDATE_ALWAYS:
-		case RADCLOCK_UPDATE_NEVER:
-		case RADCLOCK_UPDATE_AUTO:
-			break;
-		default:
-			logger(RADLOG_ERR, "Unknown autoupdate mode");
-			return 1;
-	}
-
-	if ( handle && RAD_DATA(handle)) {
-		handle->autoupdate_mode = *update_mode; 
-		return 0;
-	}
-	else
-		return 1;
-}
-
-
-int radclock_get_autoupdate(struct radclock *handle, radclock_autoupdate_t *update_mode)
-{
-	if ( handle && RAD_DATA(handle)) {
-		*update_mode = handle->autoupdate_mode; 
-		return 0;
-	}
-	else
-		return 1;
-}
-
-
-int radclock_set_local_period_mode(struct radclock *handle, radclock_local_period_t *local_period_mode)
+// TODO: should kill this? plocal is always used.
+int
+radclock_set_local_period_mode(struct radclock *handle,
+		radclock_local_period_t *local_period_mode)
 {
 	switch (*local_period_mode) {  
 		case RADCLOCK_LOCAL_PERIOD_ON:
@@ -73,160 +42,271 @@ int radclock_set_local_period_mode(struct radclock *handle, radclock_local_perio
 			break;
 		default:
 			logger(RADLOG_ERR, "Unknown local period mode");
-			return 1;
+			return (1);
 	}
 
 	if ( handle && RAD_DATA(handle)) {
 		handle->local_period_mode = *local_period_mode;
-		return 0;
+		return (0);
 	}
 	else
-		return 1;
+		return (1);
 }
 
 
-int radclock_get_local_period_mode(struct radclock *handle, radclock_local_period_t *local_period_mode)
+// TODO: should kill this? plocal is always used.
+int
+radclock_get_local_period_mode(struct radclock *handle,
+		radclock_local_period_t *local_period_mode)
 {
 	if ( handle && RAD_DATA(handle)) {
 		*local_period_mode = handle->local_period_mode; 
-		return 0;
+		return (0);
 	}
 	else
-		return 1;
+		return (1);
 }
 
 
 
 
-int radclock_get_last_stamp(struct radclock *handle, vcounter_t *last_vcount)
+int
+radclock_get_last_stamp(struct radclock *clock, vcounter_t *last_vcount)
 {
-	int data_quality = 0;
-	if ( !handle || !RAD_DATA(handle) || !last_vcount)
-		return 1;
+	struct radclock_shm *shm;
+	int generation;
 
-	data_quality = radclock_check_outdated(handle, NULL, IPC_REQ_RAD_DATA);
-	*last_vcount = RAD_DATA(handle)->last_changed;
-	return data_quality;
+	if (!clock || !last_vcount)
+		return (1);
+
+	if (!clock->ipc_shm)
+		return (1);
+
+	shm = (struct radclock_shm *) clock->ipc_shm;
+	do {
+		generation = shm->gen;
+		*last_vcount = SHM_DATA(shm)->last_changed;
+	} while (generation != shm->gen || !shm->gen);
+
+	return (0); 
 }
 
 
-int radclock_get_till_stamp(struct radclock *handle, vcounter_t *till_vcount)
+int
+radclock_get_till_stamp(struct radclock *clock, vcounter_t *till_vcount)
 {
-	int data_quality = 0;
-	if ( !handle || !RAD_DATA(handle) || !till_vcount)
-		return 1;
+	struct radclock_shm *shm;
+	int generation;
 
-	data_quality = radclock_check_outdated(handle, NULL, IPC_REQ_RAD_DATA);
-	*till_vcount = RAD_DATA(handle)->valid_till; 
-	return data_quality;
+	if (!clock || !till_vcount)
+		return (1);
+
+	if (!clock->ipc_shm)
+		return (1);
+
+	shm = (struct radclock_shm *) clock->ipc_shm;
+	do {
+		generation = shm->gen;
+		*till_vcount = SHM_DATA(shm)->valid_till;
+	} while (generation != shm->gen || !shm->gen);
+
+	return (0); 
 }
 
 
-int radclock_get_period(struct radclock *handle, double *period)
+int
+radclock_get_period(struct radclock *clock, double *period)
 {
-	int data_quality = 0;
-	if ( !handle || !RAD_DATA(handle) || !period)
-		return 1;
+	struct radclock_shm *shm;
+	int generation;
 
-	data_quality = radclock_check_outdated(handle, NULL, IPC_REQ_RAD_DATA);
-	*period = RAD_DATA(handle)->phat;
-	return data_quality;
+	if (!clock || !period)
+		return (1);
+
+	if (!clock->ipc_shm)
+		return (1);
+
+	shm = (struct radclock_shm *) clock->ipc_shm;
+	do {
+		generation = shm->gen;
+		*period = SHM_DATA(shm)->phat;
+	} while (generation != shm->gen || !shm->gen);
+
+	return (0); 
 }
 
 
-int radclock_get_offset(struct radclock *handle, long double *offset)
+int
+radclock_get_offset(struct radclock *clock, long double *offset)
 {
-	int data_quality = 0;
-	if ( !handle || !RAD_DATA(handle) || !offset)
-		return 1;
+	struct radclock_shm *shm;
+	int generation;
 
-	data_quality = radclock_check_outdated(handle, NULL, IPC_REQ_RAD_DATA);
-	*offset = RAD_DATA(handle)->ca;
-	return data_quality;
+	if (!clock || !offset)
+		return (1);
+
+	if (!clock->ipc_shm)
+		return (1);
+
+	shm = (struct radclock_shm *) clock->ipc_shm;
+	do {
+		generation = shm->gen;
+		*offset = SHM_DATA(shm)->ca;
+	} while (generation != shm->gen || !shm->gen);
+
+	return (0); 
 }
 
 
-int radclock_get_period_error(struct radclock *handle, double *err_period)
+int
+radclock_get_period_error(struct radclock *clock, double *err_period)
 {
-	int data_quality = 0;
-	if ( !handle || !RAD_DATA(handle) || !err_period)
-		return 1;
+	struct radclock_shm *shm;
+	int generation;
 
-	data_quality = radclock_check_outdated(handle, NULL, IPC_REQ_RAD_DATA);
-	*err_period = RAD_DATA(handle)->phat_err;
-	return data_quality;
+	if (!clock || !err_period)
+		return (1);
+
+	if (!clock->ipc_shm)
+		return (1);
+
+	shm = (struct radclock_shm *) clock->ipc_shm;
+	do {
+		generation = shm->gen;
+		*err_period = SHM_DATA(shm)->phat_err;
+	} while (generation != shm->gen || !shm->gen);
+
+	return (0); 
 }
 
 
-int radclock_get_offset_error(struct radclock *handle, double *err_offset)
+int
+radclock_get_offset_error(struct radclock *clock, double *err_offset)
 {
-	int data_quality = 0;
-	if ( !handle || !RAD_DATA(handle) || !err_offset)
-		return 1;
+	struct radclock_shm *shm;
+	int generation;
 
-	data_quality = radclock_check_outdated(handle, NULL, IPC_REQ_RAD_DATA);
-	*err_offset = RAD_DATA(handle)->ca_err;
-	return data_quality;
+	if (!clock || !err_offset)
+		return (1);
+
+	if (!clock->ipc_shm)
+		return (1);
+
+	shm = (struct radclock_shm *) clock->ipc_shm;
+	do {
+		generation = shm->gen;
+		*err_offset = SHM_DATA(shm)->ca_err;
+	} while (generation != shm->gen || !shm->gen);
+
+	return (0); 
 }
 
 
-int radclock_get_status(struct radclock *handle, unsigned int *status)
+int
+radclock_get_status(struct radclock *clock, unsigned int *status)
 {
-	int data_quality = 0;
-	if ( !handle || !RAD_DATA(handle) || !status)
-		return 1;
+	struct radclock_shm *shm;
+	int generation;
 
-	data_quality = radclock_check_outdated(handle, NULL, IPC_REQ_RAD_DATA);
-	*status = RAD_DATA(handle)->status;
-	return data_quality;
+	if (!clock || !status)
+		return (1);
+
+	if (!clock->ipc_shm)
+		return (1);
+
+	shm = (struct radclock_shm *) clock->ipc_shm;
+	do {
+		generation = shm->gen;
+		*status = SHM_DATA(shm)->status;
+	} while (generation != shm->gen || !shm->gen);
+
+	return (0); 
 }
 
 
-int radclock_get_clockerror_bound(struct radclock *handle, double *error_bound)
+int
+radclock_get_clockerror_bound(struct radclock *clock, double *error_bound)
 {
-	int data_quality = 0;
-	if ( !handle || !RAD_DATA(handle) || !error_bound)
-		return 1;
+	struct radclock_shm *shm;
+	int generation;
 
-	data_quality = radclock_check_outdated(handle, NULL, IPC_REQ_RAD_ERROR);
-	*error_bound = RAD_ERROR(handle)->error_bound; 
-	return data_quality;
+	if (!clock || !error_bound)
+		return (1);
+
+	if (!clock->ipc_shm)
+		return (1);
+
+	shm = (struct radclock_shm *) clock->ipc_shm;
+	do {
+		generation = shm->gen;
+		*error_bound = SHM_ERROR(shm)->error_bound; 
+	} while (generation != shm->gen || !shm->gen);
+
+	return (0); 
 }
 
 
-int radclock_get_clockerror_bound_avg(struct radclock *handle, double *error_bound_avg)
+int
+radclock_get_clockerror_bound_avg(struct radclock *clock, double *error_bound_avg)
 {
-	int data_quality = 0;
-	if ( !handle || !RAD_DATA(handle) || !error_bound_avg)
-		return 1;
+	struct radclock_shm *shm;
+	int generation;
 
-	data_quality = radclock_check_outdated(handle, NULL, IPC_REQ_RAD_ERROR);
-	*error_bound_avg = RAD_ERROR(handle)->error_bound_avg; 
-	return data_quality;
+	if (!clock || !error_bound_avg)
+		return (1);
+
+	if (!clock->ipc_shm)
+		return (1);
+
+	shm = (struct radclock_shm *) clock->ipc_shm;
+	do {
+		generation = shm->gen;
+		*error_bound_avg = SHM_ERROR(shm)->error_bound_avg; 
+	} while (generation != shm->gen || !shm->gen);
+
+	return (0); 
 }
 
 
-int radclock_get_clockerror_bound_std(struct radclock *handle, double *error_bound_std)
+int
+radclock_get_clockerror_bound_std(struct radclock *clock, double *error_bound_std)
 {
-	int data_quality = 0;
-	if ( !handle || !RAD_DATA(handle) || !error_bound_std)
-		return 1;
+	struct radclock_shm *shm;
+	int generation;
 
-	data_quality = radclock_check_outdated(handle, NULL, IPC_REQ_RAD_ERROR);
-	*error_bound_std = RAD_ERROR(handle)->error_bound_std;
-	return data_quality;
+	if (!clock || !error_bound_std)
+		return (1);
+
+	if (!clock->ipc_shm)
+		return (1);
+
+	shm = (struct radclock_shm *) clock->ipc_shm;
+	do {
+		generation = shm->gen;
+		*error_bound_std = SHM_ERROR(shm)->error_bound_std;
+	} while (generation != shm->gen || !shm->gen);
+
+	return (0); 
 }
 
-int radclock_get_min_RTT(struct radclock *handle, double *min_RTT)
+int
+radclock_get_min_RTT(struct radclock *clock, double *min_RTT)
 {
-	int data_quality = 0;
-	if ( !handle || !RAD_DATA(handle) || !min_RTT)
-		return 1;
+	struct radclock_shm *shm;
+	int generation;
 
-	data_quality = radclock_check_outdated(handle, NULL, IPC_REQ_RAD_ERROR);
-	*min_RTT = RAD_ERROR(handle)->min_RTT;
-	return data_quality;
+	if (!clock || !min_RTT)
+		return (1);
+
+	if (!clock->ipc_shm)
+		return (1);
+
+	shm = (struct radclock_shm *) clock->ipc_shm;
+	do {
+		generation = shm->gen;
+		*min_RTT = SHM_ERROR(shm)->min_RTT;
+	} while (generation != shm->gen || !shm->gen);
+
+	return (0); 
 }
-
-
 

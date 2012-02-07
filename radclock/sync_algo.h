@@ -191,6 +191,21 @@ struct bidir_output
 };
 
 
+/* TODO this may not be too generic, but need it for cleanliness before
+ * reworking the bidir_peer structure
+ */
+struct peer_error
+{
+	double Ebound_min_last;
+	long nerror;
+	double cumsum;
+	double sq_cumsum;
+	long nerror_hwin;
+	double cumsum_hwin;
+	double sq_cumsum_hwin;
+};
+
+
 // TODO
 // Should have a generic peer structure with data common to all and union for
 // specific params
@@ -271,7 +286,7 @@ struct bidir_peer
 	double plocal;					// local period estimate
 	double plocalerr;				// estimate of total error of plocal [unitless]
 	int plocal_sanity_count;		// plocal sanity count
-	int using_plocal;				// state variable for plocal refinement of algo:  1 = ON, 0 = OFF 
+	int using_plocal;				// state variable for plocal refinement of algo:  1 = ON, 0 = OFF
 	int plocal_restartscheduled; 	// if plocal reinit required
 
 	/* Offset estimation */
@@ -283,12 +298,16 @@ struct bidir_peer
 	int offset_quality_count;		// Offset quality events counter
 	int offset_sanity_count;		// Offset sanity events counter
 
+	/* Error metrics */
+	struct peer_error peer_err;
+
 	/* Statistics */
 	int stats_sd[3];			// Stats on server delay (good, avg, bad)
 };
 
+#define	PEER_ERROR(x)	(&(x->peer_err))
 
-/* 
+/*
  * Functions declarations
  */
 

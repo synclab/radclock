@@ -31,6 +31,7 @@
 #include "radclock-private.h"
 #include "ffclock.h"
 #include "fixedpoint.h"
+#include "misc.h"
 #include "verbose.h"
 #include "proto_ntp.h"
 #include "stampinput.h"
@@ -74,6 +75,45 @@ int update_system_clock(struct radclock *clock_handle) { return 0; }
 #endif
 
 
+/*
+ * Update IPC shared memory segment.
+ * Swap pointers and bump generation number to ensure consistency.
+ */
+static int
+update_ipc_shared_memory(struct radclock *clock)
+{
+	JDEBUG
+
+	struct radclock_shm *shm;
+	size_t offset_tmp;	
+	unsigned int generation;
+
+	shm = (struct radclock_shm *) clock->ipc_shm;
+
+	memcpy((void *)shm + shm->data_off_old, &clock->rad_data,
+			sizeof(struct radclock_data));
+	memcpy((void *)shm + shm->error_off_old, &clock->rad_data,
+			sizeof(struct radclock_error));
+	generation = shm->gen;
+
+	shm->gen = 0;
+
+	/* Swap current and old buffer offsets in the mapped SHM */
+	offset_tmp = shm->data_off;
+	shm->data_off = shm->data_off_old;
+	shm->data_off_old = offset_tmp;
+
+	offset_tmp = shm->error_off;
+	shm->error_off = shm->error_off_old;
+	shm->error_off_old = offset_tmp;
+
+	if (generation++ == 0)
+		generation = 1;
+	shm->gen = generation;
+
+	return (0);
+}
+
 
 
 /* Report back to back timestamps of RADclock and system clock */
@@ -83,6 +123,7 @@ read_clocks(struct radclock *clock_handle, struct timeval *sys_tv,
 {
 	vcounter_t before;
 	vcounter_t after;
+	long double time;
 	int i;
 
 	/*
@@ -104,7 +145,8 @@ read_clocks(struct radclock *clock_handle, struct timeval *sys_tv,
 		(after - before) * RAD_DATA(clock_handle)->phat * 1e6 );
 
 	*counter = (vcounter_t) ((before + after)/2);
-	radclock_vcount_to_abstime(clock_handle, counter, rad_tv);
+	counter_to_time(clock_handle, counter, &time);
+	timeld_to_timeval(&time, rad_tv);
 }
 
 
@@ -137,8 +179,10 @@ subtract_tv(struct timeval *delta, struct timeval tv1, struct timeval tv2)
  *	The code in here is in packets chronological order, could have made it
  *	prettier with a little state machine.
  */
-int update_system_clock(struct radclock *clock)
+int
+update_system_clock(struct radclock *clock)
 {
+	long double time;
 	vcounter_t vcount;
 	struct timeval rad_tv;
 	struct timeval sys_tv;
@@ -146,11 +190,11 @@ int update_system_clock(struct radclock *clock)
 	struct timex tx;
 	double offset; 		/* [sec] */
 	double freq; 		/* [PPM] */
-	int err;
 	static vcounter_t sys_init;
 	static struct timeval sys_init_tv;
 	static int next_stamp;
 	int poll_period;
+	int err;
 
 	memset(&tx, 0, sizeof(struct timex));
 
@@ -169,7 +213,9 @@ int update_system_clock(struct radclock *clock)
 	 */
 	if ( ((struct bidir_output*)clock->algo_output)->n_stamps == NTP_BURST )
 	{
-		radclock_gettimeofday(clock, &rad_tv);
+		radclock_get_vcounter(clock, &vcount);
+		counter_to_time(clock, &vcount, &time);
+		timeld_to_timeval(&time, &rad_tv);
 		err = settimeofday(&rad_tv, NULL);
 		if ( err < 0 )
 			verbose(LOG_WARNING, "System clock update failed on settimeofday()");
@@ -429,7 +475,8 @@ int insane_bidir_stamp(struct stamp_t *stamp, struct stamp_t *laststamp)
 /**
  * XXX TODO: so far we suppose bidir paradigm only and a single source at a time!!
  */
-int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
+int
+process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 {
 	JDEBUG
 
@@ -490,17 +537,23 @@ int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 	/* Update calibration using new stamp */ 
 	process_bidir_stamp(clock_handle, peer, BST(&stamp), stamp.qual_warning);
 
+	/*
+	 * Update IPC shared memory segment for all processes to get accurate
+	 * clock parameters
+	 */
+  	if ((clock_handle->run_mode == RADCLOCK_SYNC_LIVE) &&
+			(clock_handle->conf->server_ipc == BOOL_ON)) {
+		if (!HAS_STATUS(clock_handle, STARAD_UNSYNC))
+			update_ipc_shared_memory(clock_handle);
+	}
 
-// TODO: may have to kill the fixedpoint thread altogether with newer versions
-// of the kernel, need to make it conditional on version ...
 	/* To improve data accuracy, we kick a fixed point data update just after we
 	 * have preocessed a new stamp. Locking is handled by the kernel so we should
 	 * not have concurrency issue with the two threads updating the data
-	 */ 	
-	if ( (clock_handle->run_mode == RADCLOCK_SYNC_LIVE) 
-			&& (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER) )
-	{
-		if ( clock_handle->kernel_version < 2 )
+	 */
+  	if ((clock_handle->run_mode == RADCLOCK_SYNC_LIVE) &&
+			(clock_handle->conf->adjust_sysclock == BOOL_ON)) {
+			if ( clock_handle->kernel_version < 2 )
 		{	
 			update_kernel_fixed(clock_handle);
 			verbose(VERB_DEBUG, "Sync pthread updated fixed point data to kernel.");
@@ -510,7 +563,6 @@ int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 			 * may be better than ours after the very first stamp. Let's make sure we do
 			 * not push something too stupid
 			 */
-//			if ( OUTPUT(clock_handle, n_stamps) < NTP_BURST )
 			if (HAS_STATUS(clock_handle, STARAD_UNSYNC))
 				return 0;
 
@@ -543,7 +595,8 @@ int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 	}
 
 	/* Update any virtual machine store if configured */
-	if ( (clock_handle->run_mode == RADCLOCK_SYNC_LIVE) && (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER) ) 
+  	if ((clock_handle->run_mode == RADCLOCK_SYNC_LIVE) &&
+			(clock_handle->conf->adjust_sysclock == BOOL_ON))
 	{
 		RAD_VM(clock_handle)->push_data(clock_handle);
 	}
@@ -572,17 +625,17 @@ int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 	if (VERB_LEVEL &&   ( (OUTPUT(clock_handle, n_stamps) < 10)
 					|| !(OUTPUT(clock_handle, n_stamps) % ((int)(3600*6/poll_period))) )) 
 	{
-		radclock_vcount_to_abstime_fp(clock_handle, &(RAD_DATA(clock_handle)->last_changed), &currtime);
-		radclock_get_min_RTT(clock_handle, &min_RTT);
+		counter_to_time(clock_handle, &(RAD_DATA(clock_handle)->last_changed), &currtime);
+		min_RTT = RAD_ERROR(clock_handle)->min_RTT;
 		timediff = (double) (currtime - (long double) BST(&stamp)->Te);
 
 		verbose(VERB_CONTROL, "i=%ld: NTPserver stamp %.6Lf, RAD - NTPserver = %.3f [ms], RTT/2 = %.3f [ms]",
 				((struct bidir_output*)clock_handle->algo_output)->n_stamps - 1,
 				BST(&stamp)->Te, timediff * 1000, min_RTT / 2 * 1000);
 
-		radclock_get_clockerror_bound(clock_handle, &error_bound);
-		radclock_get_clockerror_bound_avg(clock_handle, &error_bound_avg);
-		radclock_get_clockerror_bound_std(clock_handle, &error_bound_std);
+		error_bound = RAD_ERROR(clock_handle)->error_bound;
+		error_bound_avg = RAD_ERROR(clock_handle)->error_bound_avg;
+		error_bound_std = RAD_ERROR(clock_handle)->error_bound_std;
 		verbose(VERB_CONTROL, "i=%ld: Clock Error Bound (cur,avg,std) %.6f %.6f %.6f [ms]",
 				((struct bidir_output*)clock_handle->algo_output)->n_stamps - 1,
 				error_bound * 1000, error_bound_avg * 1000, error_bound_std * 1000);

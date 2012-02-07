@@ -35,6 +35,7 @@
 #include "../config.h"
 #include "radclock.h"
 #include "radclock-private.h"
+#include "misc.h"
 #include "verbose.h"
 #include "sync_algo.h"
 #include "config_mgr.h"
@@ -131,12 +132,14 @@ int assess_ptimer(timer_t timer, float period)
 
 
 
-int create_ntp_request(struct radclock *clock_handle, struct ntp_pkt *pkt, struct timeval *xmt)
+int
+create_ntp_request(struct radclock *clock_handle, struct ntp_pkt *pkt, struct timeval *xmt)
 {
 	JDEBUG
 	struct timeval reftime;
-	int i;
-	vcounter_t last_vcount;
+	long double time;
+	vcounter_t vcount;
+	int err;
 
 	pkt->li_vn_mode		= PKT_LI_VN_MODE(LEAP_NOTINSYNC, NTP_VERSION, MODE_CLIENT);
 	pkt->stratum		= STRATUM_UNSPEC;
@@ -147,9 +150,14 @@ int create_ntp_request(struct radclock *clock_handle, struct ntp_pkt *pkt, struc
 	pkt->rootdispersion	= htonl(FP_SECOND);
 	pkt->refid			= SERVER_DATA(clock_handle)->refid;
 
-	/* Reference time */
-	radclock_get_last_stamp(clock_handle, &last_vcount);
-	radclock_vcount_to_abstime(clock_handle, &last_vcount, &reftime);
+	/* Reference time
+	 * The NTP timestamp format (a bit tricky): 
+	 * - NTP timestamps start on 1 Jan 1900
+	 * - the frac part uses higher end bits as negative power of two (expressed in sec)
+	 */
+	vcount = RAD_DATA(clock_handle)->last_changed;
+	counter_to_time(clock_handle, &vcount, &time);
+	timeld_to_timeval(&time, &reftime);
 	pkt->reftime.l_int = htonl(reftime.tv_sec + JAN_1970);
 	pkt->reftime.l_fra = htonl(reftime.tv_usec * 4294967296.0 / 1e6);
 
@@ -159,24 +167,17 @@ int create_ntp_request(struct radclock *clock_handle, struct ntp_pkt *pkt, struc
 	pkt->rec.l_int		= 0;
 	pkt->rec.l_fra		= 0;
 
-	/* Trying to get the time 5 times */
-	for (i=0 ; i<5 ; i++ )
-	{	
-		if (radclock_gettimeofday(clock_handle, xmt) == 0) {
-			break;
-		}
-		usleep(5); 	
-		verbose(VERB_DEFAULT, "Failed to get time - run %d", i);
-	}
+	/* Transmit time */ 
+	err = radclock_get_vcounter(clock_handle, &vcount);
+	if (err < 0)
+		return (1);
 
-	/* The NTP timestamp format (a bit tricky): 
-	 * - NTP timestamps start on 1 Jan 1900
-	 * - the frac part uses higher end bits as negative power of two (expressed in sec)
-	 */
+	counter_to_time(clock_handle, &vcount, &time);
+	timeld_to_timeval(&time, xmt);
 	pkt->xmt.l_int = htonl(xmt->tv_sec + JAN_1970);
 	pkt->xmt.l_fra = htonl(xmt->tv_usec * 4294967296.0 / 1e6);
 
-	return 0;
+	return (0);
 }
 
 
@@ -274,7 +275,9 @@ int ntp_client(struct radclock * clock_handle)
 	while ( attempt > 0)
 	{
 		/* Create and send an NTP packet */
-		create_ntp_request(clock_handle, &spkt, &xmt);
+		ret = create_ntp_request(clock_handle, &spkt, &xmt);
+		if (ret)
+			continue;
 
 		ret = sendto(CLIENT_DATA(clock_handle)->socket, 
 				(char *)&spkt, LEN_PKT_NOMAC /* No auth */, 0, 
@@ -364,7 +367,7 @@ int trigger_work(struct radclock *clock_handle)
 	if ( err < 0 )
 		return err;
 
-	if ((vcount - RAD_DATA(clock_handle)->last_changed)*GLOBAL_DATA(clock_handle)->phat > OUT_SKM / 2) 
+	if ((vcount - RAD_DATA(clock_handle)->last_changed)*RAD_DATA(clock_handle)->phat > OUT_SKM / 2) 
 	{
 		/* Data is quite old */
 		if ( ! HAS_STATUS(clock_handle, STARAD_STARVING ))

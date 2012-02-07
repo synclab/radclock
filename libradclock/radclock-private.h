@@ -39,7 +39,6 @@
 
 // TODO : should provide methods for modify this? 
 typedef enum { RADCLOCK_SYNC_NOTSET, RADCLOCK_SYNC_DEAD, RADCLOCK_SYNC_LIVE } radclock_runmode_t;
-typedef enum { RADCLOCK_IPC_CLIENT, RADCLOCK_IPC_SERVER, RADCLOCK_IPC_NONE} radclock_IPC_mode_t;
 typedef enum { RADCLOCK_UNIDIR, RADCLOCK_BIDIR} radclock_syncalgo_mode_t;
 
 
@@ -56,12 +55,13 @@ struct radclock_impl_linux {
 };
 
 
-/* Protocol related stuff on the client side */
+/* (NTP) Protocol related stuff on the client side */
 struct radclock_client_data {
 	int socket;
 	struct sockaddr_in s_to;
 	struct sockaddr_in s_from;
 };
+
 
 /**
  * NTP protocol specifics for being a server
@@ -94,10 +94,8 @@ struct radclock_data {
 	vcounter_t valid_till;
 };
 
-
-
-/* TODO: split it in 2, clock errors and peer clock tracking, recompose with
- * others for per peer algo
+/* 
+ * Visible error metrics 
  */ 
 struct radclock_error
 {
@@ -105,15 +103,27 @@ struct radclock_error
 	double error_bound_avg;
 	double error_bound_std;
 	double min_RTT;
-	// ---------------- //
-	double Ebound_min_last;
-	long nerror;
-	double cumsum;
-	double sq_cumsum;
-	long nerror_hwin;
-	double cumsum_hwin;
-	double sq_cumsum_hwin;
 };
+
+/*
+ * Structure representing radclock data and exposed to system processes via IPC
+ * shared memory.
+ */
+struct radclock_shm {
+	int version;
+	int status;
+	int clockid;
+	unsigned int gen;
+	size_t data_off;
+	size_t data_off_old;
+	size_t error_off;
+	size_t error_off_old;
+	struct radclock_data bufdata[2];
+	struct radclock_error buferr[2];
+};
+
+#define SHM_DATA(x)		((struct radclock_data *)((void *)x + x->data_off))
+#define SHM_ERROR(x)	((struct radclock_error *)((void *)x + x->error_off))
 
 
 /*
@@ -153,14 +163,9 @@ struct radclock
 	unsigned int unix_signal;
 
 	/* Common data for the daemon */
-	// TODO some cleanup in this
 	int is_daemon;
-	int ipc_socket;
-	char *ipc_socket_path;
-	radclock_autoupdate_t 	autoupdate_mode;
 	radclock_local_period_t	local_period_mode;
 	radclock_runmode_t 		run_mode;
-	radclock_IPC_mode_t 	ipc_mode;
 
 	/* Protocol related stuff on the client side (NTP, 1588, ...) */
 	struct radclock_client_data *client_data;
@@ -168,8 +173,9 @@ struct radclock
 	/* Protol related stuff (NTP, 1588, ...) */
 	struct radclock_ntpserver_data *server_data;
 	
-	/* IPC request bound */
-	int ipc_requests;
+	/* IPC shared memory */
+	int ipc_shm_id;
+	void *ipc_shm;
 
 	/* Description of current counter */
 	char hw_counter[32];
@@ -222,7 +228,6 @@ struct radclock
 #define CLIENT_DATA(x) (x->client_data)
 #define SERVER_DATA(x) (x->server_data)
 #define RAD_DATA(x) (&(x->rad_data))
-#define GLOBAL_DATA(x) (&(x->rad_data))  // TODO: deprecate me ...
 #define RAD_ERROR(x) (&(x->rad_error))
 #define RAD_VM(x) (&(x->rad_vm))
 
@@ -238,34 +243,11 @@ struct radclock
 #define HAS_STATUS(x,y) ((RAD_DATA(x)->status & y ) == y ) 
 
 
-/* IPC using datagram UNIX sockets
- * Types and messages for communication with the thread serving global data 
- * We can imagine several messages in the future ...
+/*
+ * IPC using shared memory 
  */
-// TODO: somewhere else if not running as a daemon with root access?
-
-/* Socket for IPC used by the gb_pthread */
 #define RADCLOCK_RUN_DIRECTORY		"/var/run/radclock"
-#define IPC_SOCKET_SERVER			( RADCLOCK_RUN_DIRECTORY "/radclock.socket" )
-#define IPC_SOCKET_CLIENT			"/tmp/radclock-client"
-
-#define IPC_MAGIC_NUMBER		31051978
-#define IPC_REQ_RAD_DATA		1
-#define IPC_REQ_RAD_ERROR		2
-
-struct ipc_request {
-	unsigned int magic_number;
-	unsigned int request_type;
-};
-
-struct ipc_reply {
-	unsigned int reply_type;
-	union {
-		struct radclock_data rad_data;
-		struct radclock_error rad_error;
-	};
-};
-
+#define IPC_SHARED_MEMORY			( RADCLOCK_RUN_DIRECTORY "/radclock.shm" )
 
 
 /**
@@ -283,17 +265,8 @@ int found_ffwd_kernel_version(void);
 int get_kernel_ffclock(struct radclock *handle);
 
 
-/**
- * Check if the parameters in the userland clock handle are outdated and update
- * them if it is the case.
- * The outdated criterion relies on the comparison of the vcount stamps stored in
- * the global data structure.
- * @param  handle The private handle for accessing global data
- * @param  vc A pointer to the current timestamp, or NULL 
- * @param  req_type Type of IPC request 
- * @return 0 on success, non-zero on failure
- */ 
-int radclock_check_outdated(struct radclock *handle, vcounter_t *vc, int req_type);
+/* TODO add comments */
+int raddata_quality(vcounter_t now, vcounter_t last, vcounter_t valid, double phat);
 
 
 /**

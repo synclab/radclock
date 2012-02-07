@@ -22,20 +22,11 @@
 
 
 // TODO we probably don't need all these includes anymore
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <getopt.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/time.h>
-#include <sys/socket.h>
-#include <signal.h>
-#include <sched.h>
-
-#include <syslog.h>
-#include <fcntl.h>
+#include <sys/shm.h>
 #include <sys/stat.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#include <sys/socket.h>
 
 #include <net/if.h>
 #include <netinet/in_systm.h>
@@ -45,9 +36,19 @@
 #include <net/ethernet.h>
 #include <arpa/inet.h>
 
-#include <string.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <getopt.h>
 #include <math.h> 
+#include <sched.h>
+#include <signal.h>
+#include <stddef.h>		// offsetof
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <syslog.h>
 #include <time.h> 
+#include <unistd.h>
 
 #include "../config.h"
 #include "radclock.h"
@@ -88,6 +89,7 @@ struct rusage jdbg_rusage;
 
 
 
+static int init_raddata_shm_writer(struct radclock *clock);
 
 
 
@@ -136,8 +138,8 @@ static void usage(void) {
  * Reparse the configuration file when receiving SIGHUP 
  * Reason for most of the global variables
  */
-static int rehash_daemon(struct radclock *clock_handle, 
-				         u_int32_t param_mask) 
+static int
+rehash_daemon(struct radclock *clock_handle, uint32_t param_mask) 
 {
 	/* The update of the following parameters either requires no action, 
 	 * or it has to be handled by the algo only: 
@@ -187,20 +189,17 @@ static int rehash_daemon(struct radclock *clock_handle,
 		CLEAR_UPDATE(param_mask, UPDMASK_SYNC_IN_ASCII);
 	}
 
+
+// TODO The old naming convention for server IPC could be changed for clarity.
+// Would require an update of config file parsing. 
 	if ( HAS_UPDATE(param_mask, UPDMASK_SERVER_IPC) ) {
 		switch ( conf->server_ipc ) {
 			case BOOL_ON:
-				/* We start serving global data */
-				clock_handle->ipc_mode = RADCLOCK_IPC_SERVER;
-				start_thread_IPC_SERV(clock_handle);
+				init_raddata_shm_writer(clock_handle);
 				break;
 			case BOOL_OFF:
-				/* We stop serving global data */
-				clock_handle->ipc_mode = RADCLOCK_IPC_NONE;
-				clock_handle->pthread_flag_stop |= PTH_IPC_SERV_STOP; 
-	//TODO should we join the thread in here ... requires testing
-		//	pthread_join(clock_handle->threads[PTH_IPC_SERV], &thread_status);
-				close(clock_handle->ipc_socket);
+				/* Detach for SHM segment, but do not destroy it */
+				shmdt(clock_handle->ipc_shm);
 				break;
 		}
 	}
@@ -214,7 +213,7 @@ static int rehash_daemon(struct radclock *clock_handle,
 			case BOOL_OFF:
 				/* We stop the NTP server */
 				clock_handle->pthread_flag_stop |= PTH_NTP_SERV_STOP; 
-	//TODO should we join the thread in here ... requires testing
+	// TODO should we join the thread in here ... requires testing
 	//			pthread_join(clock_handle->threads[PTH_NTP_SERV], &thread_status);
 				break;
 		}
@@ -344,8 +343,11 @@ static void signal_handler(int sig)
 
 
 
-/** Function that fork the process and creates the running daemon */
-static int daemonize(const char* lockfile, int *daemon_pid_fd) 
+/*
+ * Function that fork the process and creates the running daemon
+ */
+static int
+daemonize(const char* lockfile, int *daemon_pid_fd) 
 {
 	/* Scheduler */
 	struct sched_param sched;
@@ -425,7 +427,103 @@ static int daemonize(const char* lockfile, int *daemon_pid_fd)
 
 	JDEBUG_MEMORY(JDBG_FREE, str);
 	free(str);
-	return 1;
+
+	return (1);
+}
+
+
+/*
+ * Create and or initialise IPC shared memory to pass radclock data to system
+ * processes.
+ * TODO: May want to move all these init functions in a separate file.
+ */
+static int
+init_raddata_shm_writer(struct radclock *clock)
+{
+	struct shmid_ds shm_ctl;
+	struct radclock_shm *shm;
+	struct stat sb;
+	key_t shm_key;
+	unsigned int perm_flags;
+	int shm_fd, is_new_shm;
+
+	is_new_shm = 0;
+
+	if (stat(RADCLOCK_RUN_DIRECTORY, &sb) < 0) {
+		if (mkdir(RADCLOCK_RUN_DIRECTORY, 0755) < 0) { 
+			verbose(LOG_ERR, "Cannot create %s directory", RADCLOCK_RUN_DIRECTORY);
+			return (1);
+		}
+	}
+
+	/*
+	 * Create shm key (file created if it does not already exist)
+	 */
+	shm_fd = open(IPC_SHARED_MEMORY, O_RDWR|O_CREAT, 0644);
+	close(shm_fd);
+
+	shm_key = ftok(IPC_SHARED_MEMORY, 'a');
+	if (shm_key == -1) {
+		verbose(LOG_ERR, "ftok: %s", strerror(errno));
+		return (1);
+	}
+
+	/*
+	 * Create shared memory segment. IPC_EXCL will make this call fail if the
+	 * memory segment already exists.
+	 * May not be a bad thing, since a former instance of radclock that has
+	 * created it. However, cannot be sure the creator is the last one that has
+	 * updated it, and if that guy is still alive. Hard to do here, use pid
+	 * lockfile instead.
+	 */ 
+	perm_flags = SHM_R | SHM_W | (SHM_R>>3) | (SHM_R>>6);
+	clock->ipc_shm_id = shmget(shm_key, sizeof(struct radclock_shm),
+			IPC_CREAT | IPC_EXCL | perm_flags);
+	if (clock->ipc_shm_id < 0) {
+		switch(errno) {
+		case (EEXIST):
+			clock->ipc_shm_id = shmget(shm_key, sizeof(struct radclock_shm), 0);
+			shmctl(clock->ipc_shm_id, IPC_STAT, &shm_ctl);
+			shm_ctl.shm_perm.mode |= perm_flags;
+			shmctl(clock->ipc_shm_id, IPC_SET, &shm_ctl);
+			verbose(LOG_NOTICE, "IPC Shared Memory exists with %u processes "
+					"attached", shm_ctl.shm_nattch);
+			break;
+
+		default:
+			verbose(LOG_ERR, "shmget failed: %s\n", strerror(errno));
+			return (1);
+		}
+	}
+	else
+		is_new_shm = 1;
+
+	/*
+	 * Attach the process to the memory segment. Round it to kernel page size.
+	 */
+	clock->ipc_shm = shmat(clock->ipc_shm_id, (void *)0, 0);
+	if (clock->ipc_shm == (char *) -1) {
+		verbose(LOG_ERR, "shmat failed: %s\n", strerror(errno));
+		return (1);
+	}
+	shm = (struct radclock_shm *) clock->ipc_shm;
+
+	/* Zero the segment and init the buffer pointers if new. */ 
+	if (is_new_shm) {
+		memset(shm, 0, sizeof(struct radclock_shm));
+		shm->data_off = offsetof(struct radclock_shm, bufdata);
+		shm->data_off_old = shm->data_off + sizeof(struct radclock_data);
+		shm->error_off = offsetof(struct radclock_shm, buferr);
+		shm->error_off_old = shm->error_off + sizeof(struct radclock_error);
+		shm->gen = 1;
+	}
+
+	// TODO: need to init version number, clockid, valid / invalid status.
+	shm->version = 1;
+
+	verbose(LOG_NOTICE, "IPC Shared Memory ready");
+
+	return (0);
 }
 
 
@@ -434,7 +532,8 @@ static int daemonize(const char* lockfile, int *daemon_pid_fd)
 /*
  * radclock process specific init of the clock_handle
  */
-static int radclock_init_specific (struct radclock *clock_handle)
+static int
+radclock_init_specific (struct radclock *clock_handle)
 {
 	/* Input source */
 	struct stampsource *stamp_source;
@@ -460,25 +559,19 @@ static int radclock_init_specific (struct radclock *clock_handle)
 	/* Initial status words */
 	// TODO there should be more of them set in here, some are for live and dead
 	// runs, but not all!
-	if (clock_handle->run_mode == RADCLOCK_SYNC_LIVE)
-	{
+	if (clock_handle->run_mode == RADCLOCK_SYNC_LIVE) {
 		ADD_STATUS(clock_handle, STARAD_STARVING);
 	}
 	
-	/* Create directory to store pid lock file and ipc socket */
-	if (  (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER) 
-				|| (clock_handle->is_daemon) ) 
-		{
-		struct stat sb;
-		if (stat(RADCLOCK_RUN_DIRECTORY, &sb) < 0) {
-			if (mkdir(RADCLOCK_RUN_DIRECTORY, 0755) < 0) { 
-				verbose(LOG_ERR, "Cannot create %s directory. Run as root or (!daemon && !server)",
-					   	RADCLOCK_RUN_DIRECTORY);
-				return 1;
-			}
-		}
+	/*
+	 * Initialise IPC shared memory segment
+	 */
+	if (clock_handle->conf->server_ipc == BOOL_ON) {
+		err = init_raddata_shm_writer(clock_handle);
+		if (err)
+			return (1);
 	}
-
+	
 	/* Open input file from which to read TS data */   
 	stamp_source = create_source(clock_handle);
 	if (!stamp_source)
@@ -510,7 +603,7 @@ int main(int argc, char *argv[])
 	int ch;
 	
 	/* Mask variable used to know which parameter to update */
-	u_int32_t param_mask	= 0;
+	uint32_t param_mask = 0;
 
 	/* PID lock file for daemon */
 	int daemon_pid_fd 		= 0;
@@ -819,40 +912,20 @@ int main(int argc, char *argv[])
 	 * shared global data on the system or open a BPF. This define input to the
 	 * init of the radclock handle
 	 */
-	if (!is_live_source(clock_handle)) 
-	{
+	if (!is_live_source(clock_handle))
 		clock_handle->run_mode = RADCLOCK_SYNC_DEAD;
-		clock_handle->autoupdate_mode = RADCLOCK_UPDATE_NEVER;
-	}
-	else {
-
-		/* Passed kernel support and version check */
+	else
 		clock_handle->run_mode = RADCLOCK_SYNC_LIVE;
 
-		/* Manually signal we are the radclock algo and that we have to serve global data to the
-		 * kernel and other processes throught the IPC socket.
-		 */
-		if (clock_handle->conf->server_ipc)
-			clock_handle->ipc_mode = RADCLOCK_IPC_SERVER;
-		else
-			clock_handle->ipc_mode = RADCLOCK_IPC_NONE;
-
-		// XXX Does the following matters for the radclock?
-		clock_handle->autoupdate_mode = RADCLOCK_UPDATE_ALWAYS;
-	}
-
 	/* Init clock handle and private data */
-	if (clock_handle->run_mode == RADCLOCK_SYNC_LIVE)
-	{ 
-		if (radclock_init(clock_handle))
-		{
+	if (clock_handle->run_mode == RADCLOCK_SYNC_LIVE) { 
+		if (radclock_init(clock_handle)) {
 			verbose(LOG_ERR, "Could not initialise the RADclock");
 			return 1;
 		}
 
 		/* Make sure we are doing the right thing */
-		if (clock_handle->kernel_version < 0)
-		{
+		if (clock_handle->kernel_version < 0) {
 			verbose(LOG_ERR, "The RADclock does not run live without "
 						"Feed-Forward kernel support");
 			return 1;
@@ -860,8 +933,7 @@ int main(int argc, char *argv[])
 	}
 	
 	/* Init radclock specific stuff */
-	if (radclock_init_specific(clock_handle))
-	{
+	if (radclock_init_specific(clock_handle)) {
 		verbose(LOG_ERR, "Radclock process specific init failed.");
 		return 1;
 	}
@@ -936,15 +1008,6 @@ int main(int argc, char *argv[])
 					return 1;
 			}
 			
-			/* Are we serving some data to other processes and update the
-			 * clock globaldata in the kernel?
-			 */
-			if (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER) 
-			{
-				err = start_thread_IPC_SERV(clock_handle);
-				if (err < 0) 	return 1;
-			}
-			
 			/* Are we running an NTP server for network clients ? */
 			switch (clock_handle->conf->server_ntp) {
 				case BOOL_ON:
@@ -966,7 +1029,6 @@ int main(int argc, char *argv[])
 			 * should be removed in the future
 			 */
 			if ( (clock_handle->run_mode == RADCLOCK_SYNC_LIVE) 
-					&& (clock_handle->ipc_mode == RADCLOCK_IPC_SERVER)
 			  		&& (clock_handle->kernel_version < 2) )
 			{
 				err = start_thread_FIXEDPOINT(clock_handle);
@@ -1006,10 +1068,7 @@ int main(int argc, char *argv[])
 				pthread_join(clock_handle->threads[PTH_NTP_SERV], &thread_status);
 				verbose(LOG_NOTICE, "NTP server thread is dead.");
 			}
-			if (clock_handle->conf->server_ipc == BOOL_ON) {
-				pthread_join(clock_handle->threads[PTH_IPC_SERV], &thread_status);
-				verbose(LOG_NOTICE, "IPC thread is dead.");
-			}
+
 			pthread_join(clock_handle->threads[PTH_TRIGGER], &thread_status);
 			verbose(LOG_NOTICE, "Trigger thread is dead.");
 
@@ -1040,6 +1099,7 @@ int main(int argc, char *argv[])
 		}
 		/* End of thread while loop */
 	} /* End of run live case */
+
 
 	// TODO: look into making the stats a separate structure. Could be much
 	// TODO: easier to manage 
@@ -1072,8 +1132,32 @@ int main(int argc, char *argv[])
 	
         // TODO:  all the destructors have to be re-written
 	destroy_source(clock_handle, (struct stampsource *)(clock_handle->stamp_source));
-	radclock_destroy(clock_handle);
-	
+
+
+	/* Clear thread stuff */
+	pthread_mutex_destroy(&(clock_handle->globaldata_mutex));
+	pthread_mutex_destroy(&(clock_handle->wakeup_mutex));
+	pthread_cond_destroy(&(clock_handle->wakeup_cond));
+	pthread_mutex_destroy(&(clock_handle->rdb_mutex));
+
+	/* Detach IPC shared memory if were running as IPC server. */
+	if (clock_handle->conf->server_ipc == BOOL_ON) {
+		shmdt(clock_handle->ipc_shm);
+		/* 
+		 * Do not issue an IPC_RMID. Looked like a good idea, but it is not.
+		 * Processes still running will be attached to old shared memory segment
+		 * and won't catch updates from the new instance of the daemon (the new
+		 * segment would have a new id).
+		 * Best is to have the shared memory created once, reused and never
+		 * deleted.
+		 */
+		/* shmctl(clock_handle->ipc_shm_id, IPC_RMID, NULL); */
+	}
+
+	/* Free the clock structure. All done. */
+	free(clock_handle);
+	clock_handle = NULL;
+
 	exit(EXIT_SUCCESS);
 }
 

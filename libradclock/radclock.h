@@ -62,7 +62,6 @@ typedef uint64_t vcounter_t;
 #endif
 
 
-typedef enum { RADCLOCK_UPDATE_ALWAYS, RADCLOCK_UPDATE_NEVER, RADCLOCK_UPDATE_AUTO } radclock_autoupdate_t;
 
 typedef enum { RADCLOCK_LOCAL_PERIOD_ON, RADCLOCK_LOCAL_PERIOD_OFF } radclock_local_period_t;
 
@@ -104,28 +103,6 @@ void radclock_destroy(struct radclock *handle);
  * @return 0 on success, -1 on failure
  */
 int radclock_init(struct radclock *handle);
-
-
-/**
- * Set a specific mode of clock parameter update at the user level. 
- * Accessing the kernel clock parameter is a costly operation that may not be
- * useful. The default behavior is RADCLOCK_UPDATE_AUTO. While not recommended,
- * specific application may want to read the clock parameter from the kernel
- * each time (RADCLOCK_UPDATE_ALWAYS), or never (RADCLOCK_UPDATE_NEVER) 
- * @param handle The private handle for accessing global data 
- * @param update_mode A reference to the mode of update chosen
- * @return 0 on success, non-zero on failure
- */
-int radclock_set_autoupdate(struct radclock *handle, radclock_autoupdate_t *update_mode);
-
-
-/**
- * Retrieve the mode of clock parameter update.
- * @param handle The private handle for accessing global data 
- * @param update_mode A reference to the mode of update chosen
- * @return 0 on success, non-zero on failure
- */ 
-int radclock_get_autoupdate(struct radclock *handle, radclock_autoupdate_t *update_mode);
 
 
 /**

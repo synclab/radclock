@@ -32,6 +32,7 @@
 #include "sync_algo.h"
 #include "proto_ntp.h"
 #include "fixedpoint.h"
+#include "misc.h"
 #include "verbose.h"
 #include "jdebug.h"
 
@@ -163,8 +164,7 @@ int update_kernel_fixed(struct radclock *handle)
 		return -1;
 	}
 
-	if (radclock_vcount_to_abstime_fp(handle, &vcount, &time))
-		verbose(LOG_ERR, "Error calculating time");
+	counter_to_time(handle, &vcount, &time);
 	
 	calculate_fixedpoint_data(
 		vcount,
