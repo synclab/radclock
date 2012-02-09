@@ -46,59 +46,58 @@
 #include "logger.h"
 
 
-/**
- * A global data that will always fail!
+/*
+ * No-op functions for systems without kernel support.
+ * Useful for data replay. 
  */
 
-
-
-int found_ffwd_kernel_version(void) 
+int
+found_ffwd_kernel_version(void) 
 {
 	logger(RADLOG_WARNING, "Feed-Forward Kernel support not compiled.");
 	return -1;
 }
 
-int radclock_init_vcounter_syscall(struct radclock *handle)
+int
+radclock_init_vcounter_syscall(struct radclock *handle)
 {
 	handle->syscall_get_vcounter = 0;
 	handle->syscall_set_ffclock = 0;
 	return 0;
 }
 
-int radclock_init_vcounter(struct radclock *handle)
+int
+radclock_init_vcounter(struct radclock *handle)
 {
 	handle->get_vcounter = NULL;
 	return 0;
 }
 
-
-inline int get_kernel_ffclock(struct radclock *clock_handle)
+inline int
+get_kernel_ffclock(struct radclock *clock_handle)
 {
 	return -ENOENT;
 }
 
 
-int descriptor_set_tsmode(struct radclock *handle, pcap_t *p_handle, int kmode)
+int
+descriptor_set_tsmode(struct radclock *handle, pcap_t *p_handle, int kmode)
 {
 	return -ENOENT;
 }
 
-
-int descriptor_get_tsmode(struct radclock *handle, pcap_t *p_handle, int *kmode)
+int
+descriptor_get_tsmode(struct radclock *handle, pcap_t *p_handle, int *kmode)
 {
 	return -ENOENT;
 }
 
-
-int extract_vcount_stamp(
-			pcap_t *p_handle, 
-			const struct pcap_pkthdr *header, 
-			const unsigned char *packet,
-			vcounter_t *vcount)
+int
+extract_vcount_stamp(struct radclock *clock, pcap_t *p_handle,
+		const struct pcap_pkthdr *header, const unsigned char *packet,
+		vcounter_t *vcount)
 {
 	return -ENOENT;
 }
-
 
 #endif
-

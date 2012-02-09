@@ -44,7 +44,8 @@
 
 
 #ifdef WITH_RADKERNEL_NONE
-int update_system_clock(struct radclock *clock_handle) { return 0; }
+int update_system_clock(struct radclock *clock_handle) { return (0); }
+static int update_ipc_shared_memory(struct radclock *clock) { return (0); };
 #else
 
 #ifdef WITH_RADKERNEL_FBSD
