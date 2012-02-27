@@ -23,6 +23,7 @@
 
 
 #include <sys/shm.h>
+#include <sys/time.h>
 
 #include <errno.h>		// manage failed shmget calls 
 #include <fcntl.h>		// open()
@@ -88,10 +89,18 @@ int
 main(int argc, char *argv[])
 {
 	struct radclock *clock;
+	struct timeval tv;
+	int err;
 
 	clock = radclock_create();
 	radclock_init(clock);
+
 	read_shm(clock);
+
+	err = radclock_gettimeofday(clock, &tv);
+	fprintf(stdout, "UNIX time: %d.%d with error code: %d\n",
+			tv.tv_sec, tv.tv_usec, err);
+
 	radclock_destroy(clock);
 
 	return (0);
