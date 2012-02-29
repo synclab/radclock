@@ -1,0 +1,82 @@
+------------------------------------------------------------------------
+r228115 | lstewart | 2011-11-29 17:12:19 +1100 (Tue, 29 Nov 2011) | 12 lines
+
+Fix an oversight in r227747 by calling fbclock_bin{up}time() directly from the
+fbclock_{nanouptime|microuptime|bintime|nanotime|microtime}() functions to avoid
+indirecting through a sysclock_ops wrapper function.
+
+Committed on behalf of Julien Ridoux and Darryl Veitch from the University of
+Melbourne, Australia, as part of the FreeBSD Foundation funded "Feed-Forward
+Clock Synchronization Algorithms" project.
+
+For more information, see http://www.synclab.org/radclock/
+
+Submitted by:	Julien Ridoux (jridoux at unimelb edu au)
+
+------------------------------------------------------------------------
+Index: sys/kern/kern_tc.c
+===================================================================
+--- a/sys/kern/kern_tc.c	(revision 228114)
++++ b/sys/kern/kern_tc.c	(revision 228115)
+@@ -190,56 +190,56 @@ fbclock_binuptime(struct bintime *bt)
+ 		*bt = th->th_offset;
+ 		bintime_addx(bt, th->th_scale * tc_delta(th));
+ 	} while (gen == 0 || gen != th->th_generation);
+ }
+ 
+ static void
+ fbclock_nanouptime(struct timespec *tsp)
+ {
+ 	struct bintime bt;
+ 
+-	binuptime(&bt);
++	fbclock_binuptime(&bt);
+ 	bintime2timespec(&bt, tsp);
+ }
+ 
+ static void
+ fbclock_microuptime(struct timeval *tvp)
+ {
+ 	struct bintime bt;
+ 
+-	binuptime(&bt);
++	fbclock_binuptime(&bt);
+ 	bintime2timeval(&bt, tvp);
+ }
+ 
+ static void
+ fbclock_bintime(struct bintime *bt)
+ {
+ 
+-	binuptime(bt);
++	fbclock_binuptime(bt);
+ 	bintime_add(bt, &boottimebin);
+ }
+ 
+ static void
+ fbclock_nanotime(struct timespec *tsp)
+ {
+ 	struct bintime bt;
+ 
+-	bintime(&bt);
++	fbclock_bintime(&bt);
+ 	bintime2timespec(&bt, tsp);
+ }
+ 
+ static void
+ fbclock_microtime(struct timeval *tvp)
+ {
+ 	struct bintime bt;
+ 
+-	bintime(&bt);
++	fbclock_bintime(&bt);
+ 	bintime2timeval(&bt, tvp);
+ }
+ 
+ static void
+ fbclock_getbinuptime(struct bintime *bt)
+ {
+ 	struct timehands *th;
+ 	unsigned int gen;
+ 
+ 	do {

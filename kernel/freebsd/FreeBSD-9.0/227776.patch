@@ -1,0 +1,1233 @@
+------------------------------------------------------------------------
+r227776 | lstewart | 2011-11-21 12:26:10 +1100 (Mon, 21 Nov 2011) | 19 lines
+
+- Add the ffclock_getcounter(), ffclock_getestimate() and ffclock_setestimate()
+  system calls to provide feed-forward clock management capabilities to
+  userspace processes. ffclock_getcounter() returns the current value of the
+  kernel's feed-forward clock counter. ffclock_getestimate() returns the current
+  feed-forward clock parameter estimates and ffclock_setestimate() updates the
+  feed-forward clock parameter estimates.
+
+- Document the syscalls in the ffclock.2 man page.
+
+- Regenerate the script-derived syscall related files.
+
+Committed on behalf of Julien Ridoux and Darryl Veitch from the University of
+Melbourne, Australia, as part of the FreeBSD Foundation funded "Feed-Forward
+Clock Synchronization Algorithms" project.
+
+For more information, see http://www.synclab.org/radclock/
+
+Submitted by:	Julien Ridoux (jridoux at unimelb edu au)
+
+------------------------------------------------------------------------
+---
+ lib/libc/sys/Makefile.inc                      |    4 
+ lib/libc/sys/Symbol.map                        |    3 
+ lib/libc/sys/ffclock.2                         |  177 +++++++++++++++++++++++++
+ sys/amd64/linux32/linux32_proto.h              |    1 
+ sys/compat/freebsd32/freebsd32_proto.h         |    1 
+ sys/compat/freebsd32/freebsd32_syscall.h       |    3 
+ sys/compat/freebsd32/freebsd32_syscalls.c      |    6 
+ sys/compat/freebsd32/freebsd32_sysent.c        |    6 
+ sys/compat/freebsd32/freebsd32_systrace_args.c |   51 +++++++
+ sys/compat/freebsd32/syscalls.master           |    8 -
+ sys/conf/files                                 |    2 
+ sys/i386/linux/linux_proto.h                   |    1 
+ sys/kern/init_sysent.c                         |    6 
+ sys/kern/kern_ffclock.c                        |  130 ++++++++++++++++++
+ sys/kern/makesyscalls.sh                       |    1 
+ sys/kern/syscalls.c                            |    6 
+ sys/kern/syscalls.master                       |    8 -
+ sys/kern/systrace_args.c                       |   51 +++++++
+ sys/sys/syscall.h                              |    3 
+ sys/sys/syscall.mk                             |    3 
+ sys/sys/sysproto.h                             |   16 ++
+ sys/sys/timeffc.h                              |    9 +
+ 22 files changed, 476 insertions(+), 20 deletions(-)
+
+Index: 9.0/lib/libc/sys/Makefile.inc
+===================================================================
+--- 9.0.orig/lib/libc/sys/Makefile.inc	2012-02-27 15:51:33.000000000 +1100
++++ 9.0/lib/libc/sys/Makefile.inc	2012-02-27 21:33:58.000000000 +1100
+@@ -73,21 +73,21 @@ ${SPSEUDO}:
+ 	printf '#include "SYS.h"\nPSEUDO(${.PREFIX:S/_//})\n' \
+ 	    >> ${.TARGET}
+ 	printf ${NOTE_GNU_STACK} >>${.TARGET}
+ 
+ MAN+=	abort2.2 accept.2 access.2 acct.2 adjtime.2 \
+ 	aio_cancel.2 aio_error.2 aio_read.2 aio_return.2 \
+ 	aio_suspend.2 aio_waitcomplete.2 aio_write.2 \
+ 	bind.2 brk.2 cap_enter.2 cap_new.2 chdir.2 chflags.2 \
+ 	chmod.2 chown.2 chroot.2 clock_gettime.2 close.2 closefrom.2 \
+ 	connect.2 cpuset.2 cpuset_getaffinity.2 dup.2 execve.2 _exit.2 \
+-	extattr_get_file.2 fcntl.2 fhopen.2 flock.2 fork.2 fsync.2 \
++	extattr_get_file.2 fcntl.2 ffclock.2 fhopen.2 flock.2 fork.2 fsync.2 \
+ 	getdirentries.2 getdtablesize.2 \
+ 	getfh.2 getfsstat.2 getgid.2 getgroups.2 getitimer.2 getlogin.2 \
+ 	getloginclass.2 getpeername.2 getpgrp.2 getpid.2 getpriority.2 \
+ 	getrlimit.2 getrusage.2 getsid.2 getsockname.2 \
+ 	getsockopt.2 gettimeofday.2 getuid.2 \
+ 	intro.2 ioctl.2 issetugid.2 jail.2 kenv.2 kill.2 \
+ 	kldfind.2 kldfirstmod.2 kldload.2 kldnext.2 kldstat.2 kldsym.2 \
+ 	kldunload.2 kqueue.2 ktrace.2 link.2 lio_listio.2 listen.2 \
+ 	lseek.2 \
+ 	madvise.2 mincore.2 minherit.2 mkdir.2 mkfifo.2 mknod.2 mlock.2 \
+@@ -134,20 +134,22 @@ MLINKS+=extattr_get_file.2 extattr.2 \
+ 	extattr_get_file.2 extattr_delete_file.2 \
+ 	extattr_get_file.2 extattr_delete_list.2 \
+ 	extattr_get_file.2 extattr_get_fd.2 \
+ 	extattr_get_file.2 extattr_get_list.2 \
+ 	extattr_get_file.2 extattr_list_fd.2 \
+ 	extattr_get_file.2 extattr_list_file.2 \
+ 	extattr_get_file.2 extattr_list_link.2 \
+ 	extattr_get_file.2 extattr_set_fd.2 \
+ 	extattr_get_file.2 extattr_set_file.2 \
+ 	extattr_get_file.2 extattr_set_link.2
++MLINKS+=ffclock.2 ffclock_getcounter.2 ffclock.2 ffclock_getestimate.2 \
++	ffclock.2 ffclock_setestimate.2
+ MLINKS+=fhopen.2 fhstat.2 fhopen.2 fhstatfs.2
+ MLINKS+=getdirentries.2 getdents.2
+ MLINKS+=getfh.2 lgetfh.2
+ MLINKS+=getgid.2 getegid.2
+ MLINKS+=getitimer.2 setitimer.2
+ MLINKS+=getlogin.2 getlogin_r.3
+ MLINKS+=getlogin.2 setlogin.2
+ MLINKS+=getloginclass.2 setloginclass.2
+ MLINKS+=getpgrp.2 getpgid.2
+ MLINKS+=getpid.2 getppid.2
+Index: 9.0/lib/libc/sys/Symbol.map
+===================================================================
+--- 9.0.orig/lib/libc/sys/Symbol.map	2012-02-27 15:51:33.000000000 +1100
++++ 9.0/lib/libc/sys/Symbol.map	2012-02-27 21:33:58.000000000 +1100
+@@ -358,20 +358,23 @@ FBSD_1.1 {
+ 	shmctl;
+ 	symlinkat;
+ 	unlinkat;
+ };
+ 
+ FBSD_1.2 {
+ 	cap_enter;
+ 	cap_getmode;
+ 	cap_new;
+ 	cap_getrights;
++	ffclock_getcounter;
++	ffclock_getestimate;
++	ffclock_setestimate;
+ 	getloginclass;
+ 	pdfork;
+ 	pdgetpid;
+ 	pdkill;
+ 	posix_fallocate;
+ 	rctl_get_racct;
+ 	rctl_get_rules;
+ 	rctl_get_limits;
+ 	rctl_add_rule;
+ 	rctl_remove_rule;
+Index: 9.0/lib/libc/sys/ffclock.2
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ 9.0/lib/libc/sys/ffclock.2	2012-02-27 21:33:58.000000000 +1100
+@@ -0,0 +1,177 @@
++.\" Copyright (C) 2011 The University of Melbourne
++.\" All rights reserved.
++.\"
++.\" This documentation was written by Julien Ridoux at the University of
++.\" Melbourne under sponsorship from the FreeBSD Foundation.
++.\"
++.\" Redistribution and use in source and binary forms, with or without
++.\" modification, are permitted provided that the following conditions
++.\" are met:
++.\" 1. Redistributions of source code must retain the above copyright
++.\"    notice, this list of conditions and the following disclaimer.
++.\" 2. Redistributions in binary form must reproduce the above copyright
++.\"    notice, this list of conditions and the following disclaimer in the
++.\"    documentation and/or other materials provided with the distribution.
++.\"
++.\" THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
++.\" ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
++.\" IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
++.\" ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
++.\" FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
++.\" DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
++.\" OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
++.\" HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
++.\" LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
++.\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
++.\" SUCH DAMAGE.
++.\"
++.\" $FreeBSD$
++.\"
++.Dd November 21, 2011
++.Dt FFCLOCK 2
++.Os
++.Sh NAME
++.Nm ffclock_getcounter ,
++.Nm ffclock_getestimate ,
++.Nm ffclock_setestimate
++.Nd Retrieve feed-forward counter, get and set feed-forward clock estimates.
++.Sh LIBRARY
++.Lb libc
++.Sh SYNOPSIS
++.In sys/timeffc.h
++.Ft int
++.Fn ffclock_getcounter "ffcounter *ffcount"
++.Ft int
++.Fn ffclock_getestimate "struct ffclock_estimate *cest"
++.Ft int
++.Fn ffclock_setestimate "struct ffclock_estimate *cest"
++.Sh DESCRIPTION
++The ffclock is an alternative method to synchronise the system clock.
++The ffclock implements a feed-forward paradigm and decouples the timestamping
++and timekeeping kernel functions.
++This ensures that past clock errors do not affect current timekeeping, an
++approach radically different from the feedback alternative implemented by the
++ntpd daemon when adjusting the system clock.
++The feed-forward approach has demonstrated better performance and higher
++robustness than a feedback approach when synchronising over the network.
++.Pp
++In the feed-forward context, a
++.Em timestamp
++is a cumulative value of the ticks of the timecounter, which can be converted
++into seconds by using the feed-forward
++.Em clock estimates.
++.Pp
++The
++.Fn ffclock_getcounter
++system call allows the calling process to retrieve the current value of the
++feed-forward counter maintained by the kernel.
++.Pp
++The
++.Fn ffclock_getestimate
++and
++.Fn ffclock_setestimate
++system calls allow the caller to get and set the kernel's feed-forward clock
++parameter estimates respectively.
++The
++.Fn ffclock_setestimate
++system call should be invoked by a single instance of a feed-forward
++synchronisation daemon.
++The
++.Fn ffclock_getestimate
++system call can be called by any process to retrieve the feed-forward clock
++estimates.
++.Pp
++The feed-forward approach does not require that the clock estimates be retrieved
++every time a timestamp is to be converted into seconds.
++The number of system calls can therefore be greatly reduced if the calling
++process retrieves the clock estimates from the clock synchronisation daemon
++instead.
++The
++.Fn ffclock_getestimate
++must be used when the feed-forward synchronisation daemon is not running
++.Po see
++.Sx USAGE
++below
++.Pc .
++.Pp
++The clock parameter estimates structure pointed to by
++.Fa cest
++is defined in
++.In sys/timeffc.h
++as:
++.Bd -literal
++struct ffclock_estimate {
++	struct bintime update_time;    /* Time of last estimates update. */
++	ffcounter      update_ffcount; /* Counter value at last update. */
++	ffcounter      leapsec_next;   /* Counter value of next leap second. */
++	uint64_t       period;         /* Estimate of counter period. */
++	uint32_t       errb_abs;       /* Bound on absolute clock error [ns]. */
++	uint32_t       errb_rate;      /* Bound on counter rate error [ps/s]. */
++	uint32_t       status;         /* Clock status. */
++	int16_t        leapsec_total;  /* All leap seconds seen so far. */
++	int8_t         leapsec;        /* Next leap second (in {-1,0,1}). */
++};
++.Ed
++.Pp
++Only the super-user may set the feed-forward clock estimates.
++.Sh RETURN VALUES
++.Rv -std
++.Sh ERRORS
++The following error codes may be set in
++.Va errno :
++.Bl -tag -width Er
++.It Bq Er EFAULT
++The
++.Fa ffcount
++or
++.Fa cest
++pointer referenced invalid memory.
++.It Bq Er EPERM
++A user other than the super-user attempted to set the feed-forward clock
++parameter estimates.
++.El
++.Sh USAGE
++The feed-forward paradigm enables the definition of specialised clock functions.
++.Pp
++In its simplest form,
++.Fn ffclock_getcounter
++can be used to establish strict order between events or to measure small time
++intervals very accurately with a minimum performance cost.
++.Pp
++Different methods exist to access absolute time
++.Po or
++.Qq wall-clock time
++.Pc tracked by the ffclock.
++The simplest method uses the ffclock sysctl interface
++.Va kern.ffclock
++to make the system clock return the ffclock time.
++The
++.Xr clock_gettime 2
++system call can then be used to retrieve the current time seen by the
++feed-forward clock.
++Note that this setting affects the entire system and that a feed-forward
++synchronisation daemon should be running.
++.Pp
++A less automated method consists of retrieving the feed-forward counter
++timestamp from the kernel and using the feed-forward clock parameter estimates
++to convert the timestamp into seconds.
++The feed-forward clock parameter estimates can be retrieved from the kernel or
++from the synchronisation daemon directly (preferred).
++This method allows converting timestamps using different clock models as needed
++by the application, while collecting meaningful upper bounds on current clock
++error.
++.Sh SEE ALSO
++.Xr date 1 ,
++.Xr adjtime 2 ,
++.Xr clock_gettime 2 ,
++.Xr ctime 3
++.Sh HISTORY
++Feed-forward clock support first appeared in
++.Fx 10.0 .
++.Sh AUTHORS
++.An -nosplit
++The feed-forward clock support was written by
++.An Julien Ridoux Aq julien@synclab.org
++in collaboration with
++.An Darryl Veitch Aq dveitch@unimelb.edu.au
++at the University of Melbourne under sponsorship from the FreeBSD Foundation.
+Index: 9.0/sys/amd64/linux32/linux32_proto.h
+===================================================================
+--- 9.0.orig/sys/amd64/linux32/linux32_proto.h	2012-02-27 15:52:27.000000000 +1100
++++ 9.0/sys/amd64/linux32/linux32_proto.h	2012-02-27 21:33:59.000000000 +1100
+@@ -5,20 +5,21 @@
+  * $FreeBSD: releng/9.0/sys/amd64/linux32/linux32_proto.h 220030 2011-03-26 10:59:24Z avg $
+  * created from FreeBSD: head/sys/amd64/linux32/syscalls.master 220028 2011-03-26 10:51:56Z avg 
+  */
+ 
+ #ifndef _LINUX_SYSPROTO_H_
+ #define	_LINUX_SYSPROTO_H_
+ 
+ #include <sys/signal.h>
+ #include <sys/acl.h>
+ #include <sys/cpuset.h>
++#include <sys/_ffcounter.h>
+ #include <sys/_semaphore.h>
+ #include <sys/ucontext.h>
+ 
+ #include <bsm/audit_kevents.h>
+ 
+ struct proc;
+ 
+ struct thread;
+ 
+ #define	PAD_(t)	(sizeof(register_t) <= sizeof(t) ? \
+Index: 9.0/sys/compat/freebsd32/freebsd32_proto.h
+===================================================================
+--- 9.0.orig/sys/compat/freebsd32/freebsd32_proto.h	2012-02-27 15:52:13.000000000 +1100
++++ 9.0/sys/compat/freebsd32/freebsd32_proto.h	2012-02-27 21:33:59.000000000 +1100
+@@ -5,20 +5,21 @@
+  * $FreeBSD: releng/9.0/sys/compat/freebsd32/freebsd32_proto.h 225618 2011-09-16 14:04:14Z kmacy $
+  * created from FreeBSD: head/sys/compat/freebsd32/syscalls.master 224066 2011-07-15 18:26:19Z jonathan 
+  */
+ 
+ #ifndef _FREEBSD32_SYSPROTO_H_
+ #define	_FREEBSD32_SYSPROTO_H_
+ 
+ #include <sys/signal.h>
+ #include <sys/acl.h>
+ #include <sys/cpuset.h>
++#include <sys/_ffcounter.h>
+ #include <sys/_semaphore.h>
+ #include <sys/ucontext.h>
+ 
+ #include <bsm/audit_kevents.h>
+ 
+ struct proc;
+ 
+ struct thread;
+ 
+ #define	PAD_(t)	(sizeof(register_t) <= sizeof(t) ? \
+Index: 9.0/sys/compat/freebsd32/freebsd32_syscall.h
+===================================================================
+--- 9.0.orig/sys/compat/freebsd32/freebsd32_syscall.h	2012-02-27 15:52:13.000000000 +1100
++++ 9.0/sys/compat/freebsd32/freebsd32_syscall.h	2012-02-27 21:33:58.000000000 +1100
+@@ -200,20 +200,23 @@
+ #define	FREEBSD32_SYS_freebsd32_msgsnd	226
+ #define	FREEBSD32_SYS_freebsd32_msgrcv	227
+ #define	FREEBSD32_SYS_shmat	228
+ #define	FREEBSD32_SYS_freebsd7_freebsd32_shmctl	229
+ #define	FREEBSD32_SYS_shmdt	230
+ #define	FREEBSD32_SYS_shmget	231
+ #define	FREEBSD32_SYS_freebsd32_clock_gettime	232
+ #define	FREEBSD32_SYS_freebsd32_clock_settime	233
+ #define	FREEBSD32_SYS_freebsd32_clock_getres	234
+ #define	FREEBSD32_SYS_freebsd32_nanosleep	240
++#define	FREEBSD32_SYS_ffclock_getcounter	241
++#define	FREEBSD32_SYS_ffclock_setestimate	242
++#define	FREEBSD32_SYS_ffclock_getestimate	243
+ #define	FREEBSD32_SYS_minherit	250
+ #define	FREEBSD32_SYS_rfork	251
+ #define	FREEBSD32_SYS_openbsd_poll	252
+ #define	FREEBSD32_SYS_issetugid	253
+ #define	FREEBSD32_SYS_lchown	254
+ #define	FREEBSD32_SYS_freebsd32_aio_read	255
+ #define	FREEBSD32_SYS_freebsd32_aio_write	256
+ #define	FREEBSD32_SYS_freebsd32_lio_listio	257
+ #define	FREEBSD32_SYS_getdents	272
+ #define	FREEBSD32_SYS_lchmod	274
+Index: 9.0/sys/compat/freebsd32/freebsd32_syscalls.c
+===================================================================
+--- 9.0.orig/sys/compat/freebsd32/freebsd32_syscalls.c	2012-02-27 15:52:13.000000000 +1100
++++ 9.0/sys/compat/freebsd32/freebsd32_syscalls.c	2012-02-27 21:33:59.000000000 +1100
+@@ -244,23 +244,23 @@ const char *freebsd32_syscallnames[] = {
+ 	"shmget",			/* 231 = shmget */
+ 	"freebsd32_clock_gettime",			/* 232 = freebsd32_clock_gettime */
+ 	"freebsd32_clock_settime",			/* 233 = freebsd32_clock_settime */
+ 	"freebsd32_clock_getres",			/* 234 = freebsd32_clock_getres */
+ 	"#235",			/* 235 = timer_create */
+ 	"#236",			/* 236 = timer_delete */
+ 	"#237",			/* 237 = timer_settime */
+ 	"#238",			/* 238 = timer_gettime */
+ 	"#239",			/* 239 = timer_getoverrun */
+ 	"freebsd32_nanosleep",			/* 240 = freebsd32_nanosleep */
+-	"#241",			/* 241 = nosys */
+-	"#242",			/* 242 = nosys */
+-	"#243",			/* 243 = nosys */
++	"ffclock_getcounter",			/* 241 = ffclock_getcounter */
++	"ffclock_setestimate",			/* 242 = ffclock_setestimate */
++	"ffclock_getestimate",			/* 243 = ffclock_getestimate */
+ 	"#244",			/* 244 = nosys */
+ 	"#245",			/* 245 = nosys */
+ 	"#246",			/* 246 = nosys */
+ 	"#247",			/* 247 = nosys */
+ 	"#248",			/* 248 = ntp_gettime */
+ 	"#249",			/* 249 = nosys */
+ 	"minherit",			/* 250 = minherit */
+ 	"rfork",			/* 251 = rfork */
+ 	"openbsd_poll",			/* 252 = openbsd_poll */
+ 	"issetugid",			/* 253 = issetugid */
+Index: 9.0/sys/compat/freebsd32/freebsd32_sysent.c
+===================================================================
+--- 9.0.orig/sys/compat/freebsd32/freebsd32_sysent.c	2012-02-27 15:52:13.000000000 +1100
++++ 9.0/sys/compat/freebsd32/freebsd32_sysent.c	2012-02-27 21:33:58.000000000 +1100
+@@ -281,23 +281,23 @@ struct sysent freebsd32_sysent[] = {
+ 	{ AS(shmget_args), (sy_call_t *)lkmressys, AUE_NULL, NULL, 0, 0, 0, SY_THR_ABSENT },	/* 231 = shmget */
+ 	{ AS(freebsd32_clock_gettime_args), (sy_call_t *)freebsd32_clock_gettime, AUE_NULL, NULL, 0, 0, 0, SY_THR_STATIC },	/* 232 = freebsd32_clock_gettime */
+ 	{ AS(freebsd32_clock_settime_args), (sy_call_t *)freebsd32_clock_settime, AUE_CLOCK_SETTIME, NULL, 0, 0, 0, SY_THR_STATIC },	/* 233 = freebsd32_clock_settime */
+ 	{ AS(freebsd32_clock_getres_args), (sy_call_t *)freebsd32_clock_getres, AUE_NULL, NULL, 0, 0, 0, SY_THR_STATIC },	/* 234 = freebsd32_clock_getres */
+ 	{ 0, (sy_call_t *)nosys, AUE_NULL, NULL, 0, 0, 0, SY_THR_ABSENT },			/* 235 = timer_create */
+ 	{ 0, (sy_call_t *)nosys, AUE_NULL, NULL, 0, 0, 0, SY_THR_ABSENT },			/* 236 = timer_delete */
+ 	{ 0, (sy_call_t *)nosys, AUE_NULL, NULL, 0, 0, 0, SY_THR_ABSENT },			/* 237 = timer_settime */
+ 	{ 0, (sy_call_t *)nosys, AUE_NULL, NULL, 0, 0, 0, SY_THR_ABSENT },			/* 238 = timer_gettime */
+ 	{ 0, (sy_call_t *)nosys, AUE_NULL, NULL, 0, 0, 0, SY_THR_ABSENT },			/* 239 = timer_getoverrun */
+ 	{ AS(freebsd32_nanosleep_args), (sy_call_t *)freebsd32_nanosleep, AUE_NULL, NULL, 0, 0, 0, SY_THR_STATIC },	/* 240 = freebsd32_nanosleep */
+-	{ 0, (sy_call_t *)nosys, AUE_NULL, NULL, 0, 0, 0, SY_THR_ABSENT },			/* 241 = nosys */
+-	{ 0, (sy_call_t *)nosys, AUE_NULL, NULL, 0, 0, 0, SY_THR_ABSENT },			/* 242 = nosys */
+-	{ 0, (sy_call_t *)nosys, AUE_NULL, NULL, 0, 0, 0, SY_THR_ABSENT },			/* 243 = nosys */
++	{ AS(ffclock_getcounter_args), (sy_call_t *)sys_ffclock_getcounter, AUE_NULL, NULL, 0, 0, 0, SY_THR_STATIC },	/* 241 = ffclock_getcounter */
++	{ AS(ffclock_setestimate_args), (sy_call_t *)sys_ffclock_setestimate, AUE_NULL, NULL, 0, 0, 0, SY_THR_STATIC },	/* 242 = ffclock_setestimate */
++	{ AS(ffclock_getestimate_args), (sy_call_t *)sys_ffclock_getestimate, AUE_NULL, NULL, 0, 0, 0, SY_THR_STATIC },	/* 243 = ffclock_getestimate */
+ 	{ 0, (sy_call_t *)nosys, AUE_NULL, NULL, 0, 0, 0, SY_THR_ABSENT },			/* 244 = nosys */
+ 	{ 0, (sy_call_t *)nosys, AUE_NULL, NULL, 0, 0, 0, SY_THR_ABSENT },			/* 245 = nosys */
+ 	{ 0, (sy_call_t *)nosys, AUE_NULL, NULL, 0, 0, 0, SY_THR_ABSENT },			/* 246 = nosys */
+ 	{ 0, (sy_call_t *)nosys, AUE_NULL, NULL, 0, 0, 0, SY_THR_ABSENT },			/* 247 = nosys */
+ 	{ 0, (sy_call_t *)nosys, AUE_NULL, NULL, 0, 0, 0, SY_THR_ABSENT },			/* 248 = ntp_gettime */
+ 	{ 0, (sy_call_t *)nosys, AUE_NULL, NULL, 0, 0, 0, SY_THR_ABSENT },			/* 249 = nosys */
+ 	{ AS(minherit_args), (sy_call_t *)sys_minherit, AUE_MINHERIT, NULL, 0, 0, 0, SY_THR_STATIC },	/* 250 = minherit */
+ 	{ AS(rfork_args), (sy_call_t *)sys_rfork, AUE_RFORK, NULL, 0, 0, 0, SY_THR_STATIC },	/* 251 = rfork */
+ 	{ AS(openbsd_poll_args), (sy_call_t *)sys_openbsd_poll, AUE_POLL, NULL, 0, 0, 0, SY_THR_STATIC },	/* 252 = openbsd_poll */
+ 	{ 0, (sy_call_t *)sys_issetugid, AUE_ISSETUGID, NULL, 0, 0, 0, SY_THR_STATIC },	/* 253 = issetugid */
+Index: 9.0/sys/compat/freebsd32/freebsd32_systrace_args.c
+===================================================================
+--- 9.0.orig/sys/compat/freebsd32/freebsd32_systrace_args.c	2012-02-27 15:52:13.000000000 +1100
++++ 9.0/sys/compat/freebsd32/freebsd32_systrace_args.c	2012-02-27 21:33:59.000000000 +1100
+@@ -1196,20 +1196,41 @@ systrace_args(int sysnum, void *params, 
+ 		break;
+ 	}
+ 	/* freebsd32_nanosleep */
+ 	case 240: {
+ 		struct freebsd32_nanosleep_args *p = params;
+ 		uarg[0] = (intptr_t) p->rqtp; /* const struct timespec32 * */
+ 		uarg[1] = (intptr_t) p->rmtp; /* struct timespec32 * */
+ 		*n_args = 2;
+ 		break;
+ 	}
++	/* ffclock_getcounter */
++	case 241: {
++		struct ffclock_getcounter_args *p = params;
++		uarg[0] = (intptr_t) p->ffcount; /* ffcounter * */
++		*n_args = 1;
++		break;
++	}
++	/* ffclock_setestimate */
++	case 242: {
++		struct ffclock_setestimate_args *p = params;
++		uarg[0] = (intptr_t) p->cest; /* struct ffclock_estimate * */
++		*n_args = 1;
++		break;
++	}
++	/* ffclock_getestimate */
++	case 243: {
++		struct ffclock_getestimate_args *p = params;
++		uarg[0] = (intptr_t) p->cest; /* struct ffclock_estimate * */
++		*n_args = 1;
++		break;
++	}
+ 	/* minherit */
+ 	case 250: {
+ 		struct minherit_args *p = params;
+ 		uarg[0] = (intptr_t) p->addr; /* void * */
+ 		uarg[1] = p->len; /* size_t */
+ 		iarg[2] = p->inherit; /* int */
+ 		*n_args = 3;
+ 		break;
+ 	}
+ 	/* rfork */
+@@ -4921,20 +4942,50 @@ systrace_setargdesc(int sysnum, int ndx,
+ 		case 0:
+ 			p = "const struct timespec32 *";
+ 			break;
+ 		case 1:
+ 			p = "struct timespec32 *";
+ 			break;
+ 		default:
+ 			break;
+ 		};
+ 		break;
++	/* ffclock_getcounter */
++	case 241:
++		switch(ndx) {
++		case 0:
++			p = "ffcounter *";
++			break;
++		default:
++			break;
++		};
++		break;
++	/* ffclock_setestimate */
++	case 242:
++		switch(ndx) {
++		case 0:
++			p = "struct ffclock_estimate *";
++			break;
++		default:
++			break;
++		};
++		break;
++	/* ffclock_getestimate */
++	case 243:
++		switch(ndx) {
++		case 0:
++			p = "struct ffclock_estimate *";
++			break;
++		default:
++			break;
++		};
++		break;
+ 	/* minherit */
+ 	case 250:
+ 		switch(ndx) {
+ 		case 0:
+ 			p = "void *";
+ 			break;
+ 		case 1:
+ 			p = "size_t";
+ 			break;
+ 		case 2:
+Index: 9.0/sys/compat/freebsd32/syscalls.master
+===================================================================
+--- 9.0.orig/sys/compat/freebsd32/syscalls.master	2012-02-27 15:52:13.000000000 +1100
++++ 9.0/sys/compat/freebsd32/syscalls.master	2012-02-27 21:33:59.000000000 +1100
+@@ -440,23 +440,25 @@
+ 234	AUE_NULL	STD	{ int freebsd32_clock_getres(clockid_t clock_id, \
+ 				    struct timespec32 *tp); }
+ 235	AUE_NULL	UNIMPL	timer_create
+ 236	AUE_NULL	UNIMPL	timer_delete
+ 237	AUE_NULL	UNIMPL	timer_settime
+ 238	AUE_NULL	UNIMPL	timer_gettime
+ 239	AUE_NULL	UNIMPL	timer_getoverrun
+ 240	AUE_NULL	STD	{ int freebsd32_nanosleep( \
+ 				    const struct timespec32 *rqtp, \
+ 				    struct timespec32 *rmtp); }
+-241	AUE_NULL	UNIMPL	nosys
+-242	AUE_NULL	UNIMPL	nosys
+-243	AUE_NULL	UNIMPL	nosys
++241	AUE_NULL	NOPROTO	{ int ffclock_getcounter(ffcounter *ffcount); }
++242	AUE_NULL	NOPROTO	{ int ffclock_setestimate( \
++				    struct ffclock_estimate *cest); }
++243	AUE_NULL	NOPROTO	{ int ffclock_getestimate( \
++				    struct ffclock_estimate *cest); }
+ 244	AUE_NULL	UNIMPL	nosys
+ 245	AUE_NULL	UNIMPL	nosys
+ 246	AUE_NULL	UNIMPL	nosys
+ 247	AUE_NULL	UNIMPL	nosys
+ 248	AUE_NULL	UNIMPL	ntp_gettime
+ 249	AUE_NULL	UNIMPL	nosys
+ ; syscall numbers initially used in OpenBSD
+ 250	AUE_MINHERIT	NOPROTO	{ int minherit(void *addr, size_t len, \
+ 				    int inherit); }
+ 251	AUE_RFORK	NOPROTO	{ int rfork(int flags); }
+Index: 9.0/sys/conf/files
+===================================================================
+--- 9.0.orig/sys/conf/files	2012-02-27 21:33:10.000000000 +1100
++++ 9.0/sys/conf/files	2012-02-27 21:33:58.000000000 +1100
+@@ -2303,21 +2303,21 @@ kern/kern_cpu.c			standard
+ kern/kern_cpuset.c		standard
+ kern/kern_context.c		standard
+ kern/kern_descrip.c		standard
+ kern/kern_dtrace.c		optional kdtrace_hooks
+ kern/kern_environment.c		standard
+ kern/kern_et.c			standard
+ kern/kern_event.c		standard
+ kern/kern_exec.c		standard
+ kern/kern_exit.c		standard
+ kern/kern_fail.c		standard
+-kern/kern_ffclock.c		optional ffclock
++kern/kern_ffclock.c		standard
+ kern/kern_fork.c		standard
+ kern/kern_gzio.c		optional gzio
+ kern/kern_hhook.c		standard
+ kern/kern_idle.c		standard
+ kern/kern_intr.c		standard
+ kern/kern_jail.c		standard
+ kern/kern_khelp.c		standard
+ kern/kern_kthread.c		standard
+ kern/kern_ktr.c			optional ktr
+ kern/kern_ktrace.c		standard
+Index: 9.0/sys/i386/linux/linux_proto.h
+===================================================================
+--- 9.0.orig/sys/i386/linux/linux_proto.h	2012-02-27 15:52:17.000000000 +1100
++++ 9.0/sys/i386/linux/linux_proto.h	2012-02-27 21:33:59.000000000 +1100
+@@ -5,20 +5,21 @@
+  * $FreeBSD: releng/9.0/sys/i386/linux/linux_proto.h 220030 2011-03-26 10:59:24Z avg $
+  * created from FreeBSD: head/sys/i386/linux/syscalls.master 220028 2011-03-26 10:51:56Z avg 
+  */
+ 
+ #ifndef _LINUX_SYSPROTO_H_
+ #define	_LINUX_SYSPROTO_H_
+ 
+ #include <sys/signal.h>
+ #include <sys/acl.h>
+ #include <sys/cpuset.h>
++#include <sys/_ffcounter.h>
+ #include <sys/_semaphore.h>
+ #include <sys/ucontext.h>
+ 
+ #include <bsm/audit_kevents.h>
+ 
+ struct proc;
+ 
+ struct thread;
+ 
+ #define	PAD_(t)	(sizeof(register_t) <= sizeof(t) ? \
+Index: 9.0/sys/kern/init_sysent.c
+===================================================================
+--- 9.0.orig/sys/kern/init_sysent.c	2012-02-27 15:51:45.000000000 +1100
++++ 9.0/sys/kern/init_sysent.c	2012-02-27 21:33:58.000000000 +1100
+@@ -268,23 +268,23 @@ struct sysent sysent[] = {
+ 	{ AS(shmget_args), (sy_call_t *)lkmressys, AUE_NULL, NULL, 0, 0, 0, SY_THR_ABSENT },	/* 231 = shmget */
+ 	{ AS(clock_gettime_args), (sy_call_t *)sys_clock_gettime, AUE_NULL, NULL, 0, 0, SYF_CAPENABLED, SY_THR_STATIC },	/* 232 = clock_gettime */
+ 	{ AS(clock_settime_args), (sy_call_t *)sys_clock_settime, AUE_CLOCK_SETTIME, NULL, 0, 0, 0, SY_THR_STATIC },	/* 233 = clock_settime */
+ 	{ AS(clock_getres_args), (sy_call_t *)sys_clock_getres, AUE_NULL, NULL, 0, 0, SYF_CAPENABLED, SY_THR_STATIC },	/* 234 = clock_getres */
+ 	{ AS(ktimer_create_args), (sy_call_t *)sys_ktimer_create, AUE_NULL, NULL, 0, 0, SYF_CAPENABLED, SY_THR_STATIC },	/* 235 = ktimer_create */
+ 	{ AS(ktimer_delete_args), (sy_call_t *)sys_ktimer_delete, AUE_NULL, NULL, 0, 0, SYF_CAPENABLED, SY_THR_STATIC },	/* 236 = ktimer_delete */
+ 	{ AS(ktimer_settime_args), (sy_call_t *)sys_ktimer_settime, AUE_NULL, NULL, 0, 0, SYF_CAPENABLED, SY_THR_STATIC },	/* 237 = ktimer_settime */
+ 	{ AS(ktimer_gettime_args), (sy_call_t *)sys_ktimer_gettime, AUE_NULL, NULL, 0, 0, SYF_CAPENABLED, SY_THR_STATIC },	/* 238 = ktimer_gettime */
+ 	{ AS(ktimer_getoverrun_args), (sy_call_t *)sys_ktimer_getoverrun, AUE_NULL, NULL, 0, 0, SYF_CAPENABLED, SY_THR_STATIC },	/* 239 = ktimer_getoverrun */
+ 	{ AS(nanosleep_args), (sy_call_t *)sys_nanosleep, AUE_NULL, NULL, 0, 0, SYF_CAPENABLED, SY_THR_STATIC },	/* 240 = nanosleep */
+-	{ 0, (sy_call_t *)nosys, AUE_NULL, NULL, 0, 0, 0, SY_THR_ABSENT },			/* 241 = nosys */
+-	{ 0, (sy_call_t *)nosys, AUE_NULL, NULL, 0, 0, 0, SY_THR_ABSENT },			/* 242 = nosys */
+-	{ 0, (sy_call_t *)nosys, AUE_NULL, NULL, 0, 0, 0, SY_THR_ABSENT },			/* 243 = nosys */
++	{ AS(ffclock_getcounter_args), (sy_call_t *)sys_ffclock_getcounter, AUE_NULL, NULL, 0, 0, 0, SY_THR_STATIC },	/* 241 = ffclock_getcounter */
++	{ AS(ffclock_setestimate_args), (sy_call_t *)sys_ffclock_setestimate, AUE_NULL, NULL, 0, 0, 0, SY_THR_STATIC },	/* 242 = ffclock_setestimate */
++	{ AS(ffclock_getestimate_args), (sy_call_t *)sys_ffclock_getestimate, AUE_NULL, NULL, 0, 0, 0, SY_THR_STATIC },	/* 243 = ffclock_getestimate */
+ 	{ 0, (sy_call_t *)nosys, AUE_NULL, NULL, 0, 0, 0, SY_THR_ABSENT },			/* 244 = nosys */
+ 	{ 0, (sy_call_t *)nosys, AUE_NULL, NULL, 0, 0, 0, SY_THR_ABSENT },			/* 245 = nosys */
+ 	{ 0, (sy_call_t *)nosys, AUE_NULL, NULL, 0, 0, 0, SY_THR_ABSENT },			/* 246 = nosys */
+ 	{ 0, (sy_call_t *)nosys, AUE_NULL, NULL, 0, 0, 0, SY_THR_ABSENT },			/* 247 = nosys */
+ 	{ AS(ntp_gettime_args), (sy_call_t *)sys_ntp_gettime, AUE_NULL, NULL, 0, 0, SYF_CAPENABLED, SY_THR_STATIC },	/* 248 = ntp_gettime */
+ 	{ 0, (sy_call_t *)nosys, AUE_NULL, NULL, 0, 0, 0, SY_THR_ABSENT },			/* 249 = nosys */
+ 	{ AS(minherit_args), (sy_call_t *)sys_minherit, AUE_MINHERIT, NULL, 0, 0, SYF_CAPENABLED, SY_THR_STATIC },	/* 250 = minherit */
+ 	{ AS(rfork_args), (sy_call_t *)sys_rfork, AUE_RFORK, NULL, 0, 0, 0, SY_THR_STATIC },	/* 251 = rfork */
+ 	{ AS(openbsd_poll_args), (sy_call_t *)sys_openbsd_poll, AUE_POLL, NULL, 0, 0, SYF_CAPENABLED, SY_THR_STATIC },	/* 252 = openbsd_poll */
+ 	{ 0, (sy_call_t *)sys_issetugid, AUE_ISSETUGID, NULL, 0, 0, SYF_CAPENABLED, SY_THR_STATIC },	/* 253 = issetugid */
+Index: 9.0/sys/kern/kern_ffclock.c
+===================================================================
+--- 9.0.orig/sys/kern/kern_ffclock.c	2012-02-27 21:33:28.000000000 +1100
++++ 9.0/sys/kern/kern_ffclock.c	2012-02-27 21:33:58.000000000 +1100
+@@ -23,28 +23,43 @@
+  * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+  * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+  * SUCH DAMAGE.
+  */
+ 
+ #include <sys/cdefs.h>
+ __FBSDID("$FreeBSD$");
+ 
++#include "opt_ffclock.h"
++
+ #include <sys/param.h>
++#include <sys/bus.h>
++#include <sys/kernel.h>
++#include <sys/lock.h>
++#include <sys/module.h>
++#include <sys/mutex.h>
++#include <sys/priv.h>
++#include <sys/proc.h>
+ #include <sys/sbuf.h>
++#include <sys/sysent.h>
++#include <sys/sysproto.h>
+ #include <sys/sysctl.h>
+ #include <sys/systm.h>
+ #include <sys/timeffc.h>
+ 
++#ifdef FFCLOCK
++
+ extern struct ffclock_estimate ffclock_estimate;
+ extern struct bintime ffclock_boottime;
++extern int8_t ffclock_updated;
++extern struct mtx ffclock_mtx;
+ 
+ /*
+  * Feed-forward clock absolute time. This should be the preferred way to read
+  * the feed-forward clock for "wall-clock" type time. The flags allow to compose
+  * various flavours of absolute time (e.g. with or without leap seconds taken
+  * into account). If valid pointers are provided, the ffcounter value and an
+  * upper bound on clock error associated with the bintime are provided.
+  * NOTE: use ffclock_convert_abs() to differ the conversion of a ffcounter value
+  * read earlier.
+  */
+@@ -201,20 +216,26 @@ sysctl_kern_ffclock_active(SYSCTL_HANDLE
+ 		sysclock_active = SYSCLOCK_FFWD;
+ 	else
+ 		return (EINVAL);
+ 
+ 	return (error);
+ }
+ 
+ SYSCTL_PROC(_kern_ffclock, OID_AUTO, active, CTLTYPE_STRING | CTLFLAG_RW,
+     0, 0, sysctl_kern_ffclock_active, "A", "Kernel clock selected");
+ 
++int sysctl_kern_ffclock_ffcounter_bypass = 0;
++
++SYSCTL_INT(_kern_ffclock, OID_AUTO, ffcounter_bypass, CTLFLAG_RW,
++    &sysctl_kern_ffclock_ffcounter_bypass, 0,
++    "Use reliable hardware timecounter as the Feed-Forward Counter");
++
+ /*
+  * High level functions to access the Feed-Forward Clock.
+  */
+ void
+ ffclock_bintime(struct bintime *bt)
+ {
+ 
+ 	ffclock_abstime(NULL, bt, NULL, FFCLOCK_LERP | FFCLOCK_LEAPSEC);
+ }
+ 
+@@ -334,10 +355,119 @@ ffclock_nanodifftime(ffcounter ffdelta, 
+ }
+ 
+ void
+ ffclock_microdifftime(ffcounter ffdelta, struct timeval *tvp)
+ {
+ 	struct bintime bt;
+ 
+ 	ffclock_difftime(ffdelta, &bt, NULL);
+ 	bintime2timeval(&bt, tvp);
+ }
++
++/*
++ * System call allowing userland applications to retrieve the current value of
++ * the Feed-Forward Clock counter.
++ */
++#ifndef _SYS_SYSPROTO_H_
++struct ffclock_getcounter_args {
++	ffcounter *ffcount;
++};
++#endif
++/* ARGSUSED */
++int
++sys_ffclock_getcounter(struct thread *td, struct ffclock_getcounter_args *uap)
++{
++	ffcounter ffcount;
++	int error;
++
++	ffcount = 0;
++	ffclock_read_counter(&ffcount);
++	if (ffcount == 0)
++		return (EAGAIN);
++	error = copyout(&ffcount, uap->ffcount, sizeof(ffcounter));
++
++	return (error);
++}
++
++/*
++ * System call allowing the synchronisation daemon to push new feed-foward clock
++ * estimates to the kernel. Acquire ffclock_mtx to prevent concurrent updates
++ * and ensure data consistency.
++ * NOTE: ffclock_updated signals the fftimehands that new estimates are
++ * available. The updated estimates are picked up by the fftimehands on next
++ * tick, which could take as long as 1/hz seconds (if ticks are not missed).
++ */
++#ifndef _SYS_SYSPROTO_H_
++struct ffclock_setestimate_args {
++	struct ffclock_estimate *cest;
++};
++#endif
++/* ARGSUSED */
++int
++sys_ffclock_setestimate(struct thread *td, struct ffclock_setestimate_args *uap)
++{
++	struct ffclock_estimate cest;
++	int error;
++
++	/* Reuse of PRIV_CLOCK_SETTIME. */
++	if ((error = priv_check(td, PRIV_CLOCK_SETTIME)) != 0)
++		return (error);
++
++	if ((error = copyin(uap->cest, &cest, sizeof(struct ffclock_estimate)))
++	    != 0)
++		return (error);
++
++	mtx_lock(&ffclock_mtx);
++	memcpy(&ffclock_estimate, &cest, sizeof(struct ffclock_estimate));
++	ffclock_updated++;
++	mtx_unlock(&ffclock_mtx);
++	return (error);
++}
++
++/*
++ * System call allowing userland applications to retrieve the clock estimates
++ * stored within the kernel. It is useful to kickstart the synchronisation
++ * daemon with the kernel's knowledge of hardware timecounter.
++ */
++#ifndef _SYS_SYSPROTO_H_
++struct ffclock_getestimate_args {
++	struct ffclock_estimate *cest;
++};
++#endif
++/* ARGSUSED */
++int
++sys_ffclock_getestimate(struct thread *td, struct ffclock_getestimate_args *uap)
++{
++	struct ffclock_estimate cest;
++	int error;
++
++	mtx_lock(&ffclock_mtx);
++	memcpy(&cest, &ffclock_estimate, sizeof(struct ffclock_estimate));
++	mtx_unlock(&ffclock_mtx);
++	error = copyout(&cest, uap->cest, sizeof(struct ffclock_estimate));
++	return (error);
++}
++
++#else /* !FFCLOCK */
++
++int
++sys_ffclock_getcounter(struct thread *td, struct ffclock_getcounter_args *uap)
++{
++
++	return (ENOSYS);
++}
++
++int
++sys_ffclock_setestimate(struct thread *td, struct ffclock_setestimate_args *uap)
++{
++
++	return (ENOSYS);
++}
++
++int
++sys_ffclock_getestimate(struct thread *td, struct ffclock_getestimate_args *uap)
++{
++
++	return (ENOSYS);
++}
++
++#endif /* FFCLOCK */
+Index: 9.0/sys/kern/makesyscalls.sh
+===================================================================
+--- 9.0.orig/sys/kern/makesyscalls.sh	2012-02-27 15:51:45.000000000 +1100
++++ 9.0/sys/kern/makesyscalls.sh	2012-02-27 21:33:58.000000000 +1100
+@@ -145,20 +145,21 @@ s/\$//g
+ 
+ 		printf "\n/* The casts are bogus but will do for now. */\n" > sysent
+ 		printf "struct sysent %s[] = {\n",switchname > sysent
+ 
+ 		printf " * created from%s\n */\n\n", $0 > sysarg
+ 		printf "#ifndef %s\n", sysproto_h > sysarg
+ 		printf "#define\t%s\n\n", sysproto_h > sysarg
+ 		printf "#include <sys/signal.h>\n" > sysarg
+ 		printf "#include <sys/acl.h>\n" > sysarg
+ 		printf "#include <sys/cpuset.h>\n" > sysarg
++		printf "#include <sys/_ffcounter.h>\n" > sysarg
+ 		printf "#include <sys/_semaphore.h>\n" > sysarg
+ 		printf "#include <sys/ucontext.h>\n\n" > sysarg
+ 		printf "#include <bsm/audit_kevents.h>\n\n" > sysarg
+ 		printf "struct proc;\n\n" > sysarg
+ 		printf "struct thread;\n\n" > sysarg
+ 		printf "#define\tPAD_(t)\t(sizeof(register_t) <= sizeof(t) ? \\\n" > sysarg
+ 		printf "\t\t0 : sizeof(register_t) - sizeof(t))\n\n" > sysarg
+ 		printf "#if BYTE_ORDER == LITTLE_ENDIAN\n"> sysarg
+ 		printf "#define\tPADL_(t)\t0\n" > sysarg
+ 		printf "#define\tPADR_(t)\tPAD_(t)\n" > sysarg
+Index: 9.0/sys/kern/syscalls.c
+===================================================================
+--- 9.0.orig/sys/kern/syscalls.c	2012-02-27 15:51:45.000000000 +1100
++++ 9.0/sys/kern/syscalls.c	2012-02-27 21:33:58.000000000 +1100
+@@ -241,23 +241,23 @@ const char *syscallnames[] = {
+ 	"shmget",			/* 231 = shmget */
+ 	"clock_gettime",			/* 232 = clock_gettime */
+ 	"clock_settime",			/* 233 = clock_settime */
+ 	"clock_getres",			/* 234 = clock_getres */
+ 	"ktimer_create",			/* 235 = ktimer_create */
+ 	"ktimer_delete",			/* 236 = ktimer_delete */
+ 	"ktimer_settime",			/* 237 = ktimer_settime */
+ 	"ktimer_gettime",			/* 238 = ktimer_gettime */
+ 	"ktimer_getoverrun",			/* 239 = ktimer_getoverrun */
+ 	"nanosleep",			/* 240 = nanosleep */
+-	"#241",			/* 241 = nosys */
+-	"#242",			/* 242 = nosys */
+-	"#243",			/* 243 = nosys */
++	"ffclock_getcounter",			/* 241 = ffclock_getcounter */
++	"ffclock_setestimate",			/* 242 = ffclock_setestimate */
++	"ffclock_getestimate",			/* 243 = ffclock_getestimate */
+ 	"#244",			/* 244 = nosys */
+ 	"#245",			/* 245 = nosys */
+ 	"#246",			/* 246 = nosys */
+ 	"#247",			/* 247 = nosys */
+ 	"ntp_gettime",			/* 248 = ntp_gettime */
+ 	"#249",			/* 249 = nosys */
+ 	"minherit",			/* 250 = minherit */
+ 	"rfork",			/* 251 = rfork */
+ 	"openbsd_poll",			/* 252 = openbsd_poll */
+ 	"issetugid",			/* 253 = issetugid */
+Index: 9.0/sys/kern/syscalls.master
+===================================================================
+--- 9.0.orig/sys/kern/syscalls.master	2012-02-27 15:51:45.000000000 +1100
++++ 9.0/sys/kern/syscalls.master	2012-02-27 21:33:58.000000000 +1100
+@@ -449,23 +449,25 @@
+ 				    struct sigevent *evp, int *timerid); }
+ 236	AUE_NULL	STD	{ int ktimer_delete(int timerid); }
+ 237	AUE_NULL	STD	{ int ktimer_settime(int timerid, int flags, \
+ 				    const struct itimerspec *value, \
+ 				    struct itimerspec *ovalue); }
+ 238	AUE_NULL	STD	{ int ktimer_gettime(int timerid, struct \
+ 				    itimerspec *value); }
+ 239	AUE_NULL	STD	{ int ktimer_getoverrun(int timerid); }
+ 240	AUE_NULL	STD	{ int nanosleep(const struct timespec *rqtp, \
+ 				    struct timespec *rmtp); }
+-241	AUE_NULL	UNIMPL	nosys
+-242	AUE_NULL	UNIMPL	nosys
+-243	AUE_NULL	UNIMPL	nosys
++241	AUE_NULL	STD	{ int ffclock_getcounter(ffcounter *ffcount); }
++242	AUE_NULL	STD	{ int ffclock_setestimate( \
++				    struct ffclock_estimate *cest); }
++243	AUE_NULL	STD	{ int ffclock_getestimate( \
++				    struct ffclock_estimate *cest); }
+ 244	AUE_NULL	UNIMPL	nosys
+ 245	AUE_NULL	UNIMPL	nosys
+ 246	AUE_NULL	UNIMPL	nosys
+ 247	AUE_NULL	UNIMPL	nosys
+ 248	AUE_NULL	STD	{ int ntp_gettime(struct ntptimeval *ntvp); }
+ 249	AUE_NULL	UNIMPL	nosys
+ ; syscall numbers initially used in OpenBSD
+ 250	AUE_MINHERIT	STD	{ int minherit(void *addr, size_t len, \
+ 				    int inherit); }
+ 251	AUE_RFORK	STD	{ int rfork(int flags); }
+Index: 9.0/sys/kern/systrace_args.c
+===================================================================
+--- 9.0.orig/sys/kern/systrace_args.c	2012-02-27 15:51:45.000000000 +1100
++++ 9.0/sys/kern/systrace_args.c	2012-02-27 21:33:58.000000000 +1100
+@@ -1330,20 +1330,41 @@ systrace_args(int sysnum, void *params, 
+ 		break;
+ 	}
+ 	/* nanosleep */
+ 	case 240: {
+ 		struct nanosleep_args *p = params;
+ 		uarg[0] = (intptr_t) p->rqtp; /* const struct timespec * */
+ 		uarg[1] = (intptr_t) p->rmtp; /* struct timespec * */
+ 		*n_args = 2;
+ 		break;
+ 	}
++	/* ffclock_getcounter */
++	case 241: {
++		struct ffclock_getcounter_args *p = params;
++		uarg[0] = (intptr_t) p->ffcount; /* ffcounter * */
++		*n_args = 1;
++		break;
++	}
++	/* ffclock_setestimate */
++	case 242: {
++		struct ffclock_setestimate_args *p = params;
++		uarg[0] = (intptr_t) p->cest; /* struct ffclock_estimate * */
++		*n_args = 1;
++		break;
++	}
++	/* ffclock_getestimate */
++	case 243: {
++		struct ffclock_getestimate_args *p = params;
++		uarg[0] = (intptr_t) p->cest; /* struct ffclock_estimate * */
++		*n_args = 1;
++		break;
++	}
+ 	/* ntp_gettime */
+ 	case 248: {
+ 		struct ntp_gettime_args *p = params;
+ 		uarg[0] = (intptr_t) p->ntvp; /* struct ntptimeval * */
+ 		*n_args = 1;
+ 		break;
+ 	}
+ 	/* minherit */
+ 	case 250: {
+ 		struct minherit_args *p = params;
+@@ -5364,20 +5385,50 @@ systrace_setargdesc(int sysnum, int ndx,
+ 		case 0:
+ 			p = "const struct timespec *";
+ 			break;
+ 		case 1:
+ 			p = "struct timespec *";
+ 			break;
+ 		default:
+ 			break;
+ 		};
+ 		break;
++	/* ffclock_getcounter */
++	case 241:
++		switch(ndx) {
++		case 0:
++			p = "ffcounter *";
++			break;
++		default:
++			break;
++		};
++		break;
++	/* ffclock_setestimate */
++	case 242:
++		switch(ndx) {
++		case 0:
++			p = "struct ffclock_estimate *";
++			break;
++		default:
++			break;
++		};
++		break;
++	/* ffclock_getestimate */
++	case 243:
++		switch(ndx) {
++		case 0:
++			p = "struct ffclock_estimate *";
++			break;
++		default:
++			break;
++		};
++		break;
+ 	/* ntp_gettime */
+ 	case 248:
+ 		switch(ndx) {
+ 		case 0:
+ 			p = "struct ntptimeval *";
+ 			break;
+ 		default:
+ 			break;
+ 		};
+ 		break;
+Index: 9.0/sys/sys/syscall.h
+===================================================================
+--- 9.0.orig/sys/sys/syscall.h	2012-02-27 15:52:29.000000000 +1100
++++ 9.0/sys/sys/syscall.h	2012-02-27 21:33:59.000000000 +1100
+@@ -209,20 +209,23 @@
+ #define	SYS_shmget	231
+ #define	SYS_clock_gettime	232
+ #define	SYS_clock_settime	233
+ #define	SYS_clock_getres	234
+ #define	SYS_ktimer_create	235
+ #define	SYS_ktimer_delete	236
+ #define	SYS_ktimer_settime	237
+ #define	SYS_ktimer_gettime	238
+ #define	SYS_ktimer_getoverrun	239
+ #define	SYS_nanosleep	240
++#define	SYS_ffclock_getcounter	241
++#define	SYS_ffclock_setestimate	242
++#define	SYS_ffclock_getestimate	243
+ #define	SYS_ntp_gettime	248
+ #define	SYS_minherit	250
+ #define	SYS_rfork	251
+ #define	SYS_openbsd_poll	252
+ #define	SYS_issetugid	253
+ #define	SYS_lchown	254
+ #define	SYS_aio_read	255
+ #define	SYS_aio_write	256
+ #define	SYS_lio_listio	257
+ #define	SYS_getdents	272
+Index: 9.0/sys/sys/syscall.mk
+===================================================================
+--- 9.0.orig/sys/sys/syscall.mk	2012-02-27 15:52:29.000000000 +1100
++++ 9.0/sys/sys/syscall.mk	2012-02-27 21:33:59.000000000 +1100
+@@ -161,20 +161,23 @@ MIASM =  \
+ 	shmget.o \
+ 	clock_gettime.o \
+ 	clock_settime.o \
+ 	clock_getres.o \
+ 	ktimer_create.o \
+ 	ktimer_delete.o \
+ 	ktimer_settime.o \
+ 	ktimer_gettime.o \
+ 	ktimer_getoverrun.o \
+ 	nanosleep.o \
++	ffclock_getcounter.o \
++	ffclock_setestimate.o \
++	ffclock_getestimate.o \
+ 	ntp_gettime.o \
+ 	minherit.o \
+ 	rfork.o \
+ 	openbsd_poll.o \
+ 	issetugid.o \
+ 	lchown.o \
+ 	aio_read.o \
+ 	aio_write.o \
+ 	lio_listio.o \
+ 	getdents.o \
+Index: 9.0/sys/sys/sysproto.h
+===================================================================
+--- 9.0.orig/sys/sys/sysproto.h	2012-02-27 15:52:29.000000000 +1100
++++ 9.0/sys/sys/sysproto.h	2012-02-27 21:33:59.000000000 +1100
+@@ -5,20 +5,21 @@
+  * $FreeBSD: releng/9.0/sys/sys/sysproto.h 225618 2011-09-16 14:04:14Z kmacy $
+  * created from FreeBSD: head/sys/kern/syscalls.master 224987 2011-08-18 22:51:30Z jonathan 
+  */
+ 
+ #ifndef _SYS_SYSPROTO_H_
+ #define	_SYS_SYSPROTO_H_
+ 
+ #include <sys/signal.h>
+ #include <sys/acl.h>
+ #include <sys/cpuset.h>
++#include <sys/_ffcounter.h>
+ #include <sys/_semaphore.h>
+ #include <sys/ucontext.h>
+ 
+ #include <bsm/audit_kevents.h>
+ 
+ struct proc;
+ 
+ struct thread;
+ 
+ #define	PAD_(t)	(sizeof(register_t) <= sizeof(t) ? \
+@@ -719,20 +720,29 @@ struct ktimer_gettime_args {
+ 	char timerid_l_[PADL_(int)]; int timerid; char timerid_r_[PADR_(int)];
+ 	char value_l_[PADL_(struct itimerspec *)]; struct itimerspec * value; char value_r_[PADR_(struct itimerspec *)];
+ };
+ struct ktimer_getoverrun_args {
+ 	char timerid_l_[PADL_(int)]; int timerid; char timerid_r_[PADR_(int)];
+ };
+ struct nanosleep_args {
+ 	char rqtp_l_[PADL_(const struct timespec *)]; const struct timespec * rqtp; char rqtp_r_[PADR_(const struct timespec *)];
+ 	char rmtp_l_[PADL_(struct timespec *)]; struct timespec * rmtp; char rmtp_r_[PADR_(struct timespec *)];
+ };
++struct ffclock_getcounter_args {
++	char ffcount_l_[PADL_(ffcounter *)]; ffcounter * ffcount; char ffcount_r_[PADR_(ffcounter *)];
++};
++struct ffclock_setestimate_args {
++	char cest_l_[PADL_(struct ffclock_estimate *)]; struct ffclock_estimate * cest; char cest_r_[PADR_(struct ffclock_estimate *)];
++};
++struct ffclock_getestimate_args {
++	char cest_l_[PADL_(struct ffclock_estimate *)]; struct ffclock_estimate * cest; char cest_r_[PADR_(struct ffclock_estimate *)];
++};
+ struct ntp_gettime_args {
+ 	char ntvp_l_[PADL_(struct ntptimeval *)]; struct ntptimeval * ntvp; char ntvp_r_[PADR_(struct ntptimeval *)];
+ };
+ struct minherit_args {
+ 	char addr_l_[PADL_(void *)]; void * addr; char addr_r_[PADR_(void *)];
+ 	char len_l_[PADL_(size_t)]; size_t len; char len_r_[PADR_(size_t)];
+ 	char inherit_l_[PADL_(int)]; int inherit; char inherit_r_[PADR_(int)];
+ };
+ struct rfork_args {
+ 	char flags_l_[PADL_(int)]; int flags; char flags_r_[PADR_(int)];
+@@ -1881,20 +1891,23 @@ int	sys_shmdt(struct thread *, struct sh
+ int	sys_shmget(struct thread *, struct shmget_args *);
+ int	sys_clock_gettime(struct thread *, struct clock_gettime_args *);
+ int	sys_clock_settime(struct thread *, struct clock_settime_args *);
+ int	sys_clock_getres(struct thread *, struct clock_getres_args *);
+ int	sys_ktimer_create(struct thread *, struct ktimer_create_args *);
+ int	sys_ktimer_delete(struct thread *, struct ktimer_delete_args *);
+ int	sys_ktimer_settime(struct thread *, struct ktimer_settime_args *);
+ int	sys_ktimer_gettime(struct thread *, struct ktimer_gettime_args *);
+ int	sys_ktimer_getoverrun(struct thread *, struct ktimer_getoverrun_args *);
+ int	sys_nanosleep(struct thread *, struct nanosleep_args *);
++int	sys_ffclock_getcounter(struct thread *, struct ffclock_getcounter_args *);
++int	sys_ffclock_setestimate(struct thread *, struct ffclock_setestimate_args *);
++int	sys_ffclock_getestimate(struct thread *, struct ffclock_getestimate_args *);
+ int	sys_ntp_gettime(struct thread *, struct ntp_gettime_args *);
+ int	sys_minherit(struct thread *, struct minherit_args *);
+ int	sys_rfork(struct thread *, struct rfork_args *);
+ int	sys_openbsd_poll(struct thread *, struct openbsd_poll_args *);
+ int	sys_issetugid(struct thread *, struct issetugid_args *);
+ int	sys_lchown(struct thread *, struct lchown_args *);
+ int	sys_aio_read(struct thread *, struct aio_read_args *);
+ int	sys_aio_write(struct thread *, struct aio_write_args *);
+ int	sys_lio_listio(struct thread *, struct lio_listio_args *);
+ int	sys_getdents(struct thread *, struct getdents_args *);
+@@ -2567,20 +2580,23 @@ int	freebsd7_shmctl(struct thread *, str
+ #define	SYS_AUE_shmget	AUE_SHMGET
+ #define	SYS_AUE_clock_gettime	AUE_NULL
+ #define	SYS_AUE_clock_settime	AUE_CLOCK_SETTIME
+ #define	SYS_AUE_clock_getres	AUE_NULL
+ #define	SYS_AUE_ktimer_create	AUE_NULL
+ #define	SYS_AUE_ktimer_delete	AUE_NULL
+ #define	SYS_AUE_ktimer_settime	AUE_NULL
+ #define	SYS_AUE_ktimer_gettime	AUE_NULL
+ #define	SYS_AUE_ktimer_getoverrun	AUE_NULL
+ #define	SYS_AUE_nanosleep	AUE_NULL
++#define	SYS_AUE_ffclock_getcounter	AUE_NULL
++#define	SYS_AUE_ffclock_setestimate	AUE_NULL
++#define	SYS_AUE_ffclock_getestimate	AUE_NULL
+ #define	SYS_AUE_ntp_gettime	AUE_NULL
+ #define	SYS_AUE_minherit	AUE_MINHERIT
+ #define	SYS_AUE_rfork	AUE_RFORK
+ #define	SYS_AUE_openbsd_poll	AUE_POLL
+ #define	SYS_AUE_issetugid	AUE_ISSETUGID
+ #define	SYS_AUE_lchown	AUE_LCHOWN
+ #define	SYS_AUE_aio_read	AUE_NULL
+ #define	SYS_AUE_aio_write	AUE_NULL
+ #define	SYS_AUE_lio_listio	AUE_NULL
+ #define	SYS_AUE_getdents	AUE_O_GETDENTS
+Index: 9.0/sys/sys/timeffc.h
+===================================================================
+--- 9.0.orig/sys/sys/timeffc.h	2012-02-27 21:33:28.000000000 +1100
++++ 9.0/sys/sys/timeffc.h	2012-02-27 21:33:59.000000000 +1100
+@@ -157,13 +157,22 @@ void ffclock_getnanouptime(struct timesp
+ void ffclock_getmicrouptime(struct timeval *tvp);
+ 
+ /*
+  * Wrapper routines to convert a time interval specified in ffcounter units into
+  * seconds using the current feed-forward clock estimates.
+  */
+ void ffclock_bindifftime(ffcounter ffdelta, struct bintime *bt);
+ void ffclock_nanodifftime(ffcounter ffdelta, struct timespec *tsp);
+ void ffclock_microdifftime(ffcounter ffdelta, struct timeval *tvp);
+ 
++#else /* !_KERNEL */
++
++/* Feed-Forward Clock system calls. */
++__BEGIN_DECLS
++int ffclock_getcounter(ffcounter *ffcount);
++int ffclock_getestimate(struct ffclock_estimate *cest);
++int ffclock_setestimate(struct ffclock_estimate *cest);
++__END_DECLS
++
+ #endif /* _KERNEL */
+ #endif /* __BSD_VISIBLE */
+ #endif /* _SYS_TIMEFF_H_ */

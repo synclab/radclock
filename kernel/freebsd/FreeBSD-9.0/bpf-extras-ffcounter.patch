@@ -1,0 +1,312 @@
+Add a new ffcounter timestamp member to the BPF header.
+---
+ sys/kern/kern_ffclock.c |    2 +-
+ sys/net/bpf.c           |   31 +++++++++++++++++++++++++++++++
+ sys/net/bpf.h           |    4 ++++
+ 3 files changed, 36 insertions(+), 1 deletion(-)
+
+Index: 9.0/sys/kern/kern_ffclock.c
+===================================================================
+--- 9.0.orig/sys/kern/kern_ffclock.c	2012-02-27 21:50:51.000000000 +1100
++++ 9.0/sys/kern/kern_ffclock.c	2012-02-29 10:13:46.000000000 +1100
+@@ -155,21 +155,21 @@ ffclock_difftime(ffcounter ffdelta, stru
+ 
+ SYSCTL_NODE(_kern, OID_AUTO, sysclock, CTLFLAG_RW, 0,
+     "System clock related configuration");
+ SYSCTL_NODE(_kern_sysclock, OID_AUTO, ffclock, CTLFLAG_RW, 0,
+     "Feed-forward clock configuration");
+ 
+ static char *sysclocks[] = {"feedback", "feed-forward"};
+ #define	MAX_SYSCLOCK_NAME_LEN 16
+ #define	NUM_SYSCLOCKS (sizeof(sysclocks) / sizeof(*sysclocks))
+ 
+-static int ffclock_version = 2;
++static int ffclock_version = 3;
+ SYSCTL_INT(_kern_sysclock_ffclock, OID_AUTO, version, CTLFLAG_RD,
+     &ffclock_version, 0, "Feed-forward clock kernel version");
+ 
+ /* List available sysclocks. */
+ static int
+ sysctl_kern_sysclock_available(SYSCTL_HANDLER_ARGS)
+ {
+ 	struct sbuf *s;
+ 	int clk, error;
+ 
+Index: 9.0/sys/net/bpf.c
+===================================================================
+--- 9.0.orig/sys/net/bpf.c	2012-02-28 19:13:02.000000000 +1100
++++ 9.0/sys/net/bpf.c	2012-02-29 10:41:04.000000000 +1100
+@@ -107,20 +107,21 @@ MALLOC_DEFINE(M_BPF, "BPF", "BPF data");
+ #define BPF_WORDALIGN32(x) (((x)+(BPF_ALIGNMENT32-1))&~(BPF_ALIGNMENT32-1))
+ 
+ #ifndef BURN_BRIDGES
+ /*
+  * 32-bit version of structure prepended to each packet.  We use this header
+  * instead of the standard one for 32-bit streams.  We mark the a stream as
+  * 32-bit the first time we see a 32-bit compat ioctl request.
+  */
+ struct bpf_hdr32 {
+ 	struct timeval32 bh_tstamp;	/* time stamp */
++	ffcounter	bh_ffcounter;	/* feed-forward counter stamp */
+ 	uint32_t	bh_caplen;	/* length of captured portion */
+ 	uint32_t	bh_datalen;	/* original length of packet */
+ 	uint16_t	bh_hdrlen;	/* length of bpf header (this struct
+ 					   plus alignment padding) */
+ };
+ #endif /* !BURN_BRIDGES */
+ 
+ struct bpf_program32 {
+ 	u_int bf_len;
+ 	uint32_t bf_insns;
+@@ -182,21 +183,25 @@ static void	bpf_attachd(struct bpf_d *, 
+ static void	bpf_detachd(struct bpf_d *);
+ static void	bpf_freed(struct bpf_d *);
+ static int	bpf_movein(struct uio *, int, struct ifnet *, struct mbuf **,
+ 		    struct sockaddr *, int *, struct bpf_insn *);
+ static int	bpf_setif(struct bpf_d *, struct ifreq *);
+ static void	bpf_timed_out(void *);
+ static __inline void
+ 		bpf_wakeup(struct bpf_d *);
+ static void	catchpacket(struct bpf_d *, u_char *, u_int, u_int,
+ 		    void (*)(struct bpf_d *, caddr_t, u_int, void *, u_int),
++#ifdef FFCLOCK
++		    struct bintime *, ffcounter *);
++#else
+ 		    struct bintime *);
++#endif
+ static void	reset_d(struct bpf_d *);
+ static int	 bpf_setf(struct bpf_d *, struct bpf_program *, u_long cmd);
+ static int	bpf_getdltlist(struct bpf_d *, struct bpf_dltlist *);
+ static int	bpf_setdlt(struct bpf_d *, u_int);
+ static void	filt_bpfdetach(struct knote *);
+ static int	filt_bpfread(struct knote *, long);
+ static void	bpf_drvinit(void *);
+ static int	bpf_stats_sysctl(SYSCTL_HANDLER_ARGS);
+ static int	bpf_tscfg_sysctl_handler(SYSCTL_HANDLER_ARGS);
+ 
+@@ -1865,22 +1870,27 @@ bpf_tap(struct bpf_if *bp, u_char *pkt, 
+ 				    SET_CLOCKCFG_FLAGS(d->bd_tstamp,
+ 					cs.sysclock_active, whichclock, clockflags);
+ 				    KASSERT(whichclock >= 0, ("Bogus BPF tstamp "
+ 					"configuration: 0x%04x", d->bd_tstamp));
+ 				    sysclock_snap2bintime(&cs, &bt, whichclock,
+ 					clockflags);
+ 				}
+ #ifdef MAC
+ 			if (mac_bpfdesc_check_receive(d, bp->bif_ifp) == 0)
+ #endif
++#ifdef FFCLOCK
++				catchpacket(d, pkt, pktlen, slen,
++				    bpf_append_bytes, &bt, &cs.ffcount);
++#else
+ 				catchpacket(d, pkt, pktlen, slen,
+ 				    bpf_append_bytes, &bt);
++#endif
+ 		}
+ 		BPFD_UNLOCK(d);
+ 	}
+ 	BPFIF_UNLOCK(bp);
+ }
+ 
+ #define	BPF_CHECK_DIRECTION(d, r, i)				\
+ 	    (((d)->bd_direction == BPF_D_IN && (r) != (i)) ||	\
+ 	    ((d)->bd_direction == BPF_D_OUT && (r) == (i)))
+ 
+@@ -1949,22 +1959,27 @@ bpf_mtap(struct bpf_if *bp, struct mbuf 
+ 					    cs.sysclock_active, whichclock,
+ 					    clockflags);
+ 					KASSERT(whichclock >= 0, ("Bogus BPF tstamp "
+ 					    "configuration: 0x%04x", d->bd_tstamp));
+ 					sysclock_snap2bintime(&cs, &bt, whichclock,
+ 					    clockflags);
+ 			}
+ #ifdef MAC
+ 			if (mac_bpfdesc_check_receive(d, bp->bif_ifp) == 0)
+ #endif
++#ifdef FFCLOCK
++				catchpacket(d, (u_char *)m, pktlen, slen,
++				    bpf_append_mbuf, &bt, &cs.ffcount);
++#else
+ 				catchpacket(d, (u_char *)m, pktlen, slen,
+ 				    bpf_append_mbuf, &bt);
++#endif
+ 		}
+ 		BPFD_UNLOCK(d);
+ 	}
+ 	BPFIF_UNLOCK(bp);
+ }
+ 
+ /*
+  * Incoming linkage from device drivers, when packet is in
+  * an mbuf chain and to be prepended by a contiguous header.
+  */
+@@ -2030,22 +2045,27 @@ bpf_mtap2(struct bpf_if *bp, void *data,
+ 					    cs.sysclock_active, whichclock,
+ 					    clockflags);
+ 					KASSERT(whichclock >= 0, ("Bogus BPF tstamp "
+ 					    "configuration: 0x%04x", d->bd_tstamp));
+ 					sysclock_snap2bintime(&cs, &bt, whichclock,
+ 					    clockflags);
+ 				}
+ #ifdef MAC
+ 			if (mac_bpfdesc_check_receive(d, bp->bif_ifp) == 0)
+ #endif
++#ifdef FFCLOCK
++				catchpacket(d, (u_char *)&mb, pktlen, slen,
++				    bpf_append_mbuf, &bt, &cs.ffcount);
++#else
+ 				catchpacket(d, (u_char *)&mb, pktlen, slen,
+ 				    bpf_append_mbuf, &bt);
++#endif
+ 		}
+ 		BPFD_UNLOCK(d);
+ 	}
+ 	BPFIF_UNLOCK(bp);
+ }
+ 
+ #undef	BPF_CHECK_DIRECTION
+ 
+ static int
+ bpf_hdrlen(struct bpf_d *d)
+@@ -2102,21 +2122,25 @@ bpf_bintime2ts(struct bintime *bt, struc
+ /*
+  * Move the packet data from interface memory (pkt) into the
+  * store buffer.  "cpfn" is the routine called to do the actual data
+  * transfer.  bcopy is passed in to copy contiguous chunks, while
+  * bpf_append_mbuf is passed in to copy mbuf chains.  In the latter case,
+  * pkt is really an mbuf.
+  */
+ static void
+ catchpacket(struct bpf_d *d, u_char *pkt, u_int pktlen, u_int snaplen,
+     void (*cpfn)(struct bpf_d *, caddr_t, u_int, void *, u_int),
++#ifdef FFCLOCK
++    struct bintime *bt, ffcounter *ffcount)
++#else
+     struct bintime *bt)
++#endif
+ {
+ 	struct bpf_xhdr hdr;
+ #ifndef BURN_BRIDGES
+ 	struct bpf_hdr hdr_old;
+ #ifdef COMPAT_FREEBSD32
+ 	struct bpf_hdr32 hdr32_old;
+ #endif
+ #endif
+ 	int caplen, curlen, hdrlen, totlen;
+ 	int do_wakeup = 0;
+@@ -2192,50 +2216,57 @@ catchpacket(struct bpf_d *d, u_char *pkt
+ 	if (tstype == BPF_T_NONE || BPF_T_FORMAT(tstype) == BPF_T_MICROTIME) {
+ 		struct bpf_ts ts;
+ 		if (do_timestamp)
+ 			bpf_bintime2ts(bt, &ts, tstype);
+ #ifdef COMPAT_FREEBSD32
+ 		if (d->bd_compat32) {
+ 			bzero(&hdr32_old, sizeof(hdr32_old));
+ 			if (do_timestamp) {
+ 				hdr32_old.bh_tstamp.tv_sec = ts.bt_sec;
+ 				hdr32_old.bh_tstamp.tv_usec = ts.bt_frac;
++#ifdef FFCLOCK
++				hdr32_old.bh_ffcounter = *ffcount;
++#endif
+ 			}
+ 			hdr32_old.bh_datalen = pktlen;
+ 			hdr32_old.bh_hdrlen = hdrlen;
+ 			hdr32_old.bh_caplen = caplen;
+ 			bpf_append_bytes(d, d->bd_sbuf, curlen, &hdr32_old,
+ 			    sizeof(hdr32_old));
+ 			goto copy;
+ 		}
+ #endif
+ 		bzero(&hdr_old, sizeof(hdr_old));
+ 		if (do_timestamp) {
+ 			hdr_old.bh_tstamp.tv_sec = ts.bt_sec;
+ 			hdr_old.bh_tstamp.tv_usec = ts.bt_frac;
++#ifdef FFCLOCK
++			hdr_old.bh_ffcounter = *ffcount;
++#endif
+ 		}
+ 		hdr_old.bh_datalen = pktlen;
+ 		hdr_old.bh_hdrlen = hdrlen;
+ 		hdr_old.bh_caplen = caplen;
+ 		bpf_append_bytes(d, d->bd_sbuf, curlen, &hdr_old,
+ 		    sizeof(hdr_old));
+ 		goto copy;
+ 	}
+ #endif
+ 
+ 	/*
+ 	 * Append the bpf header.  Note we append the actual header size, but
+ 	 * move forward the length of the header plus padding.
+ 	 */
+ 	bzero(&hdr, sizeof(hdr));
+ 	if (do_timestamp) {
+ #ifdef FFCLOCK
++		hdr.bh_ffcounter = *ffcount;
+ 		if (tstype & BPF_T_FFCOUNTER)
+ 			bcopy(bt, &hdr.bh_tstamp, sizeof(ffcounter));
+ 		else
+ #endif
+ 			bpf_bintime2ts(bt, &hdr.bh_tstamp, tstype);
+ 	}
+ 	hdr.bh_datalen = pktlen;
+ 	hdr.bh_hdrlen = hdrlen;
+ 	hdr.bh_caplen = caplen;
+ 	bpf_append_bytes(d, d->bd_sbuf, curlen, &hdr, sizeof(hdr));
+Index: 9.0/sys/net/bpf.h
+===================================================================
+--- 9.0.orig/sys/net/bpf.h	2012-02-28 14:40:59.000000000 +1100
++++ 9.0/sys/net/bpf.h	2012-02-29 10:15:56.000000000 +1100
+@@ -38,20 +38,22 @@
+  *
+  *      @(#)bpf.h	8.1 (Berkeley) 6/10/93
+  *	@(#)bpf.h	1.34 (LBL)     6/16/96
+  *
+  * $FreeBSD: releng/9.0/sys/net/bpf.h 214517 2010-10-29 18:41:09Z rpaulo $
+  */
+ 
+ #ifndef _NET_BPF_H_
+ #define _NET_BPF_H_
+ 
++#include <sys/_ffcounter.h>
++
+ /* BSD style release date */
+ #define	BPF_RELEASE 199606
+ 
+ typedef	int32_t	  bpf_int32;
+ typedef	u_int32_t bpf_u_int32;
+ typedef	int64_t	  bpf_int64;
+ typedef	u_int64_t bpf_u_int64;
+ 
+ /*
+  * Alignment macros.  BPF_WORDALIGN rounds up to the next
+@@ -208,28 +210,30 @@ enum bpf_direction {
+ 
+ /*
+  * Structure prepended to each packet.
+  */
+ struct bpf_ts {
+ 	bpf_int64	bt_sec;		/* seconds */
+ 	bpf_u_int64	bt_frac;	/* fraction */
+ };
+ struct bpf_xhdr {
+ 	struct bpf_ts	bh_tstamp;	/* time stamp */
++	ffcounter	bh_ffcounter;	/* feed-forward counter stamp */
+ 	bpf_u_int32	bh_caplen;	/* length of captured portion */
+ 	bpf_u_int32	bh_datalen;	/* original length of packet */
+ 	u_short		bh_hdrlen;	/* length of bpf header (this struct
+ 					   plus alignment padding) */
+ };
+ /* Obsolete */
+ struct bpf_hdr {
+ 	struct timeval	bh_tstamp;	/* time stamp */
++	ffcounter	bh_ffcounter;	/* feed-forward counter stamp */
+ 	bpf_u_int32	bh_caplen;	/* length of captured portion */
+ 	bpf_u_int32	bh_datalen;	/* original length of packet */
+ 	u_short		bh_hdrlen;	/* length of bpf header (this struct
+ 					   plus alignment padding) */
+ };
+ #ifdef _KERNEL
+ #define	MTAG_BPF		0x627066
+ #define	MTAG_BPF_TIMESTAMP	0
+ #endif
+ 

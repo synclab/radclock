@@ -1,0 +1,979 @@
+------------------------------------------------------------------------
+r228986 | lstewart | 2011-12-30 19:57:58 +1100 (Fri, 30 Dec 2011) | 37 lines
+
+- Introduce the net.bpf.tscfg sysctl tree and associated code so as to make one
+  aspect of time stamp configuration per interface rather than per BPF
+  descriptor. Prior to this, the order in which BPF devices were opened and the
+  per descriptor time stamp configuration settings could cause non-deterministic
+  and unintended behaviour with respect to time stamping. With the new scheme, a
+  BPF attached interface's tscfg sysctl entry can be set to "default", "none",
+  "fast", "normal" or "external". Setting "default" means use the system default
+  option (set with the net.bpf.tscfg.default sysctl), "none" means do not
+  generate time stamps for tapped packets, "fast" means generate time stamps for
+  tapped packets using a hz granularity system clock read, "normal" means
+  generate time stamps for tapped packets using a full timecounter granularity
+  system clock read and "external" (currently unimplemented) means use the time
+  stamp provided with the packet from an underlying source.
+
+- Utilise the recently introduced sysclock_getsnapshot() and
+  sysclock_snap2bintime() KPIs to ensure the system clock is only read once per
+  packet, regardless of the number of BPF descriptors and time stamp formats
+  requested. Use the per BPF attached interface time stamp configuration to
+  control if sysclock_getsnapshot() is called and whether the system clock read
+  is fast or normal. The per BPF descriptor time stamp configuration is then
+  used to control how the system clock snapshot is converted to a bintime by
+  sysclock_snap2bintime().
+
+- Remove all FAST related BPF descriptor flag variants. Performing a "fast"
+  read of the system clock is now controlled per BPF attached interface using
+  the net.bpf.tscfg sysctl tree.
+
+- Update the bpf.4 man page.
+
+Committed on behalf of Julien Ridoux and Darryl Veitch from the University of
+Melbourne, Australia, as part of the FreeBSD Foundation funded "Feed-Forward
+Clock Synchronization Algorithms" project.
+
+For more information, see http://www.synclab.org/radclock/
+
+In collaboration with:	Julien Ridoux (jridoux at unimelb edu au)
+
+------------------------------------------------------------------------
+---
+ share/man/man4/bpf.4 |  101 +++++++++++++-------
+ sys/net/bpf.c        |  254 ++++++++++++++++++++++++++++++++++++---------------
+ sys/net/bpf.h        |   21 ++--
+ 3 files changed, 258 insertions(+), 118 deletions(-)
+
+Index: 9.0/share/man/man4/bpf.4
+===================================================================
+--- 9.0.orig/share/man/man4/bpf.4	2012-02-27 15:51:16.000000000 +1100
++++ 9.0/share/man/man4/bpf.4	2012-02-27 21:50:32.000000000 +1100
+@@ -42,21 +42,21 @@
+ .\" written permission.
+ .\" THIS SOFTWARE IS PROVIDED ``AS IS'' AND WITHOUT ANY EXPRESS OR IMPLIED
+ .\" WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
+ .\" MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
+ .\"
+ .\" This document is derived in part from the enet man page (enet.4)
+ .\" distributed with 4.3BSD Unix.
+ .\"
+ .\" $FreeBSD: releng/9.0/share/man/man4/bpf.4 213573 2010-10-08 12:40:16Z uqs $
+ .\"
+-.Dd June 15, 2010
++.Dd December 30, 2011
+ .Dt BPF 4
+ .Os
+ .Sh NAME
+ .Nm bpf
+ .Nd Berkeley Packet Filter
+ .Sh SYNOPSIS
+ .Cd device bpf
+ .Sh DESCRIPTION
+ The Berkeley Packet Filter
+ provides a raw interface to data link layers in a protocol
+@@ -509,75 +509,62 @@ Set to
+ to see packets originating locally and remotely on the interface.
+ Set to
+ .Dv BPF_D_OUT
+ to see only outgoing packets on the interface.
+ This setting is initialized to
+ .Dv BPF_D_INOUT
+ by default.
+ .It Dv BIOCSTSTAMP
+ .It Dv BIOCGTSTAMP
+ .Pq Li u_int
+-Set or get format and resolution of the time stamps returned by BPF.
++Set or get the format and resolution of time stamps returned by BPF.
++The per-BPF descriptor configuration provided by the
++.Dv BIOCSTSTAMP
++IOCTL complements the per-interface time stamp configuration detailed in the
++.Sx CONFIGURATION
++section.
++.Pp
+ Set to
+-.Dv BPF_T_MICROTIME ,
+-.Dv BPF_T_MICROTIME_FAST ,
+-.Dv BPF_T_MICROTIME_MONOTONIC ,
++.Dv BPF_T_MICROTIME
+ or
+-.Dv BPF_T_MICROTIME_MONOTONIC_FAST
++.Dv BPF_T_MICROTIME_MONOTONIC
+ to get time stamps in 64-bit
+ .Vt struct timeval
+ format.
+ Set to
+-.Dv BPF_T_NANOTIME ,
+-.Dv BPF_T_NANOTIME_FAST ,
+-.Dv BPF_T_NANOTIME_MONOTONIC ,
++.Dv BPF_T_NANOTIME
+ or
+-.Dv BPF_T_NANOTIME_MONOTONIC_FAST
++.Dv BPF_T_NANOTIME_MONOTONIC
+ to get time stamps in 64-bit
+ .Vt struct timespec
+ format.
+ Set to
+-.Dv BPF_T_BINTIME ,
+-.Dv BPF_T_BINTIME_FAST ,
+-.Dv BPF_T_NANOTIME_MONOTONIC ,
++.Dv BPF_T_BINTIME
+ or
+-.Dv BPF_T_BINTIME_MONOTONIC_FAST
++.Dv BPF_T_BINTIME_MONOTONIC
+ to get time stamps in 64-bit
+ .Vt struct bintime
+ format.
+ Set to
+ .Dv BPF_T_NONE
+-to ignore time stamp.
++to not set a time stamp.
++By default, time stamps are initilized to
++.Dv BPF_T_MICROTIME .
++.Pp
+ All 64-bit time stamp formats are wrapped in
+ .Vt struct bpf_ts .
+ The
+-.Dv BPF_T_MICROTIME_FAST ,
+-.Dv BPF_T_NANOTIME_FAST ,
+-.Dv BPF_T_BINTIME_FAST ,
+-.Dv BPF_T_MICROTIME_MONOTONIC_FAST ,
+-.Dv BPF_T_NANOTIME_MONOTONIC_FAST ,
+-and
+-.Dv BPF_T_BINTIME_MONOTONIC_FAST
+-are analogs of corresponding formats without _FAST suffix but do not perform
+-a full time counter query, so their accuracy is one timer tick.
+-The
+ .Dv BPF_T_MICROTIME_MONOTONIC ,
+ .Dv BPF_T_NANOTIME_MONOTONIC ,
+-.Dv BPF_T_BINTIME_MONOTONIC ,
+-.Dv BPF_T_MICROTIME_MONOTONIC_FAST ,
+-.Dv BPF_T_NANOTIME_MONOTONIC_FAST ,
+ and
+-.Dv BPF_T_BINTIME_MONOTONIC_FAST
++.Dv BPF_T_BINTIME_MONOTONIC
+ store the time elapsed since kernel boot.
+-This setting is initialized to
+-.Dv BPF_T_MICROTIME
+-by default.
+ .It Dv BIOCFEEDBACK
+ .Pq Li u_int
+ Set packet feedback mode.
+ This allows injected packets to be fed back as input to the interface when
+ output via the interface is successful.
+ When
+ .Dv BPF_D_INOUT
+ direction is set, injected outgoing packet is not returned by BPF to avoid
+ duplication. This flag is initialized to zero by default.
+ .It Dv BIOCLOCK
+@@ -685,28 +672,28 @@ data structures, which is required on al
+ architectures and improves performance on many other architectures.
+ The packet filter ensures that the
+ .Vt bpf_xhdr ,
+ .Vt bpf_hdr
+ and the network layer
+ header will be word aligned.
+ Currently,
+ .Vt bpf_hdr
+ is used when the time stamp is set to
+ .Dv BPF_T_MICROTIME ,
+-.Dv BPF_T_MICROTIME_FAST ,
+ .Dv BPF_T_MICROTIME_MONOTONIC ,
+-.Dv BPF_T_MICROTIME_MONOTONIC_FAST ,
+ or
+ .Dv BPF_T_NONE
+-for backward compatibility reasons.  Otherwise,
++for backward compatibility reasons.
++Otherwise,
+ .Vt bpf_xhdr
+-is used.  However,
++is used.
++However,
+ .Vt bpf_hdr
+ may be deprecated in the near future.
+ Suitable precautions
+ must be taken when accessing the link layer protocol fields on alignment
+ restricted machines.
+ (This is not a problem on an Ethernet, since
+ the type field is a short falling on an even offset,
+ and the addresses are probably accessed in a bytewise fashion).
+ .Pp
+ Additionally, individual packets are padded so that each starts
+@@ -945,20 +932,62 @@ BPF_MISC+BPF_TXA	A <- X
+ .Ed
+ .El
+ .Pp
+ The
+ .Nm
+ interface provides the following macros to facilitate
+ array initializers:
+ .Fn BPF_STMT opcode operand
+ and
+ .Fn BPF_JUMP opcode operand true_offset false_offset .
++.Sh CONFIGURATION
++Per-interface BPF time stamp configuration is possible via the
++.Va net.bpf.tscfg
++.Xr sysctl 8
++tree which provides the following variables:
++.Bl -tag -width "    " -offset indent
++.It Va net.bpf.tscfg.default
++The default time stamp configuration setting used by all BPF attached interfaces
++which have not been explicitly changed.
++Valid values are "none", "fast", "normal" and "external".
++The default is "normal".
++.It Va net.bpf.tscfg.<interface>
++The time stamp configuration setting used by a specific BPF attached interface.
++There will be a separate entry in the
++.Va net.bpf.tscfg
++sysctl tree for each BPF attached interface.
++Valid values are "default", "none", "fast", "normal" and "external".
++The default is "default", which means the system wide default setting specified
++by the
++.Va net.bpf.tscfg.default
++sysctl is used.
++.El
++.Pp
++The meaning of each per-interface time stamp configuration option is as follows:
++.Bl -tag -width "    " -offset indent
++.It none
++Do not generate a time stamp for all packets tapped from this interface.
++.It fast
++Generate a time stamp for all packets tapped from this interface by doing a fast
++read of the system clock.
++Fast reads have a granularity equivalent to the underlying kernel tick rate.
++.It normal
++Generate a time stamp for all packets tapped from this interface by doing a full
++read of the system clock.
++Full reads are slower than fast reads, but provide full hardware time counter
++granularity for the time stamp.
++.It external
++Something external to BPF is capable of generating time stamps for all packets
++tapped from this interface and BPF should use these external time stamps.
++Currently unimplemented, but will become useful when drivers for NICs which
++support hardware packet time stamping add support for this feature.
++.El
+ .Sh FILES
+ .Bl -tag -compact -width /dev/bpf
+ .It Pa /dev/bpf
+ the packet filter device
+ .El
+ .Sh EXAMPLES
+ The following filter is taken from the Reverse ARP Daemon.
+ It accepts only Reverse ARP requests.
+ .Bd -literal
+ struct bpf_insn insns[] = {
+Index: 9.0/sys/net/bpf.c
+===================================================================
+--- 9.0.orig/sys/net/bpf.c	2012-02-27 21:46:26.000000000 +1100
++++ 9.0/sys/net/bpf.c	2012-02-27 21:49:48.000000000 +1100
+@@ -1,19 +1,24 @@
+ /*-
+  * Copyright (C) 1990, 1991, 1993
+- *	The Regents of the University of California.  All rights reserved.
++ *	The Regents of the University of California.
++ * Copyright (C) 2011 The University of Melbourne.
++ * All rights reserved.
+  *
+  * This code is derived from the Stanford/CMU enet packet filter,
+  * (net/enet.c) distributed as part of 4.3BSD, and code contributed
+  * to Berkeley by Steven McCanne and Van Jacobson both of Lawrence
+  * Berkeley Laboratory.
+  *
++ * Portions of this software were developed by Julien Ridoux at the University
++ * of Melbourne under sponsorship from the FreeBSD Foundation.
++ *
+  * Redistribution and use in source and binary forms, with or without
+  * modification, are permitted provided that the following conditions
+  * are met:
+  * 1. Redistributions of source code must retain the above copyright
+  *    notice, this list of conditions and the following disclaimer.
+  * 2. Redistributions in binary form must reproduce the above copyright
+  *    notice, this list of conditions and the following disclaimer in the
+  *    documentation and/or other materials provided with the distribution.
+  * 4. Neither the name of the University nor the names of its contributors
+  *    may be used to endorse or promote products derived from this software
+@@ -48,20 +53,21 @@ __FBSDID("$FreeBSD: releng/9.0/sys/net/b
+ #include <sys/fcntl.h>
+ #include <sys/jail.h>
+ #include <sys/malloc.h>
+ #include <sys/mbuf.h>
+ #include <sys/time.h>
+ #include <sys/priv.h>
+ #include <sys/proc.h>
+ #include <sys/signalvar.h>
+ #include <sys/filio.h>
+ #include <sys/sockio.h>
++#include <sys/timeffc.h>
+ #include <sys/ttycom.h>
+ #include <sys/uio.h>
+ 
+ #include <sys/event.h>
+ #include <sys/file.h>
+ #include <sys/poll.h>
+ #include <sys/proc.h>
+ 
+ #include <sys/socket.h>
+ 
+@@ -105,39 +111,60 @@ MALLOC_DEFINE(M_BPF, "BPF", "BPF data");
+  * instead of the standard one for 32-bit streams.  We mark the a stream as
+  * 32-bit the first time we see a 32-bit compat ioctl request.
+  */
+ struct bpf_hdr32 {
+ 	struct timeval32 bh_tstamp;	/* time stamp */
+ 	uint32_t	bh_caplen;	/* length of captured portion */
+ 	uint32_t	bh_datalen;	/* original length of packet */
+ 	uint16_t	bh_hdrlen;	/* length of bpf header (this struct
+ 					   plus alignment padding) */
+ };
+-#endif
++#endif /* !BURN_BRIDGES */
+ 
+ struct bpf_program32 {
+ 	u_int bf_len;
+ 	uint32_t bf_insns;
+ };
+ 
+ struct bpf_dltlist32 {
+ 	u_int	bfl_len;
+ 	u_int	bfl_list;
+ };
+ 
+ #define	BIOCSETF32	_IOW('B', 103, struct bpf_program32)
+ #define	BIOCSRTIMEOUT32	_IOW('B', 109, struct timeval32)
+ #define	BIOCGRTIMEOUT32	_IOR('B', 110, struct timeval32)
+ #define	BIOCGDLTLIST32	_IOWR('B', 121, struct bpf_dltlist32)
+ #define	BIOCSETWF32	_IOW('B', 123, struct bpf_program32)
+ #define	BIOCSETFNR32	_IOW('B', 130, struct bpf_program32)
+-#endif
++#endif /* COMPAT_FREEBSD32 */
++
++static const char *bpfiftstypes[] = {
++	"default",
++#define	BPF_TSTAMP_DEFAULT	0
++	"none",
++#define	BPF_TSTAMP_NONE		1
++	"fast",
++#define	BPF_TSTAMP_FAST		2
++	"normal",
++#define	BPF_TSTAMP_NORMAL	3
++	"external"
++#define	BPF_TSTAMP_EXTERNAL	4
++};
++#define	NUM_BPFIFTSTYPES	(sizeof(bpfiftstypes) / sizeof(*bpfiftstypes))
++
++#define	SET_CLOCKCFG_FLAGS(tstype, active, clock, flags) do {		\
++	(flags) = 0;							\
++	(clock) = SYSCLOCK_FBCK;					\
++	if ((tstype) & BPF_T_MONOTONIC)					\
++		(flags) |= FBCLOCK_UPTIME;				\
++} while (0)
+ 
+ /*
+  * bpf_iflist is a list of BPF interface structures, each corresponding to a
+  * specific DLT.  The same network interface might have several BPF interface
+  * structures registered by different layers in the stack (i.e., 802.11
+  * frames, ethernet frames, etc).
+  */
+ static LIST_HEAD(, bpf_if)	bpf_iflist;
+ static struct mtx	bpf_mtx;		/* bpf global lock */
+ static int		bpf_bpfd_cnt;
+@@ -155,30 +182,37 @@ static void	catchpacket(struct bpf_d *, 
+ 		    void (*)(struct bpf_d *, caddr_t, u_int, void *, u_int),
+ 		    struct bintime *);
+ static void	reset_d(struct bpf_d *);
+ static int	 bpf_setf(struct bpf_d *, struct bpf_program *, u_long cmd);
+ static int	bpf_getdltlist(struct bpf_d *, struct bpf_dltlist *);
+ static int	bpf_setdlt(struct bpf_d *, u_int);
+ static void	filt_bpfdetach(struct knote *);
+ static int	filt_bpfread(struct knote *, long);
+ static void	bpf_drvinit(void *);
+ static int	bpf_stats_sysctl(SYSCTL_HANDLER_ARGS);
++static int	bpf_tscfg_sysctl_handler(SYSCTL_HANDLER_ARGS);
+ 
+ SYSCTL_NODE(_net, OID_AUTO, bpf, CTLFLAG_RW, 0, "bpf sysctl");
+ int bpf_maxinsns = BPF_MAXINSNS;
+ SYSCTL_INT(_net_bpf, OID_AUTO, maxinsns, CTLFLAG_RW,
+     &bpf_maxinsns, 0, "Maximum bpf program instructions");
+ static int bpf_zerocopy_enable = 0;
+ SYSCTL_INT(_net_bpf, OID_AUTO, zerocopy_enable, CTLFLAG_RW,
+     &bpf_zerocopy_enable, 0, "Enable new zero-copy BPF buffer sessions");
+ SYSCTL_NODE(_net_bpf, OID_AUTO, stats, CTLFLAG_MPSAFE | CTLFLAG_RW,
+     bpf_stats_sysctl, "bpf statistics portal");
++static SYSCTL_NODE(_net_bpf, OID_AUTO, tscfg, CTLFLAG_RW, NULL,
++    "Per-interface timestamp configuration");
++static int bpf_default_tstype = BPF_TSTAMP_NORMAL;
++SYSCTL_PROC(_net_bpf_tscfg, OID_AUTO, default,
++    CTLTYPE_STRING | CTLFLAG_RW, NULL, 0, bpf_tscfg_sysctl_handler, "A",
++    "Per-interface system wide default timestamp configuration");
+ 
+ static	d_open_t	bpfopen;
+ static	d_read_t	bpfread;
+ static	d_write_t	bpfwrite;
+ static	d_ioctl_t	bpfioctl;
+ static	d_poll_t	bpfpoll;
+ static	d_kqfilter_t	bpfkqfilter;
+ 
+ static struct cdevsw bpf_cdevsw = {
+ 	.d_version =	D_VERSION,
+@@ -1752,101 +1786,76 @@ filt_bpfread(struct knote *kn, long hint
+ 			kn->kn_data += d->bd_hlen;
+ 	} else if (d->bd_rtout > 0 && d->bd_state == BPF_IDLE) {
+ 		callout_reset(&d->bd_callout, d->bd_rtout,
+ 		    bpf_timed_out, d);
+ 		d->bd_state = BPF_WAITING;
+ 	}
+ 
+ 	return (ready);
+ }
+ 
+-#define	BPF_TSTAMP_NONE		0
+-#define	BPF_TSTAMP_FAST		1
+-#define	BPF_TSTAMP_NORMAL	2
+-#define	BPF_TSTAMP_EXTERN	3
+-
+-static int
+-bpf_ts_quality(int tstype)
+-{
+-
+-	if (tstype == BPF_T_NONE)
+-		return (BPF_TSTAMP_NONE);
+-	if ((tstype & BPF_T_FAST) != 0)
+-		return (BPF_TSTAMP_FAST);
+-
+-	return (BPF_TSTAMP_NORMAL);
+-}
+-
+-static int
+-bpf_gettime(struct bintime *bt, int tstype, struct mbuf *m)
+-{
+-	struct m_tag *tag;
+-	int quality;
+-
+-	quality = bpf_ts_quality(tstype);
+-	if (quality == BPF_TSTAMP_NONE)
+-		return (quality);
+-
+-	if (m != NULL) {
+-		tag = m_tag_locate(m, MTAG_BPF, MTAG_BPF_TIMESTAMP, NULL);
+-		if (tag != NULL) {
+-			*bt = *(struct bintime *)(tag + 1);
+-			return (BPF_TSTAMP_EXTERN);
+-		}
+-	}
+-	if (quality == BPF_TSTAMP_NORMAL)
+-		binuptime(bt);
+-	else
+-		getbinuptime(bt);
+-
+-	return (quality);
+-}
+-
+ /*
+  * Incoming linkage from device drivers.  Process the packet pkt, of length
+  * pktlen, which is stored in a contiguous buffer.  The packet is parsed
+  * by each process' filter, and if accepted, stashed into the corresponding
+  * buffer.
+  */
+ void
+ bpf_tap(struct bpf_if *bp, u_char *pkt, u_int pktlen)
+ {
+ 	struct bintime bt;
++	struct sysclock_snap cs;
+ 	struct bpf_d *d;
++	int tstype, whichclock;
++	u_int clockflags, slen;
+ #ifdef BPF_JITTER
+ 	bpf_jit_filter *bf;
+ #endif
+-	u_int slen;
+-	int gottime;
+ 
+-	gottime = BPF_TSTAMP_NONE;
++	tstype = bp->tstype;
++	if (tstype == BPF_TSTAMP_DEFAULT)
++		tstype = bpf_default_tstype;
++
++	if (tstype == BPF_TSTAMP_NORMAL || tstype == BPF_TSTAMP_FAST)
++		sysclock_getsnapshot(&cs, tstype == BPF_TSTAMP_FAST ? 1 : 0);
++	else
++		bzero(&bt, sizeof(bt));
++
+ 	BPFIF_LOCK(bp);
+ 	LIST_FOREACH(d, &bp->bif_dlist, bd_next) {
+ 		BPFD_LOCK(d);
+ 		++d->bd_rcount;
+ 		/*
+ 		 * NB: We dont call BPF_CHECK_DIRECTION() here since there is no
+ 		 * way for the caller to indiciate to us whether this packet
+ 		 * is inbound or outbound.  In the bpf_mtap() routines, we use
+ 		 * the interface pointers on the mbuf to figure it out.
+ 		 */
+ #ifdef BPF_JITTER
+ 		bf = bpf_jitter_enable != 0 ? d->bd_bfilter : NULL;
+ 		if (bf != NULL)
+ 			slen = (*(bf->func))(pkt, pktlen, pktlen);
+ 		else
+ #endif
+ 		slen = bpf_filter(d->bd_rfilter, pkt, pktlen, pktlen);
+ 		if (slen != 0) {
+ 			d->bd_fcount++;
+-			if (gottime < bpf_ts_quality(d->bd_tstamp))
+-				gottime = bpf_gettime(&bt, d->bd_tstamp, NULL);
++			if (tstype == BPF_TSTAMP_NORMAL ||
++			    tstype == BPF_TSTAMP_FAST) {
++				whichclock = -1;
++				SET_CLOCKCFG_FLAGS(d->bd_tstamp,
++				    cs.sysclock_active, whichclock, clockflags);
++				KASSERT(whichclock >= 0, ("Bogus BPF tstamp "
++				    "configuration: 0x%04x", d->bd_tstamp));
++				sysclock_snap2bintime(&cs, &bt, whichclock,
++				    clockflags);
++			}
+ #ifdef MAC
+ 			if (mac_bpfdesc_check_receive(d, bp->bif_ifp) == 0)
+ #endif
+ 				catchpacket(d, pkt, pktlen, slen,
+ 				    bpf_append_bytes, &bt);
+ 		}
+ 		BPFD_UNLOCK(d);
+ 	}
+ 	BPFIF_UNLOCK(bp);
+ }
+@@ -1855,125 +1864,164 @@ bpf_tap(struct bpf_if *bp, u_char *pkt, 
+ 	    (((d)->bd_direction == BPF_D_IN && (r) != (i)) ||	\
+ 	    ((d)->bd_direction == BPF_D_OUT && (r) == (i)))
+ 
+ /*
+  * Incoming linkage from device drivers, when packet is in an mbuf chain.
+  */
+ void
+ bpf_mtap(struct bpf_if *bp, struct mbuf *m)
+ {
+ 	struct bintime bt;
++	struct sysclock_snap cs;
+ 	struct bpf_d *d;
++	u_int clockflags, pktlen, slen;
++	int tstype, whichclock;
+ #ifdef BPF_JITTER
+ 	bpf_jit_filter *bf;
+ #endif
+-	u_int pktlen, slen;
+-	int gottime;
+ 
+ 	/* Skip outgoing duplicate packets. */
+ 	if ((m->m_flags & M_PROMISC) != 0 && m->m_pkthdr.rcvif == NULL) {
+ 		m->m_flags &= ~M_PROMISC;
+ 		return;
+ 	}
+ 
++	tstype = bp->tstype;
++	if (tstype == BPF_TSTAMP_DEFAULT)
++		tstype = bpf_default_tstype;
++
++	if (tstype == BPF_TSTAMP_NORMAL || tstype == BPF_TSTAMP_FAST)
++		sysclock_getsnapshot(&cs, tstype == BPF_TSTAMP_FAST ?
++		    1 : 0);
++#ifdef notyet
++	else if (tstype == BPF_TSTAMP_EXTERNAL)
++		/* XXX: Convert external tstamp to bintime. */
++#endif
++	else
++		bzero(&bt, sizeof(bt));
++
+ 	pktlen = m_length(m, NULL);
+ 
+-	gottime = BPF_TSTAMP_NONE;
+ 	BPFIF_LOCK(bp);
+ 	LIST_FOREACH(d, &bp->bif_dlist, bd_next) {
+ 		if (BPF_CHECK_DIRECTION(d, m->m_pkthdr.rcvif, bp->bif_ifp))
+ 			continue;
+ 		BPFD_LOCK(d);
+ 		++d->bd_rcount;
+ #ifdef BPF_JITTER
+ 		bf = bpf_jitter_enable != 0 ? d->bd_bfilter : NULL;
+ 		/* XXX We cannot handle multiple mbufs. */
+ 		if (bf != NULL && m->m_next == NULL)
+ 			slen = (*(bf->func))(mtod(m, u_char *), pktlen, pktlen);
+ 		else
+ #endif
+ 		slen = bpf_filter(d->bd_rfilter, (u_char *)m, pktlen, 0);
+ 		if (slen != 0) {
+ 			d->bd_fcount++;
+-			if (gottime < bpf_ts_quality(d->bd_tstamp))
+-				gottime = bpf_gettime(&bt, d->bd_tstamp, m);
++			if (tstype == BPF_TSTAMP_NORMAL ||
++			    tstype == BPF_TSTAMP_FAST) {
++				whichclock = -1;
++				SET_CLOCKCFG_FLAGS(d->bd_tstamp,
++				    cs.sysclock_active, whichclock, clockflags);
++				KASSERT(whichclock >= 0, ("Bogus BPF tstamp "
++				    "configuration: 0x%04x", d->bd_tstamp));
++				sysclock_snap2bintime(&cs, &bt, whichclock,
++				    clockflags);
++			}
+ #ifdef MAC
+ 			if (mac_bpfdesc_check_receive(d, bp->bif_ifp) == 0)
+ #endif
+ 				catchpacket(d, (u_char *)m, pktlen, slen,
+ 				    bpf_append_mbuf, &bt);
+ 		}
+ 		BPFD_UNLOCK(d);
+ 	}
+ 	BPFIF_UNLOCK(bp);
+ }
+ 
+ /*
+  * Incoming linkage from device drivers, when packet is in
+  * an mbuf chain and to be prepended by a contiguous header.
+  */
+ void
+ bpf_mtap2(struct bpf_if *bp, void *data, u_int dlen, struct mbuf *m)
+ {
+ 	struct bintime bt;
++	struct sysclock_snap cs;
+ 	struct mbuf mb;
+ 	struct bpf_d *d;
+-	u_int pktlen, slen;
+-	int gottime;
++	u_int clockflags, pktlen, slen;
++	int tstype, whichclock;
+ 
+ 	/* Skip outgoing duplicate packets. */
+ 	if ((m->m_flags & M_PROMISC) != 0 && m->m_pkthdr.rcvif == NULL) {
+ 		m->m_flags &= ~M_PROMISC;
+ 		return;
+ 	}
+ 
++	tstype = bp->tstype;
++	if (tstype == BPF_TSTAMP_DEFAULT)
++		tstype = bpf_default_tstype;
++
++	if (tstype == BPF_TSTAMP_NORMAL || tstype == BPF_TSTAMP_FAST)
++		sysclock_getsnapshot(&cs, tstype == BPF_TSTAMP_FAST ?
++		    1 : 0);
++#ifdef notyet
++	else if (tstype == BPF_TSTAMP_EXTERNAL)
++		/* XXX: Convert extern tstamp to bintime. */
++#endif
++	else
++		bzero(&bt, sizeof(bt));
++
+ 	pktlen = m_length(m, NULL);
+ 	/*
+ 	 * Craft on-stack mbuf suitable for passing to bpf_filter.
+ 	 * Note that we cut corners here; we only setup what's
+ 	 * absolutely needed--this mbuf should never go anywhere else.
+ 	 */
+ 	mb.m_next = m;
+ 	mb.m_data = data;
+ 	mb.m_len = dlen;
+ 	pktlen += dlen;
+ 
+-	gottime = BPF_TSTAMP_NONE;
+ 	BPFIF_LOCK(bp);
+ 	LIST_FOREACH(d, &bp->bif_dlist, bd_next) {
+ 		if (BPF_CHECK_DIRECTION(d, m->m_pkthdr.rcvif, bp->bif_ifp))
+ 			continue;
+ 		BPFD_LOCK(d);
+ 		++d->bd_rcount;
+ 		slen = bpf_filter(d->bd_rfilter, (u_char *)&mb, pktlen, 0);
+ 		if (slen != 0) {
+ 			d->bd_fcount++;
+-			if (gottime < bpf_ts_quality(d->bd_tstamp))
+-				gottime = bpf_gettime(&bt, d->bd_tstamp, m);
++			if (tstype == BPF_TSTAMP_NORMAL ||
++			    tstype == BPF_TSTAMP_FAST) {
++				whichclock = -1;
++				SET_CLOCKCFG_FLAGS(d->bd_tstamp,
++				    cs.sysclock_active, whichclock, clockflags);
++				KASSERT(whichclock >= 0, ("Bogus BPF tstamp "
++				    "configuration: 0x%04x", d->bd_tstamp));
++				sysclock_snap2bintime(&cs, &bt, whichclock,
++				    clockflags);
++			}
+ #ifdef MAC
+ 			if (mac_bpfdesc_check_receive(d, bp->bif_ifp) == 0)
+ #endif
+ 				catchpacket(d, (u_char *)&mb, pktlen, slen,
+ 				    bpf_append_mbuf, &bt);
+ 		}
+ 		BPFD_UNLOCK(d);
+ 	}
+ 	BPFIF_UNLOCK(bp);
+ }
+ 
+ #undef	BPF_CHECK_DIRECTION
+ 
+-#undef	BPF_TSTAMP_NONE
+-#undef	BPF_TSTAMP_FAST
+-#undef	BPF_TSTAMP_NORMAL
+-#undef	BPF_TSTAMP_EXTERN
+-
+ static int
+ bpf_hdrlen(struct bpf_d *d)
+ {
+ 	int hdrlen;
+ 
+ 	hdrlen = d->bd_bif->bif_hdrlen;
+ #ifndef BURN_BRIDGES
+ 	if (d->bd_tstamp == BPF_T_NONE ||
+ 	    BPF_T_FORMAT(d->bd_tstamp) == BPF_T_MICROTIME)
+ #ifdef COMPAT_FREEBSD32
+@@ -1991,29 +2039,23 @@ bpf_hdrlen(struct bpf_d *d)
+ 	else
+ #endif
+ 		hdrlen = BPF_WORDALIGN(hdrlen);
+ 
+ 	return (hdrlen - d->bd_bif->bif_hdrlen);
+ }
+ 
+ static void
+ bpf_bintime2ts(struct bintime *bt, struct bpf_ts *ts, int tstype)
+ {
+-	struct bintime bt2;
+ 	struct timeval tsm;
+ 	struct timespec tsn;
+ 
+-	if ((tstype & BPF_T_MONOTONIC) == 0) {
+-		bt2 = *bt;
+-		bintime_add(&bt2, &boottimebin);
+-		bt = &bt2;
+-	}
+ 	switch (BPF_T_FORMAT(tstype)) {
+ 	case BPF_T_MICROTIME:
+ 		bintime2timeval(bt, &tsm);
+ 		ts->bt_sec = tsm.tv_sec;
+ 		ts->bt_frac = tsm.tv_usec;
+ 		break;
+ 	case BPF_T_NANOTIME:
+ 		bintime2timespec(bt, &tsn);
+ 		ts->bt_sec = tsn.tv_sec;
+ 		ts->bt_frac = tsn.tv_nsec;
+@@ -2193,20 +2235,78 @@ bpf_freed(struct bpf_d *d)
+ 		if (d->bd_bfilter != NULL)
+ 			bpf_destroy_jit_filter(d->bd_bfilter);
+ #endif
+ 	}
+ 	if (d->bd_wfilter != NULL)
+ 		free((caddr_t)d->bd_wfilter, M_BPF);
+ 	mtx_destroy(&d->bd_mtx);
+ }
+ 
+ /*
++ * Show or change the per bpf_if or system wide default timestamp configuration.
++ */
++static int
++bpf_tscfg_sysctl_handler(SYSCTL_HANDLER_ARGS)
++{
++	char tstype_name[16];
++	struct bpf_if *bp;
++	int error, tstype;
++
++	bp = (struct bpf_if *)arg1;
++
++	if (req->newptr == NULL) {
++		/*
++		 * Return the name of the BPF interface's timestamp setting, or
++		 * the system wide default if bp is NULL.
++		 */
++		strlcpy(tstype_name,
++		    bpfiftstypes[bp ? bp->tstype : bpf_default_tstype],
++		    sizeof(tstype_name));
++		error = sysctl_handle_string(oidp, tstype_name,
++		    sizeof(tstype_name), req);
++	} else {
++		/*
++		 * Change the timestamp configuration for this BPF interface or
++		 * the system wide default setting.
++		 */
++		error = EINVAL;
++		for (tstype = 0; tstype < NUM_BPFIFTSTYPES; tstype++) {
++			if (strncmp((char *)req->newptr, bpfiftstypes[tstype],
++			    strlen(bpfiftstypes[tstype])) == 0) {
++				/* User specified type found in bpfiftstypes. */
++				if (strcmp(oidp->oid_name, "default") == 0) {
++					/*
++					 * Don't allow BPF_TSTAMP_DEFAULT to be
++					 * assigned to the
++					 * "net.bpf.tscfg.default" OID.
++					 */
++					if (tstype != BPF_TSTAMP_DEFAULT) {
++						bpf_default_tstype = tstype;
++						error = 0;
++					}
++				} else {
++					/*
++					 * Valid tstype for
++					 * "net.bpf.tscfg.<iface>" OID.
++					 */
++					bp->tstype = tstype;
++					error = 0;
++				}
++				break;
++			}
++		}
++	}
++
++	return (error);
++}
++
++/*
+  * Attach an interface to bpf.  dlt is the link layer type; hdrlen is the
+  * fixed size of the link header (variable length headers not yet supported).
+  */
+ void
+ bpfattach(struct ifnet *ifp, u_int dlt, u_int hdrlen)
+ {
+ 
+ 	bpfattach2(ifp, dlt, hdrlen, &ifp->if_bpf);
+ }
+ 
+@@ -2218,20 +2318,31 @@ bpfattach(struct ifnet *ifp, u_int dlt, 
+  */
+ void
+ bpfattach2(struct ifnet *ifp, u_int dlt, u_int hdrlen, struct bpf_if **driverp)
+ {
+ 	struct bpf_if *bp;
+ 
+ 	bp = malloc(sizeof(*bp), M_BPF, M_NOWAIT | M_ZERO);
+ 	if (bp == NULL)
+ 		panic("bpfattach");
+ 
++	bp->tscfgoid = SYSCTL_ADD_PROC(NULL,
++	    SYSCTL_STATIC_CHILDREN(_net_bpf_tscfg), OID_AUTO, ifp->if_xname,
++	    CTLTYPE_STRING | CTLFLAG_RW, bp, sizeof(bp),
++	    bpf_tscfg_sysctl_handler, "A",
++	    "Interface BPF timestamp configuration");
++	if (bp->tscfgoid == NULL) {
++		free(bp, M_BPF);
++		panic("bpfattach tscfgoid");
++	}
++
++	bp->tstype = BPF_TSTAMP_DEFAULT;
+ 	LIST_INIT(&bp->bif_dlist);
+ 	bp->bif_ifp = ifp;
+ 	bp->bif_dlt = dlt;
+ 	mtx_init(&bp->bif_mtx, "bpf interface lock", NULL, MTX_DEF);
+ 	KASSERT(*driverp == NULL, ("bpfattach2: driverp already initialized"));
+ 	*driverp = bp;
+ 
+ 	mtx_lock(&bpf_mtx);
+ 	LIST_INSERT_HEAD(&bpf_iflist, bp, bif_next);
+ 	mtx_unlock(&bpf_mtx);
+@@ -2271,20 +2382,21 @@ bpfdetach(struct ifnet *ifp)
+ 	LIST_REMOVE(bp, bif_next);
+ 	mtx_unlock(&bpf_mtx);
+ 
+ 	while ((d = LIST_FIRST(&bp->bif_dlist)) != NULL) {
+ 		bpf_detachd(d);
+ 		BPFD_LOCK(d);
+ 		bpf_wakeup(d);
+ 		BPFD_UNLOCK(d);
+ 	}
+ 
++	sysctl_remove_oid(bp->tscfgoid, 1, 0);
+ 	mtx_destroy(&bp->bif_mtx);
+ 	free(bp, M_BPF);
+ }
+ 
+ /*
+  * Get a list of available data link type of the interface.
+  */
+ static int
+ bpf_getdltlist(struct bpf_d *d, struct bpf_dltlist *bfl)
+ {
+Index: 9.0/sys/net/bpf.h
+===================================================================
+--- 9.0.orig/sys/net/bpf.h	2012-02-27 15:52:15.000000000 +1100
++++ 9.0/sys/net/bpf.h	2012-02-27 21:47:42.000000000 +1100
+@@ -1,19 +1,24 @@
+ /*-
+  * Copyright (C) 1990, 1991, 1993
+- *	The Regents of the University of California.  All rights reserved.
++ *	The Regents of the University of California.
++ * Copyright (C) 2011 The University of Melbourne.
++ * All rights reserved.
+  *
+  * This code is derived from the Stanford/CMU enet packet filter,
+  * (net/enet.c) distributed as part of 4.3BSD, and code contributed
+  * to Berkeley by Steven McCanne and Van Jacobson both of Lawrence
+  * Berkeley Laboratory.
+  *
++ * Portions of this software were developed by Julien Ridoux at the University
++ * of Melbourne under sponsorship from the FreeBSD Foundation.
++ *
+  * Redistribution and use in source and binary forms, with or without
+  * modification, are permitted provided that the following conditions
+  * are met:
+  * 1. Redistributions of source code must retain the above copyright
+  *    notice, this list of conditions and the following disclaimer.
+  * 2. Redistributions in binary form must reproduce the above copyright
+  *    notice, this list of conditions and the following disclaimer in the
+  *    documentation and/or other materials provided with the distribution.
+  * 4. Neither the name of the University nor the names of its contributors
+  *    may be used to endorse or promote products derived from this software
+@@ -159,39 +164,31 @@ enum bpf_direction {
+ 	BPF_D_OUT	/* See outgoing packets */
+ };
+ 
+ /* Time stamping functions */
+ #define	BPF_T_MICROTIME		0x0000
+ #define	BPF_T_NANOTIME		0x0001
+ #define	BPF_T_BINTIME		0x0002
+ #define	BPF_T_NONE		0x0003
+ #define	BPF_T_FORMAT_MASK	0x0003
+ #define	BPF_T_NORMAL		0x0000
+-#define	BPF_T_FAST		0x0100
+-#define	BPF_T_MONOTONIC		0x0200
+-#define	BPF_T_MONOTONIC_FAST	(BPF_T_FAST | BPF_T_MONOTONIC)
+-#define	BPF_T_FLAG_MASK		0x0300
++#define	BPF_T_MONOTONIC		0x0100
++#define	BPF_T_FLAG_MASK		0x0100
+ #define	BPF_T_FORMAT(t)		((t) & BPF_T_FORMAT_MASK)
+ #define	BPF_T_FLAG(t)		((t) & BPF_T_FLAG_MASK)
+ #define	BPF_T_VALID(t)						\
+     ((t) == BPF_T_NONE || (BPF_T_FORMAT(t) != BPF_T_NONE &&	\
+     ((t) & ~(BPF_T_FORMAT_MASK | BPF_T_FLAG_MASK)) == 0))
+ 
+-#define	BPF_T_MICROTIME_FAST		(BPF_T_MICROTIME | BPF_T_FAST)
+-#define	BPF_T_NANOTIME_FAST		(BPF_T_NANOTIME | BPF_T_FAST)
+-#define	BPF_T_BINTIME_FAST		(BPF_T_BINTIME | BPF_T_FAST)
+ #define	BPF_T_MICROTIME_MONOTONIC	(BPF_T_MICROTIME | BPF_T_MONOTONIC)
+ #define	BPF_T_NANOTIME_MONOTONIC	(BPF_T_NANOTIME | BPF_T_MONOTONIC)
+ #define	BPF_T_BINTIME_MONOTONIC		(BPF_T_BINTIME | BPF_T_MONOTONIC)
+-#define	BPF_T_MICROTIME_MONOTONIC_FAST	(BPF_T_MICROTIME | BPF_T_MONOTONIC_FAST)
+-#define	BPF_T_NANOTIME_MONOTONIC_FAST	(BPF_T_NANOTIME | BPF_T_MONOTONIC_FAST)
+-#define	BPF_T_BINTIME_MONOTONIC_FAST	(BPF_T_BINTIME | BPF_T_MONOTONIC_FAST)
+ 
+ /*
+  * Structure prepended to each packet.
+  */
+ struct bpf_ts {
+ 	bpf_int64	bt_sec;		/* seconds */
+ 	bpf_u_int64	bt_frac;	/* fraction */
+ };
+ struct bpf_xhdr {
+ 	struct bpf_ts	bh_tstamp;	/* time stamp */
+@@ -1093,20 +1090,22 @@ SYSCTL_DECL(_net_bpf);
+ /*
+  * Descriptor associated with each attached hardware interface.
+  */
+ struct bpf_if {
+ 	LIST_ENTRY(bpf_if)	bif_next;	/* list of all interfaces */
+ 	LIST_HEAD(, bpf_d)	bif_dlist;	/* descriptor list */
+ 	u_int bif_dlt;				/* link layer type */
+ 	u_int bif_hdrlen;		/* length of link header */
+ 	struct ifnet *bif_ifp;		/* corresponding interface */
+ 	struct mtx	bif_mtx;	/* mutex for interface */
++	struct sysctl_oid *tscfgoid;	/* timestamp sysctl oid for interface */
++	int tstype;			/* timestamp setting for interface */
+ };
+ 
+ void	 bpf_bufheld(struct bpf_d *d);
+ int	 bpf_validate(const struct bpf_insn *, int);
+ void	 bpf_tap(struct bpf_if *, u_char *, u_int);
+ void	 bpf_mtap(struct bpf_if *, struct mbuf *);
+ void	 bpf_mtap2(struct bpf_if *, void *, u_int, struct mbuf *);
+ void	 bpfattach(struct ifnet *, u_int, u_int);
+ void	 bpfattach2(struct ifnet *, u_int, u_int, struct bpf_if **);
+ void	 bpfdetach(struct ifnet *);

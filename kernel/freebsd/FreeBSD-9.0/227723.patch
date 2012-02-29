@@ -1,0 +1,864 @@
+------------------------------------------------------------------------
+r227723 | lstewart | 2011-11-20 01:10:16 +1100 (Sun, 20 Nov 2011) | 16 lines
+
+Core structure and functions to support a feed-forward clock within the kernel.
+Implement ffcounter, a monotonically increasing cumulative counter on top of the
+active timecounter. Provide low-level functions to read the ffcounter and
+convert it to absolute time or a time interval in seconds using the current
+ffclock estimates, which track the drift of the oscillator. Add a ring of
+fftimehands to track passing of time on each kernel tick and pick up updates of
+ffclock estimates.
+
+Committed on behalf of Julien Ridoux and Darryl Veitch from the University of
+Melbourne, Australia, as part of the FreeBSD Foundation funded "Feed-Forward
+Clock Synchronization Algorithms" project.
+
+For more information, see http://www.synclab.org/radclock/
+
+Submitted by:	Julien Ridoux (jridoux at unimelb edu au)
+
+------------------------------------------------------------------------
+---
+ sys/conf/NOTES       |    8 
+ sys/conf/options     |    1 
+ sys/kern/kern_tc.c   |  442 +++++++++++++++++++++++++++++++++++++++++++++++++++
+ sys/kern/subr_rtc.c  |   10 +
+ sys/sys/_ffcounter.h |   42 ++++
+ sys/sys/timeffc.h    |  110 ++++++++++++
+ 6 files changed, 612 insertions(+), 1 deletion(-)
+
+Index: 9.0/sys/conf/NOTES
+===================================================================
+--- 9.0.orig/sys/conf/NOTES	2012-02-27 15:51:42.000000000 +1100
++++ 9.0/sys/conf/NOTES	2012-02-27 21:31:00.000000000 +1100
+@@ -1176,20 +1176,28 @@ options		PROCDESC
+ # actually reducing the accuracy of operation.
+ 
+ options 	HZ=100
+ 
+ # Enable support for the kernel PLL to use an external PPS signal,
+ # under supervision of [x]ntpd(8)
+ # More info in ntpd documentation: http://www.eecis.udel.edu/~ntp
+ 
+ options 	PPS_SYNC
+ 
++# Enable support for generic feed-forward clocks in the kernel.
++# The feed-forward clock support is an alternative to the feedback oriented
++# ntpd/system clock approach, and is to be used with a feed-forward
++# synchronization algorithm such as the RADclock:
++# More info here: http://www.synclab.org/radclock
++
++options 	FFCLOCK
++
+ 
+ #####################################################################
+ # SCSI DEVICES
+ 
+ # SCSI DEVICE CONFIGURATION
+ 
+ # The SCSI subsystem consists of the `base' SCSI code, a number of
+ # high-level SCSI device `type' drivers, and the low-level host-adapter
+ # device drivers.  The host adapters are listed in the ISA and PCI
+ # device configuration sections below.
+Index: 9.0/sys/conf/options
+===================================================================
+--- 9.0.orig/sys/conf/options	2012-02-27 15:51:42.000000000 +1100
++++ 9.0/sys/conf/options	2012-02-27 21:31:00.000000000 +1100
+@@ -72,20 +72,21 @@ COMPAT_43	opt_compat.h
+ COMPAT_43TTY	opt_compat.h
+ COMPAT_FREEBSD4	opt_compat.h
+ COMPAT_FREEBSD5	opt_compat.h
+ COMPAT_FREEBSD6	opt_compat.h
+ COMPAT_FREEBSD7	opt_compat.h
+ COMPILING_LINT	opt_global.h
+ COMPRESS_USER_CORES opt_core.h
+ CY_PCI_FASTINTR
+ DEADLKRES	opt_watchdog.h
+ DIRECTIO
++FFCLOCK
+ FULL_PREEMPTION	opt_sched.h
+ IPI_PREEMPTION	opt_sched.h
+ GEOM_AES	opt_geom.h
+ GEOM_BDE	opt_geom.h
+ GEOM_BSD	opt_geom.h
+ GEOM_CACHE	opt_geom.h
+ GEOM_CONCAT	opt_geom.h
+ GEOM_ELI	opt_geom.h
+ GEOM_FOX	opt_geom.h
+ GEOM_GATE	opt_geom.h
+Index: 9.0/sys/kern/kern_tc.c
+===================================================================
+--- 9.0.orig/sys/kern/kern_tc.c	2012-02-27 15:51:45.000000000 +1100
++++ 9.0/sys/kern/kern_tc.c	2012-02-27 21:32:45.000000000 +1100
+@@ -1,29 +1,43 @@
+ /*-
+  * ----------------------------------------------------------------------------
+  * "THE BEER-WARE LICENSE" (Revision 42):
+  * <phk@FreeBSD.ORG> wrote this file.  As long as you retain this notice you
+  * can do whatever you want with this stuff. If we meet some day, and you think
+  * this stuff is worth it, you can buy me a beer in return.   Poul-Henning Kamp
+  * ----------------------------------------------------------------------------
++ *
++ * Copyright (C) 2011 The FreeBSD Foundation
++ * All rights reserved.
++ *
++ * Portions of this software were developed by Julien Ridoux at the University
++ * of Melbourne under sponsorship from the FreeBSD Foundation.
+  */
+ 
+ #include <sys/cdefs.h>
+ __FBSDID("$FreeBSD: releng/9.0/sys/kern/kern_tc.c 224042 2011-07-14 21:00:26Z jkim $");
+ 
+ #include "opt_ntp.h"
++#include "opt_ffclock.h"
+ 
+ #include <sys/param.h>
+ #include <sys/kernel.h>
++#ifdef FFCLOCK
++#include <sys/lock.h>
++#include <sys/mutex.h>
++#endif
+ #include <sys/sysctl.h>
+ #include <sys/syslog.h>
+ #include <sys/systm.h>
++#ifdef FFCLOCK
++#include <sys/timeffc.h>
++#endif
+ #include <sys/timepps.h>
+ #include <sys/timetc.h>
+ #include <sys/timex.h>
+ 
+ /*
+  * A large step happens on boot.  This constant detects such steps.
+  * It is relatively small so that ntp_update_second gets called enough
+  * in the typical 'missed a couple of seconds' case, but doesn't loop
+  * forever when the time step is large.
+  */
+@@ -293,20 +307,439 @@ getmicrotime(struct timeval *tvp)
+ 	struct timehands *th;
+ 	u_int gen;
+ 
+ 	do {
+ 		th = timehands;
+ 		gen = th->th_generation;
+ 		*tvp = th->th_microtime;
+ 	} while (gen == 0 || gen != th->th_generation);
+ }
+ 
++#ifdef FFCLOCK
++/*
++ * Support for feed-forward synchronization algorithms. This is heavily inspired
++ * by the timehands mechanism but kept independent from it. *_windup() functions
++ * have some connection to avoid accessing the timecounter hardware more than
++ * necessary.
++ */
++
++/* Feed-forward clock estimates kept updated by the synchronization daemon. */
++struct ffclock_estimate ffclock_estimate;
++struct bintime ffclock_boottime;	/* Feed-forward boot time estimate. */
++uint32_t ffclock_status;		/* Feed-forward clock status. */
++int8_t ffclock_updated;			/* New estimates are available. */
++struct mtx ffclock_mtx;			/* Mutex on ffclock_estimate. */
++
++struct fftimehands {
++	struct ffclock_estimate	cest;
++	struct bintime		tick_time;
++	struct bintime		tick_time_lerp;
++	ffcounter		tick_ffcount;
++	uint64_t		period_lerp;
++	volatile uint8_t	gen;
++	struct fftimehands	*next;
++};
++
++#define	NUM_ELEMENTS(x) (sizeof(x) / sizeof(*x))
++
++static struct fftimehands ffth[10];
++static struct fftimehands *volatile fftimehands = ffth;
++
++static void
++ffclock_init(void)
++{
++	struct fftimehands *cur;
++	struct fftimehands *last;
++
++	memset(ffth, 0, sizeof(ffth));
++
++	last = ffth + NUM_ELEMENTS(ffth) - 1;
++	for (cur = ffth; cur < last; cur++)
++		cur->next = cur + 1;
++	last->next = ffth;
++
++	ffclock_updated = 0;
++	ffclock_status = FFCLOCK_STA_UNSYNC;
++	mtx_init(&ffclock_mtx, "ffclock lock", NULL, MTX_DEF);
++}
++
++/*
++ * Reset the feed-forward clock estimates. Called from inittodr() to get things
++ * kick started and uses the timecounter nominal frequency as a first period
++ * estimate. Note: this function may be called several time just after boot.
++ * Note: this is the only function that sets the value of boot time for the
++ * monotonic (i.e. uptime) version of the feed-forward clock.
++ */
++void
++ffclock_reset_clock(struct timespec *ts)
++{
++	struct timecounter *tc;
++	struct ffclock_estimate cest;
++
++	tc = timehands->th_counter;
++	memset(&cest, 0, sizeof(struct ffclock_estimate));
++
++	timespec2bintime(ts, &ffclock_boottime);
++	timespec2bintime(ts, &(cest.update_time));
++	ffclock_read_counter(&cest.update_ffcount);
++	cest.leapsec_next = 0;
++	cest.period = ((1ULL << 63) / tc->tc_frequency) << 1;
++	cest.errb_abs = 0;
++	cest.errb_rate = 0;
++	cest.status = FFCLOCK_STA_UNSYNC;
++	cest.leapsec_total = 0;
++	cest.leapsec = 0;
++
++	mtx_lock(&ffclock_mtx);
++	bcopy(&cest, &ffclock_estimate, sizeof(struct ffclock_estimate));
++	ffclock_updated = INT8_MAX;
++	mtx_unlock(&ffclock_mtx);
++
++	printf("ffclock reset: %s (%llu Hz), time = %ld.%09lu\n", tc->tc_name,
++	    (unsigned long long)tc->tc_frequency, (long)ts->tv_sec,
++	    (unsigned long)ts->tv_nsec);
++}
++
++/*
++ * Sub-routine to convert a time interval measured in RAW counter units to time
++ * in seconds stored in bintime format.
++ * NOTE: bintime_mul requires u_int, but the value of the ffcounter may be
++ * larger than the max value of u_int (on 32 bit architecture). Loop to consume
++ * extra cycles.
++ */
++static void
++ffclock_convert_delta(ffcounter ffdelta, uint64_t period, struct bintime *bt)
++{
++	struct bintime bt2;
++	ffcounter delta, delta_max;
++
++	delta_max = (1ULL << (8 * sizeof(unsigned int))) - 1;
++	bintime_clear(bt);
++	do {
++		if (ffdelta > delta_max)
++			delta = delta_max;
++		else
++			delta = ffdelta;
++		bt2.sec = 0;
++		bt2.frac = period;
++		bintime_mul(&bt2, (unsigned int)delta);
++		bintime_add(bt, &bt2);
++		ffdelta -= delta;
++	} while (ffdelta > 0);
++}
++
++/*
++ * Update the fftimehands.
++ * Push the tick ffcount and time(s) forward based on current clock estimate.
++ * The conversion from ffcounter to bintime relies on the difference clock
++ * principle, whose accuracy relies on computing small time intervals. If a new
++ * clock estimate has been passed by the synchronisation daemon, make it
++ * current, and compute the linear interpolation for monotonic time if needed.
++ */
++static void
++ffclock_windup(unsigned int delta)
++{
++	struct ffclock_estimate *cest;
++	struct fftimehands *ffth;
++	struct bintime bt, gap_lerp;
++	ffcounter ffdelta;
++	uint64_t frac;
++	unsigned int polling;
++	uint8_t forward_jump, ogen;
++
++	/*
++	 * Pick the next timehand, copy current ffclock estimates and move tick
++	 * times and counter forward.
++	 */
++	forward_jump = 0;
++	ffth = fftimehands->next;
++	ogen = ffth->gen;
++	ffth->gen = 0;
++	cest = &ffth->cest;
++	bcopy(&fftimehands->cest, cest, sizeof(struct ffclock_estimate));
++	ffdelta = (ffcounter)delta;
++	ffth->period_lerp = fftimehands->period_lerp;
++
++	ffth->tick_time = fftimehands->tick_time;
++	ffclock_convert_delta(ffdelta, cest->period, &bt);
++	bintime_add(&ffth->tick_time, &bt);
++
++	ffth->tick_time_lerp = fftimehands->tick_time_lerp;
++	ffclock_convert_delta(ffdelta, ffth->period_lerp, &bt);
++	bintime_add(&ffth->tick_time_lerp, &bt);
++
++	ffth->tick_ffcount = fftimehands->tick_ffcount + ffdelta;
++
++	/*
++	 * Assess the status of the clock, if the last update is too old, it is
++	 * likely the synchronisation daemon is dead and the clock is free
++	 * running.
++	 */
++	if (ffclock_updated == 0) {
++		ffdelta = ffth->tick_ffcount - cest->update_ffcount;
++		ffclock_convert_delta(ffdelta, cest->period, &bt);
++		if (bt.sec > 2 * FFCLOCK_SKM_SCALE)
++			ffclock_status |= FFCLOCK_STA_UNSYNC;
++	}
++
++	/*
++	 * If available, grab updated clock estimates and make them current.
++	 * Recompute time at this tick using the updated estimates. The clock
++	 * estimates passed the feed-forward synchronisation daemon may result
++	 * in time conversion that is not monotonically increasing (just after
++	 * the update). time_lerp is a particular linear interpolation over the
++	 * synchronisation algo polling period that ensures monotonicity for the
++	 * clock ids requesting it.
++	 */
++	if (ffclock_updated > 0) {
++		bcopy(&ffclock_estimate, cest, sizeof(struct ffclock_estimate));
++		ffdelta = ffth->tick_ffcount - cest->update_ffcount;
++		ffth->tick_time = cest->update_time;
++		ffclock_convert_delta(ffdelta, cest->period, &bt);
++		bintime_add(&ffth->tick_time, &bt);
++
++		/* ffclock_reset sets ffclock_updated to INT8_MAX */
++		if (ffclock_updated == INT8_MAX)
++			ffth->tick_time_lerp = ffth->tick_time;
++
++		if (bintime_cmp(&ffth->tick_time, &ffth->tick_time_lerp, >))
++			forward_jump = 1;
++		else
++			forward_jump = 0;
++
++		bintime_clear(&gap_lerp);
++		if (forward_jump) {
++			gap_lerp = ffth->tick_time;
++			bintime_sub(&gap_lerp, &ffth->tick_time_lerp);
++		} else {
++			gap_lerp = ffth->tick_time_lerp;
++			bintime_sub(&gap_lerp, &ffth->tick_time);
++		}
++
++		/*
++		 * The reset from the RTC clock may be far from accurate, and
++		 * reducing the gap between real time and interpolated time
++		 * could take a very long time if the interpolated clock insists
++		 * on strict monotonicity. The clock is reset under very strict
++		 * conditions (kernel time is known to be wrong and
++		 * synchronization daemon has been restarted recently.
++		 * ffclock_boottime absorbs the jump to ensure boot time is
++		 * correct and uptime functions stay consistent.
++		 */
++		if (((ffclock_status & FFCLOCK_STA_UNSYNC) == FFCLOCK_STA_UNSYNC) &&
++		    ((cest->status & FFCLOCK_STA_UNSYNC) == 0) &&
++		    ((cest->status & FFCLOCK_STA_WARMUP) == FFCLOCK_STA_WARMUP)) {
++			if (forward_jump)
++				bintime_add(&ffclock_boottime, &gap_lerp);
++			else
++				bintime_sub(&ffclock_boottime, &gap_lerp);
++			ffth->tick_time_lerp = ffth->tick_time;
++			bintime_clear(&gap_lerp);
++		}
++
++		ffclock_status = cest->status;
++		ffth->period_lerp = cest->period;
++
++		/*
++		 * Compute corrected period used for the linear interpolation of
++		 * time. The rate of linear interpolation is capped to 5000PPM
++		 * (5ms/s).
++		 */
++		if (bintime_isset(&gap_lerp)) {
++			ffdelta = cest->update_ffcount;
++			ffdelta -= fftimehands->cest.update_ffcount;
++			ffclock_convert_delta(ffdelta, cest->period, &bt);
++			polling = bt.sec;
++			bt.sec = 0;
++			bt.frac = 5000000 * (uint64_t)18446744073LL;
++			bintime_mul(&bt, polling);
++			if (bintime_cmp(&gap_lerp, &bt, >))
++				gap_lerp = bt;
++
++			/* Approximate 1 sec by 1-(1/2^64) to ease arithmetic */
++			frac = 0;
++			if (gap_lerp.sec > 0) {
++				frac -= 1;
++				frac /= ffdelta / gap_lerp.sec;
++			}
++			frac += gap_lerp.frac / ffdelta;
++
++			if (forward_jump)
++				ffth->period_lerp += frac;
++			else
++				ffth->period_lerp -= frac;
++		}
++
++		ffclock_updated = 0;
++	}
++	if (++ogen == 0)
++		ogen = 1;
++	ffth->gen = ogen;
++	fftimehands = ffth;
++}
++
++/*
++ * Adjust the fftimehands when the timecounter is changed. Stating the obvious,
++ * the old and new hardware counter cannot be read simultaneously. tc_windup()
++ * does read the two counters 'back to back', but a few cycles are effectively
++ * lost, and not accumulated in tick_ffcount. This is a fairly radical
++ * operation for a feed-forward synchronization daemon, and it is its job to not
++ * pushing irrelevant data to the kernel. Because there is no locking here,
++ * simply force to ignore pending or next update to give daemon a chance to
++ * realize the counter has changed.
++ */
++static void
++ffclock_change_tc(struct timehands *th)
++{
++	struct fftimehands *ffth;
++	struct ffclock_estimate *cest;
++	struct timecounter *tc;
++	uint8_t ogen;
++
++	tc = th->th_counter;
++	ffth = fftimehands->next;
++	ogen = ffth->gen;
++	ffth->gen = 0;
++
++	cest = &ffth->cest;
++	bcopy(&(fftimehands->cest), cest, sizeof(struct ffclock_estimate));
++	cest->period = ((1ULL << 63) / tc->tc_frequency ) << 1;
++	cest->errb_abs = 0;
++	cest->errb_rate = 0;
++	cest->status |= FFCLOCK_STA_UNSYNC;
++
++	ffth->tick_ffcount = fftimehands->tick_ffcount;
++	ffth->tick_time_lerp = fftimehands->tick_time_lerp;
++	ffth->tick_time = fftimehands->tick_time;
++	ffth->period_lerp = cest->period;
++
++	/* Do not lock but ignore next update from synchronization daemon. */
++	ffclock_updated--;
++
++	if (++ogen == 0)
++		ogen = 1;
++	ffth->gen = ogen;
++	fftimehands = ffth;
++}
++
++/*
++ * Retrieve feed-forward counter and time of last kernel tick.
++ */
++void
++ffclock_last_tick(ffcounter *ffcount, struct bintime *bt, uint32_t flags)
++{
++	struct fftimehands *ffth;
++	uint8_t gen;
++
++	/*
++	 * No locking but check generation has not changed. Also need to make
++	 * sure ffdelta is positive, i.e. ffcount > tick_ffcount.
++	 */
++	do {
++		ffth = fftimehands;
++		gen = ffth->gen;
++		if ((flags & FFCLOCK_LERP) == FFCLOCK_LERP)
++			*bt = ffth->tick_time_lerp;
++		else
++			*bt = ffth->tick_time;
++		*ffcount = ffth->tick_ffcount;
++	} while (gen == 0 || gen != ffth->gen);
++}
++
++/*
++ * Absolute clock conversion. Low level function to convert ffcounter to
++ * bintime. The ffcounter is converted using the current ffclock period estimate
++ * or the "interpolated period" to ensure monotonicity.
++ * NOTE: this conversion may have been deferred, and the clock updated since the
++ * hardware counter has been read.
++ */
++void
++ffclock_convert_abs(ffcounter ffcount, struct bintime *bt, uint32_t flags)
++{
++	struct fftimehands *ffth;
++	struct bintime bt2;
++	ffcounter ffdelta;
++	uint8_t gen;
++
++	/*
++	 * No locking but check generation has not changed. Also need to make
++	 * sure ffdelta is positive, i.e. ffcount > tick_ffcount.
++	 */
++	do {
++		ffth = fftimehands;
++		gen = ffth->gen;
++		if (ffcount > ffth->tick_ffcount)
++			ffdelta = ffcount - ffth->tick_ffcount;
++		else
++			ffdelta = ffth->tick_ffcount - ffcount;
++
++		if ((flags & FFCLOCK_LERP) == FFCLOCK_LERP) {
++			*bt = ffth->tick_time_lerp;
++			ffclock_convert_delta(ffdelta, ffth->period_lerp, &bt2);
++		} else {
++			*bt = ffth->tick_time;
++			ffclock_convert_delta(ffdelta, ffth->cest.period, &bt2);
++		}
++
++		if (ffcount > ffth->tick_ffcount)
++			bintime_add(bt, &bt2);
++		else
++			bintime_sub(bt, &bt2);
++	} while (gen == 0 || gen != ffth->gen);
++}
++
++/*
++ * Difference clock conversion.
++ * Low level function to Convert a time interval measured in RAW counter units
++ * into bintime. The difference clock allows measuring small intervals much more
++ * reliably than the absolute clock.
++ */
++void
++ffclock_convert_diff(ffcounter ffdelta, struct bintime *bt)
++{
++	struct fftimehands *ffth;
++	uint8_t gen;
++
++	/* No locking but check generation has not changed. */
++	do {
++		ffth = fftimehands;
++		gen = ffth->gen;
++		ffclock_convert_delta(ffdelta, ffth->cest.period, bt);
++	} while (gen == 0 || gen != ffth->gen);
++}
++
++/*
++ * Access to current ffcounter value.
++ */
++void
++ffclock_read_counter(ffcounter *ffcount)
++{
++	struct timehands *th;
++	struct fftimehands *ffth;
++	unsigned int gen, delta;
++
++	/*
++	 * ffclock_windup() called from tc_windup(), safe to rely on
++	 * th->th_generation only, for correct delta and ffcounter.
++	 */
++	do {
++		th = timehands;
++		gen = th->th_generation;
++		ffth = fftimehands;
++		delta = tc_delta(th);
++		*ffcount = ffth->tick_ffcount;
++	} while (gen == 0 || gen != th->th_generation);
++
++	*ffcount += delta;
++}
++#endif /* FFCLOCK */
++
+ /*
+  * Initialize a new timecounter and possibly use it.
+  */
+ void
+ tc_init(struct timecounter *tc)
+ {
+ 	u_int u;
+ 	struct sysctl_oid *tc_root;
+ 
+ 	u = tc->tc_frequency / tc->tc_counter_mask;
+@@ -433,20 +866,23 @@ tc_windup(void)
+ 	/*
+ 	 * Capture a timecounter delta on the current timecounter and if
+ 	 * changing timecounters, a counter value from the new timecounter.
+ 	 * Update the offset fields accordingly.
+ 	 */
+ 	delta = tc_delta(th);
+ 	if (th->th_counter != timecounter)
+ 		ncount = timecounter->tc_get_timecount(timecounter);
+ 	else
+ 		ncount = 0;
++#ifdef FFCLOCK
++	ffclock_windup(delta);
++#endif
+ 	th->th_offset_count += delta;
+ 	th->th_offset_count &= th->th_counter->tc_counter_mask;
+ 	while (delta > th->th_counter->tc_frequency) {
+ 		/* Eat complete unadjusted seconds. */
+ 		delta -= th->th_counter->tc_frequency;
+ 		th->th_offset.sec++;
+ 	}
+ 	if ((delta > th->th_counter->tc_frequency / 2) &&
+ 	    (th->th_scale * delta < ((uint64_t)1 << 63))) {
+ 		/* The product th_scale * delta just barely overflows. */
+@@ -495,20 +931,23 @@ tc_windup(void)
+ #ifndef __arm__
+ 		if ((timecounter->tc_flags & TC_FLAGS_C3STOP) != 0)
+ 			cpu_disable_deep_sleep++;
+ 		if ((th->th_counter->tc_flags & TC_FLAGS_C3STOP) != 0)
+ 			cpu_disable_deep_sleep--;
+ #endif
+ 		th->th_counter = timecounter;
+ 		th->th_offset_count = ncount;
+ 		tc_min_ticktock_freq = max(1, timecounter->tc_frequency /
+ 		    (((uint64_t)timecounter->tc_counter_mask + 1) / 3));
++#ifdef FFCLOCK
++		ffclock_change_tc(th);
++#endif
+ 	}
+ 
+ 	/*-
+ 	 * Recalculate the scaling factor.  We want the number of 1/2^64
+ 	 * fractions of a second per period of the hardware counter, taking
+ 	 * into account the th_adjustment factor which the NTP PLL/adjtime(2)
+ 	 * processing provides us with.
+ 	 *
+ 	 * The th_adjustment is nanoseconds per second with 32 bit binary
+ 	 * fraction and we want 64 bit binary fraction of second:
+@@ -813,20 +1252,23 @@ inittimecounter(void *dummy)
+ 	 * smallest reasonable one.  If they want better timestamps they
+ 	 * should use the non-"get"* functions.
+ 	 */
+ 	if (hz > 1000)
+ 		tc_tick = (hz + 500) / 1000;
+ 	else
+ 		tc_tick = 1;
+ 	p = (tc_tick * 1000000) / hz;
+ 	printf("Timecounters tick every %d.%03u msec\n", p / 1000, p % 1000);
+ 
++#ifdef FFCLOCK
++	ffclock_init();
++#endif
+ 	/* warm up new timecounter (again) and get rolling. */
+ 	(void)timecounter->tc_get_timecount(timecounter);
+ 	(void)timecounter->tc_get_timecount(timecounter);
+ 	tc_windup();
+ }
+ 
+ SYSINIT(timecounter, SI_SUB_CLOCKS, SI_ORDER_SECOND, inittimecounter, NULL);
+ 
+ /* Cpu tick handling -------------------------------------------------*/
+ 
+Index: 9.0/sys/kern/subr_rtc.c
+===================================================================
+--- 9.0.orig/sys/kern/subr_rtc.c	2012-02-27 15:51:45.000000000 +1100
++++ 9.0/sys/kern/subr_rtc.c	2012-02-27 21:31:00.000000000 +1100
+@@ -1,19 +1,24 @@
+ /*-
+  * Copyright (C) 1988 University of Utah.
+  * Copyright (C) 1982, 1990, 1993
+- *	The Regents of the University of California.  All rights reserved.
++ *	The Regents of the University of California.
++ * Copyright (C) 2011 The FreeBSD Foundation
++ * All rights reserved.
+  *
+  * This code is derived from software contributed to Berkeley by
+  * the Systems Programming Group of the University of Utah Computer
+  * Science Department.
+  *
++ * Portions of this software were developed by Julien Ridoux at the University
++ * of Melbourne under sponsorship from the FreeBSD Foundation.
++ *
+  * Redistribution and use in source and binary forms, with or without
+  * modification, are permitted provided that the following conditions
+  * are met:
+  * 1. Redistributions of source code must retain the above copyright
+  *    notice, this list of conditions and the following disclaimer.
+  * 2. Redistributions in binary form must reproduce the above copyright
+  *    notice, this list of conditions and the following disclaimer in the
+  *    documentation and/or other materials provided with the distribution.
+  * 4. Neither the name of the University nor the names of its contributors
+  *    may be used to endorse or promote products derived from this software
+@@ -126,20 +131,23 @@ inittodr(time_t base)
+ 	}
+ 	if (error == EINVAL || ts.tv_sec < 0) {
+ 		printf("Invalid time in real time clock.\n"
+ 		    "Check and reset the date immediately!\n");
+ 		goto wrong_time;
+ 	}
+ 
+ 	ts.tv_sec += utc_offset();
+ 	timespecadd(&ts, &clock_adj);
+ 	tc_setclock(&ts);
++#ifdef FFCLOCK
++	ffclock_reset_clock(&ts);
++#endif
+ 	return;
+ 
+ wrong_time:
+ 	if (base > 0) {
+ 		ts.tv_sec = base;
+ 		ts.tv_nsec = 0;
+ 		tc_setclock(&ts);
+ 	}
+ }
+ 
+Index: 9.0/sys/sys/_ffcounter.h
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ 9.0/sys/sys/_ffcounter.h	2012-02-27 21:31:00.000000000 +1100
+@@ -0,0 +1,42 @@
++/*-
++ * Copyright (C) 2011 The University of Melbourne
++ * All rights reserved.
++ *
++ * This software was developed by Julien Ridoux at the University of Melbourne
++ * under sponsorship from the FreeBSD Foundation.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
++ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
++ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
++ * ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
++ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
++ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
++ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
++ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
++ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
++ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
++ * SUCH DAMAGE.
++ *
++ * $FreeBSD$
++ */
++
++#ifndef _SYS__FFCOUNTER_H_
++#define _SYS__FFCOUNTER_H_
++
++/*
++ * The feed-forward clock counter. The fundamental element of a feed-forward
++ * clock is a wide monotonically increasing counter that accumulates at the same
++ * rate as the selected timecounter.
++ */
++typedef uint64_t ffcounter;
++
++#endif /* _SYS__FFCOUNTER_H_ */
+Index: 9.0/sys/sys/timeffc.h
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ 9.0/sys/sys/timeffc.h	2012-02-27 21:31:00.000000000 +1100
+@@ -0,0 +1,110 @@
++/*-
++ * Copyright (C) 2011 The University of Melbourne
++ * All rights reserved.
++ *
++ * This software was developed by Julien Ridoux at the University of Melbourne
++ * under sponsorship from the FreeBSD Foundation.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
++ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
++ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
++ * ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
++ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
++ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
++ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
++ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
++ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
++ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
++ * SUCH DAMAGE.
++ *
++ * $FreeBSD$
++ */
++
++#ifndef _SYS_TIMEFF_H_
++#define _SYS_TIMEFF_H_
++
++#include <sys/_ffcounter.h>
++
++/*
++ * Feed-forward clock estimate
++ * Holds time mark as a ffcounter and conversion to bintime based on current
++ * timecounter period and offset estimate passed by the synchronization daemon.
++ * Provides time of last daemon update, clock status and bound on error.
++ */
++struct ffclock_estimate {
++	struct bintime	update_time;	/* Time of last estimates update. */
++	ffcounter	update_ffcount;	/* Counter value at last update. */
++	ffcounter	leapsec_next;	/* Counter value of next leap second. */
++	uint64_t	period;		/* Estimate of counter period. */
++	uint32_t	errb_abs;	/* Bound on absolute clock error [ns]. */
++	uint32_t	errb_rate;	/* Bound on counter rate error [ps/s]. */
++	uint32_t	status;		/* Clock status. */
++	int16_t		leapsec_total;	/* All leap seconds seen so far. */
++	int8_t		leapsec;	/* Next leap second (in {-1,0,1}). */
++};
++
++#if __BSD_VISIBLE
++#ifdef _KERNEL
++
++/*
++ * Parameters of counter characterisation required by feed-forward algorithms.
++ */
++#define	FFCLOCK_SKM_SCALE	1024
++
++/*
++ * Feed-forward clock status
++ */
++#define	FFCLOCK_STA_UNSYNC	1
++#define	FFCLOCK_STA_WARMUP	2
++
++/*
++ * Clock flags to select how the feed-forward counter is converted to absolute
++ * time by ffclock_convert_abs().
++ * FAST:    do not read the hardware counter, return feed-forward clock time
++ *          at last tick. The time returned has the resolution of the kernel
++ *          tick (1/hz [s]).
++ * LERP:    linear interpolation of ffclock time to guarantee monotonic time.
++ * LEAPSEC: include leap seconds.
++ * UPTIME:  removes time of boot.
++ */
++#define	FFCLOCK_FAST		1
++#define	FFCLOCK_LERP		2
++#define	FFCLOCK_LEAPSEC		4
++#define	FFCLOCK_UPTIME		8
++
++/* Resets feed-forward clock from RTC */
++void ffclock_reset_clock(struct timespec *ts);
++
++/*
++ * Return the current value of the feed-forward clock counter. Essential to
++ * measure time interval in counter units. If a fast timecounter is used by the
++ * system, may also allow fast but accurate timestamping.
++ */
++void ffclock_read_counter(ffcounter *ffcount);
++
++/*
++ * Retrieve feed-forward counter value and time of last kernel tick. This
++ * accepts the FFCLOCK_LERP flag.
++ */
++void ffclock_last_tick(ffcounter *ffcount, struct bintime *bt, uint32_t flags);
++
++/*
++ * Low level routines to convert a counter timestamp into absolute time and a
++ * counter timestamp interval into an interval in seconds. The absolute time
++ * conversion accepts the FFCLOCK_LERP flag.
++ */
++void ffclock_convert_abs(ffcounter ffcount, struct bintime *bt, uint32_t flags);
++void ffclock_convert_diff(ffcounter ffdelta, struct bintime *bt);
++
++#endif /* _KERNEL */
++#endif /* __BSD_VISIBLE */
++#endif /* _SYS_TIMEFF_H_ */
