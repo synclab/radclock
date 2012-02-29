@@ -1,0 +1,231 @@
+------------------------------------------------------------------------
+r228117 | lstewart | 2011-11-29 17:53:36 +1100 (Tue, 29 Nov 2011) | 13 lines
+
+Make the fbclock_[get]{bin,nano,micro}[up]time() function prototypes public so
+that new APIs with some performance sensitivity can be built on top of them.
+These functions should not be called directly except in special circumstances.
+
+Committed on behalf of Julien Ridoux and Darryl Veitch from the University of
+Melbourne, Australia, as part of the FreeBSD Foundation funded "Feed-Forward
+Clock Synchronization Algorithms" project.
+
+For more information, see http://www.synclab.org/radclock/
+
+Discussed with:	Julien Ridoux (jridoux at unimelb edu au)
+Submitted by:	Julien Ridoux (jridoux at unimelb edu au)
+
+------------------------------------------------------------------------
+---
+ sys/kern/kern_tc.c |   24 ++++++++++++------------
+ sys/sys/timeffc.h  |   22 ++++++++++++++++++++++
+ 2 files changed, 34 insertions(+), 12 deletions(-)
+
+Index: src/sys/kern/kern_tc.c
+===================================================================
+--- src.orig/sys/kern/kern_tc.c	2012-02-29 18:09:57.000000000 +1100
++++ src/sys/kern/kern_tc.c	2012-02-29 18:10:03.000000000 +1100
+@@ -165,145 +165,145 @@ tc_delta(struct timehands *th)
+ 	    tc->tc_counter_mask);
+ }
+ 
+ /*
+  * Functions for reading the time.  We have to loop until we are sure that
+  * the timehands that we operated on was not updated under our feet.  See
+  * the comment in <sys/time.h> for a description of these 12 functions.
+  */
+ 
+ #ifdef FFCLOCK
+-static void
++void
+ fbclock_binuptime(struct bintime *bt)
+ {
+ 	struct timehands *th;
+ 	unsigned int gen;
+ 
+ 	do {
+ 		th = timehands;
+ 		gen = th->th_generation;
+ 		*bt = th->th_offset;
+ 		bintime_addx(bt, th->th_scale * tc_delta(th));
+ 	} while (gen == 0 || gen != th->th_generation);
+ }
+ 
+-static void
++void
+ fbclock_nanouptime(struct timespec *tsp)
+ {
+ 	struct bintime bt;
+ 
+ 	fbclock_binuptime(&bt);
+ 	bintime2timespec(&bt, tsp);
+ }
+ 
+-static void
++void
+ fbclock_microuptime(struct timeval *tvp)
+ {
+ 	struct bintime bt;
+ 
+ 	fbclock_binuptime(&bt);
+ 	bintime2timeval(&bt, tvp);
+ }
+ 
+-static void
++void
+ fbclock_bintime(struct bintime *bt)
+ {
+ 
+ 	fbclock_binuptime(bt);
+ 	bintime_add(bt, &boottimebin);
+ }
+ 
+-static void
++void
+ fbclock_nanotime(struct timespec *tsp)
+ {
+ 	struct bintime bt;
+ 
+ 	fbclock_bintime(&bt);
+ 	bintime2timespec(&bt, tsp);
+ }
+ 
+-static void
++void
+ fbclock_microtime(struct timeval *tvp)
+ {
+ 	struct bintime bt;
+ 
+ 	fbclock_bintime(&bt);
+ 	bintime2timeval(&bt, tvp);
+ }
+ 
+-static void
++void
+ fbclock_getbinuptime(struct bintime *bt)
+ {
+ 	struct timehands *th;
+ 	unsigned int gen;
+ 
+ 	do {
+ 		th = timehands;
+ 		gen = th->th_generation;
+ 		*bt = th->th_offset;
+ 	} while (gen == 0 || gen != th->th_generation);
+ }
+ 
+-static void
++void
+ fbclock_getnanouptime(struct timespec *tsp)
+ {
+ 	struct timehands *th;
+ 	unsigned int gen;
+ 
+ 	do {
+ 		th = timehands;
+ 		gen = th->th_generation;
+ 		bintime2timespec(&th->th_offset, tsp);
+ 	} while (gen == 0 || gen != th->th_generation);
+ }
+ 
+-static void
++void
+ fbclock_getmicrouptime(struct timeval *tvp)
+ {
+ 	struct timehands *th;
+ 	unsigned int gen;
+ 
+ 	do {
+ 		th = timehands;
+ 		gen = th->th_generation;
+ 		bintime2timeval(&th->th_offset, tvp);
+ 	} while (gen == 0 || gen != th->th_generation);
+ }
+ 
+-static void
++void
+ fbclock_getbintime(struct bintime *bt)
+ {
+ 	struct timehands *th;
+ 	unsigned int gen;
+ 
+ 	do {
+ 		th = timehands;
+ 		gen = th->th_generation;
+ 		*bt = th->th_offset;
+ 	} while (gen == 0 || gen != th->th_generation);
+ 	bintime_add(bt, &boottimebin);
+ }
+ 
+-static void
++void
+ fbclock_getnanotime(struct timespec *tsp)
+ {
+ 	struct timehands *th;
+ 	unsigned int gen;
+ 
+ 	do {
+ 		th = timehands;
+ 		gen = th->th_generation;
+ 		*tsp = th->th_nanotime;
+ 	} while (gen == 0 || gen != th->th_generation);
+ }
+ 
+-static void
++void
+ fbclock_getmicrotime(struct timeval *tvp)
+ {
+ 	struct timehands *th;
+ 	unsigned int gen;
+ 
+ 	do {
+ 		th = timehands;
+ 		gen = th->th_generation;
+ 		*tvp = th->th_microtime;
+ 	} while (gen == 0 || gen != th->th_generation);
+Index: src/sys/sys/timeffc.h
+===================================================================
+--- src.orig/sys/sys/timeffc.h	2012-02-29 18:07:19.000000000 +1100
++++ src/sys/sys/timeffc.h	2012-02-29 18:10:03.000000000 +1100
+@@ -157,20 +157,42 @@ void ffclock_getnanouptime(struct timesp
+ void ffclock_getmicrouptime(struct timeval *tvp);
+ 
+ /*
+  * Wrapper routines to convert a time interval specified in ffcounter units into
+  * seconds using the current feed-forward clock estimates.
+  */
+ void ffclock_bindifftime(ffcounter ffdelta, struct bintime *bt);
+ void ffclock_nanodifftime(ffcounter ffdelta, struct timespec *tsp);
+ void ffclock_microdifftime(ffcounter ffdelta, struct timeval *tvp);
+ 
++/*
++ * When FFCLOCK is enabled in the kernel, [get]{bin,nano,micro}[up]time() become
++ * wrappers around equivalent feedback or feed-forward functions. Provide access
++ * outside of kern_tc.c to the feedback clock equivalent functions for
++ * specialised use i.e. these are not for general consumption.
++ */
++void fbclock_bintime(struct bintime *bt);
++void fbclock_nanotime(struct timespec *tsp);
++void fbclock_microtime(struct timeval *tvp);
++
++void fbclock_getbintime(struct bintime *bt);
++void fbclock_getnanotime(struct timespec *tsp);
++void fbclock_getmicrotime(struct timeval *tvp);
++
++void fbclock_binuptime(struct bintime *bt);
++void fbclock_nanouptime(struct timespec *tsp);
++void fbclock_microuptime(struct timeval *tvp);
++
++void fbclock_getbinuptime(struct bintime *bt);
++void fbclock_getnanouptime(struct timespec *tsp);
++void fbclock_getmicrouptime(struct timeval *tvp);
++
+ #else /* !_KERNEL */
+ 
+ /* Feed-Forward Clock system calls. */
+ __BEGIN_DECLS
+ int ffclock_getcounter(ffcounter *ffcount);
+ int ffclock_getestimate(struct ffclock_estimate *cest);
+ int ffclock_setestimate(struct ffclock_estimate *cest);
+ __END_DECLS
+ 
+ #endif /* _KERNEL */

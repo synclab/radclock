@@ -1,0 +1,224 @@
+------------------------------------------------------------------------
+r227745 | lstewart | 2011-11-20 12:20:50 +1100 (Sun, 20 Nov 2011) | 13 lines
+
+Provide high-level functions to access the feed-forward absolute and difference
+clocks. Each routine can output an upper bound on the absolute time or time
+interval requested. Different flavours of absolute time can be requested, for
+example with or without leap seconds, monotonic or not, etc.
+
+Committed on behalf of Julien Ridoux and Darryl Veitch from the University of
+Melbourne, Australia, as part of the FreeBSD Foundation funded "Feed-Forward
+Clock Synchronization Algorithms" project.
+
+For more information, see http://www.synclab.org/radclock/
+
+Submitted by:	Julien Ridoux (jridoux at unimelb edu au)
+
+------------------------------------------------------------------------
+---
+ sys/conf/files          |    1 
+ sys/kern/kern_ffclock.c |  129 ++++++++++++++++++++++++++++++++++++++++++++++++
+ sys/sys/timeffc.h       |   23 ++++++++
+ 3 files changed, 153 insertions(+)
+
+Index: 9.0/sys/conf/files
+===================================================================
+--- 9.0.orig/sys/conf/files	2012-02-27 15:51:42.000000000 +1100
++++ 9.0/sys/conf/files	2012-02-27 21:33:10.000000000 +1100
+@@ -2303,20 +2303,21 @@ kern/kern_cpu.c			standard
+ kern/kern_cpuset.c		standard
+ kern/kern_context.c		standard
+ kern/kern_descrip.c		standard
+ kern/kern_dtrace.c		optional kdtrace_hooks
+ kern/kern_environment.c		standard
+ kern/kern_et.c			standard
+ kern/kern_event.c		standard
+ kern/kern_exec.c		standard
+ kern/kern_exit.c		standard
+ kern/kern_fail.c		standard
++kern/kern_ffclock.c		optional ffclock
+ kern/kern_fork.c		standard
+ kern/kern_gzio.c		optional gzio
+ kern/kern_hhook.c		standard
+ kern/kern_idle.c		standard
+ kern/kern_intr.c		standard
+ kern/kern_jail.c		standard
+ kern/kern_khelp.c		standard
+ kern/kern_kthread.c		standard
+ kern/kern_ktr.c			optional ktr
+ kern/kern_ktrace.c		standard
+Index: 9.0/sys/kern/kern_ffclock.c
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ 9.0/sys/kern/kern_ffclock.c	2012-02-27 21:33:10.000000000 +1100
+@@ -0,0 +1,129 @@
++/*-
++ * Copyright (C) 2011 The University of Melbourne
++ * All rights reserved.
++ *
++ * This software was developed by Julien Ridoux at the University of Melbourne
++ * under sponsorship from the FreeBSD Foundation.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
++ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
++ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
++ * ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
++ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
++ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
++ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
++ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
++ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
++ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
++ * SUCH DAMAGE.
++ */
++
++#include <sys/cdefs.h>
++__FBSDID("$FreeBSD$");
++
++#include <sys/param.h>
++#include <sys/systm.h>
++#include <sys/timeffc.h>
++
++extern struct ffclock_estimate ffclock_estimate;
++extern struct bintime ffclock_boottime;
++
++/*
++ * Feed-forward clock absolute time. This should be the preferred way to read
++ * the feed-forward clock for "wall-clock" type time. The flags allow to compose
++ * various flavours of absolute time (e.g. with or without leap seconds taken
++ * into account). If valid pointers are provided, the ffcounter value and an
++ * upper bound on clock error associated with the bintime are provided.
++ * NOTE: use ffclock_convert_abs() to differ the conversion of a ffcounter value
++ * read earlier.
++ */
++void
++ffclock_abstime(ffcounter *ffcount, struct bintime *bt,
++    struct bintime *error_bound, uint32_t flags)
++{
++	struct ffclock_estimate cest;
++	ffcounter ffc;
++	ffcounter update_ffcount;
++	ffcounter ffdelta_error;
++
++	/* Get counter and corresponding time. */
++	if ((flags & FFCLOCK_FAST) == FFCLOCK_FAST)
++		ffclock_last_tick(&ffc, bt, flags);
++	else {
++		ffclock_read_counter(&ffc);
++		ffclock_convert_abs(ffc, bt, flags);
++	}
++
++	/* Current ffclock estimate, use update_ffcount as generation number. */
++	do {
++		update_ffcount = ffclock_estimate.update_ffcount;
++		bcopy(&ffclock_estimate, &cest, sizeof(struct ffclock_estimate));
++	} while (update_ffcount != ffclock_estimate.update_ffcount);
++
++	/*
++	 * Leap second adjustment. Total as seen by synchronisation algorithm
++	 * since it started. cest.leapsec_next is the ffcounter prediction of
++	 * when the next leapsecond occurs.
++	 */
++	if ((flags & FFCLOCK_LEAPSEC) == FFCLOCK_LEAPSEC) {
++		bt->sec -= cest.leapsec_total;
++		if (ffc > cest.leapsec_next)
++			bt->sec -= cest.leapsec;
++	}
++
++	/* Boot time adjustment, for uptime/monotonic clocks. */
++	if ((flags & FFCLOCK_UPTIME) == FFCLOCK_UPTIME) {
++		bintime_sub(bt, &ffclock_boottime);
++	}
++
++	/* Compute error bound if a valid pointer has been passed. */
++	if (error_bound) {
++		ffdelta_error = ffc - cest.update_ffcount;
++		ffclock_convert_diff(ffdelta_error, error_bound);
++		/* 18446744073709 = int(2^64/1e12), err_bound_rate in [ps/s] */
++		bintime_mul(error_bound, cest.errb_rate *
++		    (uint64_t)18446744073709LL);
++		/* 18446744073 = int(2^64 / 1e9), since err_abs in [ns] */
++		bintime_addx(error_bound, cest.errb_abs *
++		    (uint64_t)18446744073LL);
++	}
++
++	if (ffcount)
++		*ffcount = ffc;
++}
++
++/*
++ * Feed-forward difference clock. This should be the preferred way to convert a
++ * time interval in ffcounter values into a time interval in seconds. If a valid
++ * pointer is passed, an upper bound on the error in computing the time interval
++ * in seconds is provided.
++ */
++void
++ffclock_difftime(ffcounter ffdelta, struct bintime *bt,
++    struct bintime *error_bound)
++{
++	ffcounter update_ffcount;
++	uint32_t err_rate;
++
++	ffclock_convert_diff(ffdelta, bt);
++
++	if (error_bound) {
++		do {
++			update_ffcount = ffclock_estimate.update_ffcount;
++			err_rate = ffclock_estimate.errb_rate;
++		} while (update_ffcount != ffclock_estimate.update_ffcount);
++
++		ffclock_convert_diff(ffdelta, error_bound);
++		/* 18446744073709 = int(2^64/1e12), err_bound_rate in [ps/s] */
++		bintime_mul(error_bound, err_rate * (uint64_t)18446744073709LL);
++	}
++}
+Index: 9.0/sys/sys/timeffc.h
+===================================================================
+--- 9.0.orig/sys/sys/timeffc.h	2012-02-27 21:33:08.000000000 +1100
++++ 9.0/sys/sys/timeffc.h	2012-02-27 21:33:10.000000000 +1100
+@@ -98,13 +98,36 @@ void ffclock_read_counter(ffcounter *ffc
+ void ffclock_last_tick(ffcounter *ffcount, struct bintime *bt, uint32_t flags);
+ 
+ /*
+  * Low level routines to convert a counter timestamp into absolute time and a
+  * counter timestamp interval into an interval in seconds. The absolute time
+  * conversion accepts the FFCLOCK_LERP flag.
+  */
+ void ffclock_convert_abs(ffcounter ffcount, struct bintime *bt, uint32_t flags);
+ void ffclock_convert_diff(ffcounter ffdelta, struct bintime *bt);
+ 
++/*
++ * Feed-forward clock routines.
++ *
++ * These functions rely on the timecounters and ffclock_estimates stored in
++ * fftimehands. Note that the error_bound parameter is not the error of the
++ * clock but an upper bound on the error of the absolute time or time interval
++ * returned.
++ *
++ * ffclock_abstime(): retrieves current time as counter value and convert this
++ *     timestamp in seconds. The value (in seconds) of the converted timestamp
++ *     depends on the flags passed: for a given counter value, different
++ *     conversions are possible. Different clock models can be selected by
++ *     combining flags (for example (FFCLOCK_LERP|FFCLOCK_UPTIME) produces
++ *     linearly interpolated uptime).
++ * ffclock_difftime(): computes a time interval in seconds based on an interval
++ *     measured in ffcounter units. This should be the preferred way to measure
++ *     small time intervals very accurately.
++ */
++void ffclock_abstime(ffcounter *ffcount, struct bintime *bt,
++    struct bintime *error_bound, uint32_t flags);
++void ffclock_difftime(ffcounter ffdelta, struct bintime *bt,
++    struct bintime *error_bound);
++
+ #endif /* _KERNEL */
+ #endif /* __BSD_VISIBLE */
+ #endif /* _SYS_TIMEFF_H_ */

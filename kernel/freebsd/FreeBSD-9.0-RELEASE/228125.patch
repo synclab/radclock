@@ -1,0 +1,68 @@
+------------------------------------------------------------------------
+r228125 | lstewart | 2011-11-29 19:43:04 +1100 (Tue, 29 Nov 2011) | 11 lines
+
+Make sysclock_active publicly available to external consumers.
+
+Committed on behalf of Julien Ridoux and Darryl Veitch from the University of
+Melbourne, Australia, as part of the FreeBSD Foundation funded "Feed-Forward
+Clock Synchronization Algorithms" project.
+
+For more information, see http://www.synclab.org/radclock/
+
+Discussed with:	Julien Ridoux (jridoux at unimelb edu au)
+Submitted by:	Julien Ridoux (jridoux at unimelb edu au)
+
+------------------------------------------------------------------------
+Index: sys/kern/kern_ffclock.c
+===================================================================
+--- a/sys/kern/kern_ffclock.c	(revision 228124)
++++ b/sys/kern/kern_ffclock.c	(revision 228125)
+@@ -183,22 +183,20 @@ sysctl_kern_ffclock_choice(SYSCTL_HANDLE
+ 	}
+ 	error = sbuf_finish(s);
+ 	sbuf_delete(s);
+ 
+ 	return (error);
+ }
+ 
+ SYSCTL_PROC(_kern_ffclock, OID_AUTO, choice, CTLTYPE_STRING | CTLFLAG_RD,
+     0, 0, sysctl_kern_ffclock_choice, "A", "Clock paradigms available");
+ 
+-extern int sysclock_active;
+-
+ static int
+ sysctl_kern_ffclock_active(SYSCTL_HANDLER_ARGS)
+ {
+ 	char newclock[32];
+ 	int error;
+ 
+ 	switch (sysclock_active) {
+ 	case SYSCLOCK_FBCK:
+ 		strlcpy(newclock, sysclocks[SYSCLOCK_FBCK], sizeof(newclock));
+ 		break;
+Index: sys/sys/timeffc.h
+===================================================================
+--- a/sys/sys/timeffc.h	(revision 228124)
++++ b/sys/sys/timeffc.h	(revision 228125)
+@@ -54,20 +54,21 @@ struct ffclock_estimate {
+ 
+ #if __BSD_VISIBLE
+ #ifdef _KERNEL
+ 
+ /*
+  * Index into the sysclocks array for obtaining the ASCII name of a particular
+  * sysclock.
+  */
+ #define	SYSCLOCK_FBCK	0
+ #define	SYSCLOCK_FFWD	1
++extern int sysclock_active;
+ 
+ /*
+  * Parameters of counter characterisation required by feed-forward algorithms.
+  */
+ #define	FFCLOCK_SKM_SCALE	1024
+ 
+ /*
+  * Feed-forward clock status
+  */
+ #define	FFCLOCK_STA_UNSYNC	1
