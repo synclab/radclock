@@ -224,7 +224,8 @@ int capture_raw_data( struct radclock *clock_handle)
 			 * relevant information and inserting raw data bundles in the
 			 * linked list known by the clock handle.
 			 */
-			err = pcap_loop(clock_handle->pcap_handle, -1 /*packet*/, fill_rawdata_ntp, (u_char *) clock_handle);
+			err = pcap_loop(clock_handle->pcap_handle, -1 /*packet*/,
+					fill_rawdata_ntp, (u_char *) clock_handle);
 			break;
 		
 		case SYNCTYPE_PPS:

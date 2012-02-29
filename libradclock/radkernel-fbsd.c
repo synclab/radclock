@@ -609,7 +609,7 @@ struct bpf_hdr_hack_v1 {
 	(offsetof(type, vcount) + sizeof(((type *)0)->vcount))
 
 #define BPF_HDR_LEN_v1		\
-	(BPF_WORDALIGN(SIZEOF_BPF_HDR_v1(struct bpf_hdr_hack_v1) + ETHER_HDR_LEN)	- ETHER_HDR_LEN)
+	(BPF_WORDALIGN(SIZEOF_BPF_HDR_v1(struct bpf_hdr_hack_v1) + ETHER_HDR_LEN) - ETHER_HDR_LEN)
 
 // FIXME inline should be in a header file, d'oh...
 // FIXME should convert to void, make these tests once and not on each packet
@@ -665,15 +665,59 @@ extract_vcount_stamp_v2(pcap_t *p_handle, const struct pcap_pkthdr *header,
 	vcounter_t *hack;
 	hack = (vcounter_t*) &(header->ts);
 	*vcount = *hack;
-
-/*
- * // TODO Clean me !!
-	logger(RADLOG_ERR, "Header = %llu", (long long unsigned) (header->ts.tv_sec));
-	logger(RADLOG_ERR, "Header = %llu", (long long unsigned) (header->ts.tv_usec));
-	logger(RADLOG_ERR, "Extract vcount = %llu", (long long unsigned)*vcount);
-*/
 	return (0);
 }
+
+
+struct bpf_hdr_hack_v3 {
+	struct timeval bh_tstamp;	/* time stamp */
+	vcounter_t vcount;			/* raw vcount value for this packet */
+	bpf_u_int32 bh_caplen;		/* length of captured portion */
+	bpf_u_int32 bh_datalen;		/* original length of packet */
+	u_short bh_hdrlen;			/* length of bpf header (this struct plus alignment padding) */
+};
+
+
+#define SIZEOF_BPF_HDR_v3(type)	\
+	(offsetof(type, bh_hdrlen) + sizeof(((type *)0)->bh_hdrlen))
+
+#define BPF_HDR_LEN_v3		\
+	(BPF_WORDALIGN(SIZEOF_BPF_HDR_v3(struct bpf_hdr_hack_v3) + ETHER_HDR_LEN) - ETHER_HDR_LEN)
+
+
+static inline int
+extract_vcount_stamp_v3(pcap_t *p_handle, const struct pcap_pkthdr *header,
+		const unsigned char *packet, vcounter_t *vcount)
+{
+	struct bpf_hdr_hack_v3 *hack;
+
+	/*
+	 * Find the beginning of the hacked header starting from the MAC header.
+	 * Useful for checking we are doing the right thing.
+	 */
+	hack = (struct bpf_hdr_hack_v3 *) (packet - BPF_HDR_LEN_v3);
+
+	/* 
+	 * Check we did the right thing by comparing hack and pcap header pointer
+	 * Compare to previous hacks, the pcap packet header and the kernel BPF
+	 * header do not match anymore (actually even the idea of a memcmp of the
+	 * pointers was quite dodgy, since pcap access the members of the structure
+	 * by name.
+	 * */
+	if (hack->bh_hdrlen != BPF_HDR_LEN_v3) {
+		logger(RADLOG_ERR, "Feed-forward kernel v3 error: BPF header length mismatch %d vs %d", 
+				hack->bh_hdrlen, BPF_HDR_LEN_v3);
+		return (-1);
+	}
+	if (memcmp(&hack->bh_tstamp, &header->ts, sizeof(struct timeval)) != 0) {
+		logger(RADLOG_ERR, "Feed-forward kernel v3 error: BPF headers do not match");
+		return (-1);
+	}
+
+	*vcount= hack->vcount;
+	return (0);
+}
+
 
 
 int
@@ -694,8 +738,10 @@ extract_vcount_stamp(struct radclock *clock, pcap_t *p_handle,
 		err = extract_vcount_stamp_v1(clock->pcap_handle, header, packet, vcount);
 		break;
 	case 2:
-	case 3:
 		err = extract_vcount_stamp_v2(clock->pcap_handle, header, packet, vcount);
+		break;
+	case 3:
+		err = extract_vcount_stamp_v3(clock->pcap_handle, header, packet, vcount);
 		break;
 	default:
 		err = -1;
@@ -705,9 +751,10 @@ extract_vcount_stamp(struct radclock *clock, pcap_t *p_handle,
 	if (err < 0) {
 		logger(RADLOG_ERR, "Cannot extract vcounter from packet timestamped: %ld.%ld",
 			header->ts.tv_sec, header->ts.tv_usec);
+		return (-1);
 	}
 
-	return (-1);
+	return (0);
 }
 
 

@@ -101,9 +101,9 @@ int radclock_get_tsmode(struct radclock *handle, pcap_t *p_handle, radclock_tsmo
 
 struct routine_priv_data
 {
-	struct radclock *handle;
+	struct radclock *clock;
 	pcap_t *p_handle;
-	struct pcap_pkthdr *header;
+	struct pcap_pkthdr *pcap_header;
 	unsigned char *packet;
 	vcounter_t *vcount;
 	struct timeval *ts;
@@ -114,10 +114,10 @@ struct routine_priv_data
 void kernelclock_routine(u_char *user, const struct pcap_pkthdr *phdr, const u_char *pdata)
 {
 	struct routine_priv_data *data = (struct routine_priv_data *) user;
-	memcpy(data->header, phdr, sizeof(struct pcap_pkthdr));
+	memcpy(data->pcap_header, phdr, sizeof(struct pcap_pkthdr));
 	data->packet = (unsigned char*)pdata;
 	memcpy(data->ts, &phdr->ts, sizeof(struct timeval));
-	data->ret = extract_vcount_stamp(data->handle, data->p_handle, phdr, pdata, data->vcount);
+	data->ret = extract_vcount_stamp(data->clock, data->p_handle, phdr, pdata, data->vcount);
 }
 
 
@@ -129,22 +129,22 @@ void kernelclock_routine(u_char *user, const struct pcap_pkthdr *phdr, const u_c
  * vcount padded in the pcap header.
  * No other choice than having a clock handle as a parameter input ...
  */
-int radclock_get_packet( struct radclock *handle, 
+int radclock_get_packet( struct radclock *clock, 
 						pcap_t *p_handle, 
 						struct pcap_pkthdr *header, 
 						unsigned char **packet, 
 						vcounter_t *vcount, 
 						struct timeval *ts)
 {
-	struct routine_priv_data data = 
+	struct routine_priv_data data =
 	{
-		.handle 	= handle,
-		.p_handle 	= p_handle,
-		.header 	= header,
-		.vcount 	= vcount,
-		.ts 		= ts,
-		.ret 		= 0,
-		.packet 	= NULL,
+		.clock			= clock,
+		.p_handle		= p_handle,
+		.pcap_header	= header,
+		.vcount			= vcount,
+		.ts				= ts,
+		.ret			= 0,
+		.packet			= NULL,
 	};
 	/* Need to call the low level pcap_loop function to be able to pass our 
 	 * own callback and get the vcount value */
@@ -154,10 +154,14 @@ int radclock_get_packet( struct radclock *handle,
 	*packet = data.packet;
 
 	/* Error can be -1 (read error) or -2 (explicit loop break */
-	if ( err < 0 )
-		return err;
-	if ( data.ret < 0)
-		return -1;
+	if (err < 0) {
+		perror("pcap_loop:");
+		return (err);
+	}
+	if (data.ret < 0) {
+		logger(LOG_ERR, "extract_vcount_stamp error");
+		return (-1);
+	}
 	return 0;
 }
 
