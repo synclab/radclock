@@ -467,6 +467,7 @@ inline int set_kernel_fixedpoint(struct radclock *handle, struct radclock_fixedp
 	case 0:
 	case 1:
 		err = radclock_gnl_set_attr(PRIV_DATA(handle)->radclock_gnl_id, RADCLOCK_ATTR_FIXEDPOINT, fpdata);
+		break;
 
 	case 2:	
 		verbose(LOG_ERR, "set_kernel_fixedpoint but kernel version 2!!");
