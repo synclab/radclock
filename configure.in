@@ -462,6 +462,19 @@ case "$target_os" in
 					;;
 				esac
 			;;	
+			3.2.2*)
+				# Set the SYSCALL numbers
+				case "$target_cpu" in
+					i386 | i486 | i586 | i686)
+						syscall_get_vcounter_number=349
+						syscall_get_vcounter_latency_number=350
+					;;
+					x86_64)
+						syscall_get_vcounter_number=312
+						syscall_get_vcounter_latency_number=313
+					;;
+				esac
+			;;	
 			*)
 				syscall_get_vcounter_number=0
 				syscall_get_vcounter_latency_number=0
