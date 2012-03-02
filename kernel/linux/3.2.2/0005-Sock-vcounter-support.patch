@@ -1,0 +1,107 @@
+From 1b367a00b9d1d6ccc281d3180adfb859667bca7d Mon Sep 17 00:00:00 2001
+From: Julien Ridoux <julien@synclab.org>
+Date: Mon, 30 Aug 2010 20:23:13 +1000
+Subject: [PATCH 5/9] Sock vcounter support
+
+Add support to pass vcounter from skbuff to sock, depending on
+timestamping mode.
+---
+ include/net/sock.h |    9 +++++++++
+ net/core/sock.c    |    9 +++++++++
+ net/ipv4/af_inet.c |    6 ++++++
+ 3 files changed, 24 insertions(+), 0 deletions(-)
+
+diff --git a/include/net/sock.h b/include/net/sock.h
+index 32e3937..bf984e2 100644
+--- a/include/net/sock.h
++++ b/include/net/sock.h
+@@ -60,10 +60,14 @@
+ 
+ #include <linux/atomic.h>
+ #include <net/dst.h>
+ #include <net/checksum.h>
+ 
++#ifdef CONFIG_RADCLOCK
++#include <linux/clocksource.h>
++#endif
++
+ /*
+  * This structure really needs to be cleaned up.
+  * Most of it is for TCP, and not used by any of
+  * the other protocols.
+  */
+@@ -325,10 +329,15 @@ struct sock {
+ 	long			sk_rcvtimeo;
+ 	long			sk_sndtimeo;
+ 	void			*sk_protinfo;
+ 	struct timer_list	sk_timer;
+ 	ktime_t			sk_stamp;
++	#ifdef CONFIG_RADCLOCK
++	vcounter_t		sk_vcount_stamp;
++	ktime_t			sk_stamp_fair; 	/* Receives the fair tv from skbuff, ns resolution */
++	int			sk_radclock_tsmode;
++	#endif
+ 	struct socket		*sk_socket;
+ 	void			*sk_user_data;
+ 	struct page		*sk_sndmsg_page;
+ 	struct sk_buff		*sk_send_head;
+ 	__u32			sk_sndmsg_off;
+diff --git a/net/core/sock.c b/net/core/sock.c
+index b23f174..d8338f5 100644
+--- a/net/core/sock.c
++++ b/net/core/sock.c
+@@ -132,10 +132,14 @@
+ 
+ #ifdef CONFIG_INET
+ #include <net/tcp.h>
+ #endif
+ 
++#ifdef CONFIG_RADCLOCK
++extern int sysfs_ffclock_tsmode;
++#endif
++
+ /*
+  * Each address family might have different locking rules, so we have
+  * one slock key per address family:
+  */
+ static struct lock_class_key af_family_keys[AF_MAX];
+@@ -2011,10 +2015,15 @@ void sock_init_data(struct socket *sock, struct sock *sk)
+ 	sk->sk_rcvlowat		=	1;
+ 	sk->sk_rcvtimeo		=	MAX_SCHEDULE_TIMEOUT;
+ 	sk->sk_sndtimeo		=	MAX_SCHEDULE_TIMEOUT;
+ 
+ 	sk->sk_stamp = ktime_set(-1L, 0);
++	#ifdef CONFIG_RADCLOCK
++	sk->sk_radclock_tsmode = sysfs_ffclock_tsmode;
++	sk->sk_vcount_stamp = 0;
++	sk->sk_stamp_fair = ktime_set(-1L, -1L);
++	#endif
+ 
+ 	/*
+ 	 * Before updating sk_refcnt, we must commit prior changes to memory
+ 	 * (Documentation/RCU/rculist_nulls.txt for details)
+ 	 */
+diff --git a/net/ipv4/af_inet.c b/net/ipv4/af_inet.c
+index 1b5096a..a056b52 100644
+--- a/net/ipv4/af_inet.c
++++ b/net/ipv4/af_inet.c
+@@ -850,10 +850,16 @@ int inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
+ 	struct sock *sk = sock->sk;
+ 	int err = 0;
+ 	struct net *net = sock_net(sk);
+ 
+ 	switch (cmd) {
++#ifdef CONFIG_RADCLOCK
++		case SIOCGRADCLOCKTSMODE:
++			break;
++		case SIOCSRADCLOCKTSMODE:
++			break;
++#endif
+ 	case SIOCGSTAMP:
+ 		err = sock_get_timestamp(sk, (struct timeval __user *)arg);
+ 		break;
+ 	case SIOCGSTAMPNS:
+ 		err = sock_get_timestampns(sk, (struct timespec __user *)arg);
+-- 
+1.7.5.4
+

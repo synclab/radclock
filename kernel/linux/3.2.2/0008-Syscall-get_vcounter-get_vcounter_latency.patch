@@ -1,0 +1,165 @@
+From 66f497199fe49fa0d191eea0c38486f97d5fe1e6 Mon Sep 17 00:00:00 2001
+From: Julien Ridoux <julien@synclab.org>
+Date: Mon, 30 Aug 2010 20:32:35 +1000
+Subject: [PATCH 8/9] Syscall get_vcounter get_vcounter_latency
+
+Add get_vcounter() and get_vcounter_latency syscalls to access the
+raw vcounter and its latency from user space
+---
+ arch/x86/include/asm/unistd_32.h   |    6 ++++-
+ arch/x86/include/asm/unistd_64.h   |    6 +++++
+ arch/x86/kernel/syscall_table_32.S |    4 +++
+ include/linux/syscalls.h           |    8 ++++++
+ kernel/time.c                      |   43 ++++++++++++++++++++++++++++++++++++
+ 5 files changed, 66 insertions(+), 1 deletions(-)
+
+diff --git a/arch/x86/include/asm/unistd_32.h b/arch/x86/include/asm/unistd_32.h
+index 599c77d..e220a79 100644
+--- a/arch/x86/include/asm/unistd_32.h
++++ b/arch/x86/include/asm/unistd_32.h
+@@ -352,14 +352,18 @@
+ #define __NR_syncfs             344
+ #define __NR_sendmmsg		345
+ #define __NR_setns		346
+ #define __NR_process_vm_readv	347
+ #define __NR_process_vm_writev	348
++#ifdef CONFIG_RADCLOCK
++#define __NR_get_vcounter	349
++#define __NR_get_vcounter_latency	350
++#endif
+ 
+ #ifdef __KERNEL__
+ 
+-#define NR_syscalls 349
++#define NR_syscalls 351
+ 
+ #define __ARCH_WANT_IPC_PARSE_VERSION
+ #define __ARCH_WANT_OLD_READDIR
+ #define __ARCH_WANT_OLD_STAT
+ #define __ARCH_WANT_STAT64
+diff --git a/arch/x86/include/asm/unistd_64.h b/arch/x86/include/asm/unistd_64.h
+index 0431f19..4658143 100644
+--- a/arch/x86/include/asm/unistd_64.h
++++ b/arch/x86/include/asm/unistd_64.h
+@@ -684,10 +684,16 @@ __SYSCALL(__NR_setns, sys_setns)
+ __SYSCALL(__NR_getcpu, sys_getcpu)
+ #define __NR_process_vm_readv			310
+ __SYSCALL(__NR_process_vm_readv, sys_process_vm_readv)
+ #define __NR_process_vm_writev			311
+ __SYSCALL(__NR_process_vm_writev, sys_process_vm_writev)
++#ifdef CONFIG_RADCLOCK
++#define __NR_get_vcounter			312
++__SYSCALL(__NR_get_vcounter, sys_get_vcounter)
++#define __NR_get_vcounter_latency	313
++__SYSCALL(__NR_get_vcounter_latency, sys_get_vcounter_latency)
++#endif
+ 
+ #ifndef __NO_STUBS
+ #define __ARCH_WANT_OLD_READDIR
+ #define __ARCH_WANT_OLD_STAT
+ #define __ARCH_WANT_SYS_ALARM
+diff --git a/arch/x86/kernel/syscall_table_32.S b/arch/x86/kernel/syscall_table_32.S
+index 9a0e312..1c83bc6 100644
+--- a/arch/x86/kernel/syscall_table_32.S
++++ b/arch/x86/kernel/syscall_table_32.S
+@@ -346,5 +346,9 @@ ENTRY(sys_call_table)
+ 	.long sys_syncfs
+ 	.long sys_sendmmsg		/* 345 */
+ 	.long sys_setns
+ 	.long sys_process_vm_readv
+ 	.long sys_process_vm_writev
++#ifdef CONFIG_RADCLOCK
++	.long sys_get_vcounter
++	.long sys_get_vcounter_latency
++#endif
+diff --git a/include/linux/syscalls.h b/include/linux/syscalls.h
+index 86a24b1..f2b5f1d 100644
+--- a/include/linux/syscalls.h
++++ b/include/linux/syscalls.h
+@@ -73,10 +73,13 @@ struct file_handle;
+ #include <asm/signal.h>
+ #include <linux/unistd.h>
+ #include <linux/quota.h>
+ #include <linux/key.h>
+ #include <trace/syscall.h>
++#ifdef CONFIG_RADCLOCK
++#include <linux/clocksource.h>
++#endif
+ 
+ #define __SC_DECL1(t1, a1)	t1 a1
+ #define __SC_DECL2(t2, a2, ...) t2 a2, __SC_DECL1(__VA_ARGS__)
+ #define __SC_DECL3(t3, a3, ...) t3 a3, __SC_DECL2(__VA_ARGS__)
+ #define __SC_DECL4(t4, a4, ...) t4 a4, __SC_DECL3(__VA_ARGS__)
+@@ -855,6 +858,11 @@ asmlinkage long sys_process_vm_writev(pid_t pid,
+ 				      unsigned long liovcnt,
+ 				      const struct iovec __user *rvec,
+ 				      unsigned long riovcnt,
+ 				      unsigned long flags);
+ 
++#ifdef CONFIG_RADCLOCK
++asmlinkage long sys_get_vcounter(vcounter_t *vcounter);
++asmlinkage long sys_get_vcounter_latency(vcounter_t *vcounter, cycle_t *vcount_lat, cycle_t *tsc_lat);
++#endif
++
+ #endif
+diff --git a/kernel/time.c b/kernel/time.c
+index 73e416d..c980a50 100644
+--- a/kernel/time.c
++++ b/kernel/time.c
+@@ -112,10 +112,53 @@ SYSCALL_DEFINE2(gettimeofday, struct timeval __user *, tv,
+ 			return -EFAULT;
+ 	}
+ 	return 0;
+ }
+ 
++
++#ifdef CONFIG_RADCLOCK
++asmlinkage long sys_get_vcounter(vcounter_t *vcounter)
++{
++	vcounter_t vcount;
++	vcount = read_vcounter();
++
++	if (copy_to_user(vcounter, &vcount, sizeof(vcounter_t)))
++		return -EFAULT;
++	return 0;
++}
++
++asmlinkage long sys_get_vcounter_latency(vcounter_t *vcounter, cycle_t *vcount_lat, cycle_t *tsc_lat)
++{
++	vcounter_t vcount;
++	cycle_t tsc1, tsc2, tsc3;
++
++	/* One for fun and warmup */
++	rdtscll(tsc1);
++	__asm __volatile("lfence" ::: "memory");
++	rdtscll(tsc1);
++	__asm __volatile("lfence" ::: "memory");
++	rdtscll(tsc2);
++	__asm __volatile("lfence" ::: "memory");
++	vcount = read_vcounter();
++	__asm __volatile("lfence" ::: "memory");
++	rdtscll(tsc3);
++	__asm __volatile("lfence" ::: "memory");
++
++	tsc1 = tsc2 - tsc1;
++	tsc2 = tsc3 - tsc2;
++
++	if (copy_to_user(vcounter, &vcount, sizeof(vcounter_t)))
++		return -EFAULT;
++	if (copy_to_user(vcount_lat, &tsc2, sizeof(cycle_t)))
++		return -EFAULT;
++	if (copy_to_user(tsc_lat, &tsc1, sizeof(cycle_t)))
++		return -EFAULT;
++	return 0;
++}
++#endif
++
++
+ /*
+  * Adjust the time obtained from the CMOS to be UTC time instead of
+  * local time.
+  *
+  * This is ugly, but preferable to the alternatives.  Otherwise we
+-- 
+1.7.5.4
+

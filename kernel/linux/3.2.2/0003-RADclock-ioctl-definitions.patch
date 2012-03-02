@@ -1,0 +1,100 @@
+From 1f425505cbf8161e6f56db307c8ab581cd60262b Mon Sep 17 00:00:00 2001
+From: Julien Ridoux <julien@synclab.org>
+Date: Thu, 1 Mar 2012 10:02:35 +1100
+Subject: [PATCH 3/9] RADclock ioctl definitions
+
+Add ioctl definitions for the RADclock using a socket open with libpcap
+Definitions to get/set RADclock timestamp mode on the socket
+Definition to get the raw vcounter stamp of a captured packet
+---
+ include/asm-generic/sockios.h |    5 +++++
+ include/linux/sockios.h       |    4 ++++
+ net/socket.c                  |   22 ++++++++++++++++++++++
+ 3 files changed, 31 insertions(+), 0 deletions(-)
+
+diff --git a/include/asm-generic/sockios.h b/include/asm-generic/sockios.h
+index 9a61a36..c5601d4 100644
+--- a/include/asm-generic/sockios.h
++++ b/include/asm-generic/sockios.h
+@@ -8,6 +8,11 @@
+ #define SIOCGPGRP	0x8904
+ #define SIOCATMARK	0x8905
+ #define SIOCGSTAMP	0x8906		/* Get stamp (timeval) */
+ #define SIOCGSTAMPNS	0x8907		/* Get stamp (timespec) */
+ 
++#ifdef CONFIG_RADCLOCK
++#define SIOCSRADCLOCKTSMODE	0x8908
++#define SIOCGRADCLOCKTSMODE	0x8909
++#endif
++
+ #endif /* __ASM_GENERIC_SOCKIOS_H */
+diff --git a/include/linux/sockios.h b/include/linux/sockios.h
+index 7997a50..5dae2d1 100644
+--- a/include/linux/sockios.h
++++ b/include/linux/sockios.h
+@@ -125,10 +125,14 @@
+ #define SIOCBRDELIF	0x89a3		/* remove interface from bridge */
+ 
+ /* hardware time stamping: parameters in linux/net_tstamp.h */
+ #define SIOCSHWTSTAMP   0x89b0
+ 
++#ifdef CONFIG_RADCLOCK
++#define SIOCGRADCLOCKSTAMP 0x89b1	/* get current vcounter timestamp */
++#endif
++
+ /* Device private ioctl calls */
+ 
+ /*
+  *	These 16 ioctls are available to devices via the do_ioctl() device
+  *	vector. Each device should include this file and redefine these names
+diff --git a/net/socket.c b/net/socket.c
+index 2877647..f71746b 100644
+--- a/net/socket.c
++++ b/net/socket.c
+@@ -2611,10 +2611,28 @@ static int do_siocgstampns(struct net *net, struct socket *sock,
+ 		err |= __put_user(kts.tv_nsec, &up->tv_nsec);
+ 	}
+ 	return err;
+ }
+ 
++
++#ifdef CONFIG_RADCLOCK
++static int do_siocgradclockstamp(struct net *net, struct socket *sock,
++			 unsigned int cmd, unsigned long long __user *up)
++{
++	mm_segment_t old_fs = get_fs();
++	__u64 val;
++	int err;
++
++	set_fs (KERNEL_DS);
++	err = sock_do_ioctl(net, sock, cmd, (unsigned long)&val);
++	set_fs (old_fs);
++	if (!err)
++		err = put_user(val, up);
++	return err;
++}
++#endif
++
+ static int dev_ifname32(struct net *net, struct compat_ifreq __user *uifr32)
+ {
+ 	struct ifreq __user *uifr;
+ 	int err;
+ 
+@@ -3153,10 +3171,14 @@ static int compat_sock_ioctl_trans(struct file *file, struct socket *sock,
+ 		return do_siocgstamp(net, sock, cmd, argp);
+ 	case SIOCGSTAMPNS:
+ 		return do_siocgstampns(net, sock, cmd, argp);
+ 	case SIOCSHWTSTAMP:
+ 		return compat_siocshwtstamp(net, argp);
++#ifdef CONFIG_RADCLOCK
++	case SIOCGRADCLOCKSTAMP:
++		return do_siocgradclockstamp(net, sock, cmd, argp);
++#endif
+ 
+ 	case FIOSETOWN:
+ 	case SIOCSPGRP:
+ 	case FIOGETOWN:
+ 	case SIOCGPGRP:
+-- 
+1.7.5.4
+
