@@ -141,39 +141,42 @@ void* thread_data_processing(void *c_handle)
 	init_thread_signal_mgt();
 	
 	/* Clock handle to be able to read global data */
-	struct radclock *clock_handle;
-	clock_handle = (struct radclock*) c_handle;
+	struct radclock *clock;
+	clock = (struct radclock*) c_handle;
 
 	/* Init peer stamp counter, everything rely on this starting at 0 */
 	peer.stamp_i = 0;
 	
 	// TODO XXX Need to manage peers better !!
 	/* Register active peer */
-	clock_handle->active_peer = (void*) &peer;
+	clock->active_peer = (void*) &peer;
 
-	while ( (clock_handle->pthread_flag_stop & PTH_DATA_PROC_STOP) != PTH_DATA_PROC_STOP )
+	while ((clock->pthread_flag_stop & PTH_DATA_PROC_STOP) != PTH_DATA_PROC_STOP)
 	{
 		/* Block until we acquire the lock first, then release it and wait */
-		pthread_mutex_lock(&clock_handle->wakeup_mutex);
+		pthread_mutex_lock(&clock->wakeup_mutex);
+
+		/* Loosely signal this thread did lock the mutex */ 
+		clock->wakeup_data_ready = 0;
 	
 		/* We may have been waiting for acquiring the lock, but the trigger
 		 * thread has been gone dying, so it will never signal again. So we need
 		 * to die
 		 */
-		if ( (clock_handle->pthread_flag_stop & PTH_DATA_PROC_STOP) == PTH_DATA_PROC_STOP )
-		{
-			pthread_mutex_unlock(&clock_handle->wakeup_mutex);
+		if ((clock->pthread_flag_stop & PTH_DATA_PROC_STOP) ==
+				PTH_DATA_PROC_STOP) {
+			pthread_mutex_unlock(&clock->wakeup_mutex);
 			break;
 		}
 
-		pthread_cond_wait(&clock_handle->wakeup_cond, &clock_handle->wakeup_mutex);
+		pthread_cond_wait(&clock->wakeup_cond, &clock->wakeup_mutex);
 
 		/* Process rawdata until there is something to process */
 		do {
-			err = process_rawdata(clock_handle, &peer);
+			err = process_rawdata(clock, &peer);
 		} while (err == 0); 
 
-		pthread_mutex_unlock(&clock_handle->wakeup_mutex);
+		pthread_mutex_unlock(&clock->wakeup_mutex);
 	}
 
 	/* Thread exit */
