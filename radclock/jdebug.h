@@ -67,7 +67,7 @@ pthread_id()
 #define JDEBUG_RUSAGE getrusage(RUSAGE_SELF, &jdbg_rusage); \
 		fprintf(stdout, "%s | %-24s - %-4d - %-25s | USAGE  maxrss:  %6ld KB | stime: %ld.%ld, utime: %ld.%ld\n",\
 		pthread_id(), __FILE__, __LINE__, __FUNCTION__,\
-		jdbg_rusage.ru_maxrss,\
+		(long int)jdbg_rusage.ru_maxrss,\
 		(long int)jdbg_rusage.ru_stime.tv_sec, (long int)jdbg_rusage.ru_stime.tv_usec,\
 		(long int)jdbg_rusage.ru_utime.tv_sec, (long int)jdbg_rusage.ru_utime.tv_usec);
 
@@ -85,11 +85,11 @@ extern long int jdbg_memuse;
 	if (_op == JDBG_MALLOC)\
 		fprintf(stdout, "%s | %-24s - %-4d - %-25s | MALLOC %6ld KB | memory allocated = %8ld Bytes\n",\
 			pthread_id(), __FILE__, __LINE__, __FUNCTION__,\
-			malloc_usable_size(_x), jdbg_memuse+=malloc_usable_size(_x));\
+			(long int)malloc_usable_size(_x), jdbg_memuse+=malloc_usable_size(_x));\
 	else \
 		fprintf(stdout, "%s | %-24s - %-4d - %-25s | FREE   %6ld KB | memory allocated = %8ld Bytes\n",\
 			pthread_id(), __FILE__, __LINE__, __FUNCTION__,\
-			malloc_usable_size(_x), jdbg_memuse-=malloc_usable_size(_x));
+			(long int)malloc_usable_size(_x), jdbg_memuse-=malloc_usable_size(_x));
 
 #else
 #define JDEBUG_MEMORY(_op, _x) \
