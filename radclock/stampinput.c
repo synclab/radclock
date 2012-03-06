@@ -159,7 +159,7 @@ err_out:
  * @return 0 on success a negitive value on error
  */
 int get_next_stamp(struct radclock *handle, struct stampsource *source,
-	struct stamp_t *stamp, uint64_t *stamp_id)
+	struct stamp_t *stamp)
 {
 	return INPUT_OPS(source)->get_next_stamp(handle, source, stamp);
 }

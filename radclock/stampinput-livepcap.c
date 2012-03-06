@@ -668,7 +668,7 @@ static int livepcapstamp_init(struct radclock *handle, struct stampsource *sourc
 
 static int
 livepcapstamp_get_next(struct radclock *handle, struct stampsource *source,
-	struct stamp_t *stamp, uint64_t *stamp_id)
+	struct stamp_t *stamp)
 {
 	JDEBUG
 
@@ -684,7 +684,6 @@ livepcapstamp_get_next(struct radclock *handle, struct stampsource *source,
 			(void *)LIVEPCAP_DATA(source),
 			get_packet_livepcap,
 			stamp,
-			stamp_id,
 			&source->ntp_stats,
 			LIVEPCAP_DATA(source)->src_ipaddr);
 

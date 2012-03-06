@@ -138,6 +138,7 @@ typedef enum {
 
 struct unidir_stamp {
 	vcounter_t stamp;
+	/* Need some time information of some kind */
 };
 
 
@@ -149,14 +150,22 @@ struct bidir_stamp {
 };
 
 
+// TODO this is very NTP centric
 struct stamp_t {
 	stamp_type_t type;
+	int qual_warning;	/* warning: route or server changes, server problem */
+	uint64_t id;
+	char server_ipaddr[16];
+	int ttl;
+	int stratum;
+	uint32_t refid;
+	int leapsec;
+	double rootdelay;
+	double rootdispersion;
 	union stamp_u {
 		struct unidir_stamp ustamp;
 		struct bidir_stamp  bstamp;
 	} st;
-		
-	int qual_warning;	/* warning: route or server changes, server problem */
 };
 
 #define UST(x) (&((x)->st.ustamp))

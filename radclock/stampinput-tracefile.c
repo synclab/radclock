@@ -153,7 +153,7 @@ static int tracefilestamp_init(struct radclock *handle, struct stampsource *sour
 
 static int
 tracefilestamp_get_next(struct radclock *handle, struct stampsource *source,
-	struct stamp_t *stamp, uint64_t *stamp_id)
+	struct stamp_t *stamp)
 {
 	int err;
 
@@ -166,7 +166,6 @@ tracefilestamp_get_next(struct radclock *handle, struct stampsource *source,
 			(void *)TRACEFILE_DATA(source),
 			get_packet_tracefile,
 			stamp,
-			stamp_id,
 			&source->ntp_stats,
 			TRACEFILE_DATA(source)->src_ipaddr);
 

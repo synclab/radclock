@@ -484,7 +484,6 @@ process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 	/* Bi-directionnal stamp passed to the algo for processing */
 	struct stamp_t stamp;
 	static struct stamp_t laststamp;
-	uint64_t stamp_id		= 0;
 
 	/* Error control logging */
 	long double currtime 	= 0;
@@ -506,7 +505,8 @@ process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 	/* Generic call for creating the stamps depending on the type of the 
 	 * input source.
 	 */
-	err = get_next_stamp(clock_handle, (struct stampsource *)clock_handle->stamp_source, &stamp, &stamp_id);
+	// Need to differentiate ascii input from pcap input
+	err = get_next_stamp(clock_handle, (struct stampsource *)clock_handle->stamp_source, &stamp);
 
 	// TODO why inverting the error code logic in here !!! XXX FIXME XXX
 	if (err < 0)
@@ -599,7 +599,7 @@ process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 
 
 	/* Write algo output to matlab file, much less urgent than previous tasks */
-	print_out_files(clock_handle, &stamp, stamp_id);
+	print_out_files(clock_handle, &stamp);
 	
 	/* View updated RADclock data and compare with NTP server stamps in nice
 	 * format. The first 10 then every 6 hours (poll_period can change, but

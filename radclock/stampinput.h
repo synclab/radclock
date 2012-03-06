@@ -50,7 +50,7 @@ struct stampsource *create_source(struct radclock *handle);
  *  or a negative value on failure.
  */
 int get_next_stamp(struct radclock *handle, struct stampsource *source,
-struct stamp_t *stamp, uint64_t *stamp_id);
+struct stamp_t *stamp);
 
 /**
  * Break inpout loop

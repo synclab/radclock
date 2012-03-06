@@ -116,7 +116,8 @@ static int asciistamp_init(struct radclock *handle, struct stampsource *source)
 }
 
 static int
-asciistamp_get_next(struct radclock *handle, struct stampsource *source, struct stamp_t *stamp, uint64_t *stamp_id)
+asciistamp_get_next(struct radclock *handle, struct stampsource *source,
+		struct stamp_t *stamp)
 {
 	FILE *stamp_fd = ASCII_DATA(source)->fd;
 
@@ -141,7 +142,6 @@ asciistamp_get_next(struct radclock *handle, struct stampsource *source, struct 
 		stamp->qual_warning = 0;
 		source->ntp_stats.ref_count+=2; 
 	}
-	*stamp_id = 0;
 	return 0;
 } 
 
