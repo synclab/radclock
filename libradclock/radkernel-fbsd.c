@@ -373,10 +373,19 @@ int get_kernel_ffclock(struct radclock *handle)
 	/* FreeBSD system call */
 	err = ffclock_getestimate(&cest);
 	if (err < 0) {
+// TODO Clean up verbose logging
 		logger(RADLOG_ERR, "Clock estimate init from kernel failed");
 		fprintf(stdout, "Clock estimate init from kernel failed");
 		return err;
 	}
+
+	/* Sanity check to avoid introducing crazy data */
+	if ((cest.update_time.sec == 0) || (cest.period == 0)) {
+		logger(RADLOG_ERR, "Clock estimate from kernel look bogus - ignored");
+		fprintf(stdout, "Clock estimate from kernel look bogus - ignored");
+		return (0);
+	}
+	
 
 	/* 
 	 * Cannot push 64 times in a LLU at once. Push twice 32 instead. In this
