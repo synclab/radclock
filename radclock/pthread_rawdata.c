@@ -541,23 +541,20 @@ process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 	}
 
 	/* To improve data accuracy, we kick a fixed point data update just after we
-	 * have preocessed a new stamp. Locking is handled by the kernel so we should
-	 * not have concurrency issue with the two threads updating the data
+	 * have preocessed a new stamp. Locking is handled by the kernel so we
+	 * should not have concurrency issue with the two threads updating the data.
+	 * If we are starting (or restarting), the last estimate in the kernel may
+	 * be better than ours after the very first stamp. Let's make sure we do not
+	 * push something too stupid, too quickly
 	 */
-  	if ((clock_handle->run_mode == RADCLOCK_SYNC_LIVE) &&
-			(clock_handle->conf->adjust_sysclock == BOOL_ON)) {
-			if ( clock_handle->kernel_version < 2 )
-		{	
+	if (clock_handle->run_mode == RADCLOCK_SYNC_LIVE &&
+			clock_handle->conf->adjust_sysclock == BOOL_ON &&
+			!HAS_STATUS(clock_handle, STARAD_UNSYNC)) {
+
+		if ( clock_handle->kernel_version < 2 ) {
 			update_kernel_fixed(clock_handle);
 			verbose(VERB_DEBUG, "Sync pthread updated fixed point data to kernel.");
-		}
-		else {
-			/* If we are starting (or restarting), the last estimate in the kernel
-			 * may be better than ours after the very first stamp. Let's make sure we do
-			 * not push something too stupid
-			 */
-			if (HAS_STATUS(clock_handle, STARAD_UNSYNC))
-				return 0;
+		} else {
 
 // XXX Out of whack, need cleaning when make next version linux support
 #ifdef WITH_RADKERNEL_FBSD
@@ -585,20 +582,17 @@ process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 			set_kernel_ffclock(clock_handle);
 			verbose(VERB_DEBUG, "Feed-forward kernel clock has been set.");
 		}
-	}
 
-	/* Update any virtual machine store if configured */
-  	if ((clock_handle->run_mode == RADCLOCK_SYNC_LIVE) &&
-			(clock_handle->conf->adjust_sysclock == BOOL_ON))
-	{
+		/* Update any virtual machine store if configured */
 		RAD_VM(clock_handle)->push_data(clock_handle);
 	}
+
 
 	/* Adjust the system clock, we only pass in here if we are not piggybacking
 	 * on ntp daemon.
 	 */
-  	if ( (clock_handle->run_mode == RADCLOCK_SYNC_LIVE) && (clock_handle->conf->adjust_sysclock == BOOL_ON) )
-	{
+	if ((clock_handle->run_mode == RADCLOCK_SYNC_LIVE) &&
+			(clock_handle->conf->adjust_sysclock == BOOL_ON)) {
 		// TODO: catch errors
 		update_system_clock(clock_handle);
 	}
