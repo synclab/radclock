@@ -130,6 +130,8 @@ int assess_ptimer(timer_t timer, float period)
 }	
 
 
+// TODO Ugly as hell
+static long double last_xmt = 0.0;
 
 
 int
@@ -168,11 +170,19 @@ create_ntp_request(struct radclock *clock_handle, struct ntp_pkt *pkt, struct ti
 	pkt->rec.l_fra		= 0;
 
 	/* Transmit time */ 
+
 	err = radclock_get_vcounter(clock_handle, &vcount);
 	if (err < 0)
 		return (1);
-
 	counter_to_time(clock_handle, &vcount, &time);
+
+	if (time == last_xmt) {
+		verbose (LOG_ERR, "xmt and last_xmt are the same !! vcount= %llu", 
+				(long long unsigned) vcount);
+		return (1);
+	}
+	last_xmt = time;
+
 	timeld_to_timeval(&time, xmt);
 	pkt->xmt.l_int = htonl(xmt->tv_sec + JAN_1970);
 	pkt->xmt.l_fra = htonl(xmt->tv_usec * 4294967296.0 / 1e6);
@@ -313,9 +323,7 @@ int ntp_client(struct radclock * clock_handle)
 				break;
 		}
 		else
-		{
 			verbose(VERB_DEBUG, "No reply after 800ms. Socket timed out");
-		}
 
 		attempt--;
 	}
