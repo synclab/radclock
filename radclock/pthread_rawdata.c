@@ -397,7 +397,8 @@ update_system_clock(struct radclock *clock)
  * stamps are insane and could break processing (e.g. induce zero division, NaN
  * results, etc.). We get rid of them here.
  */
-int insane_bidir_stamp(struct stamp_t *stamp, struct stamp_t *laststamp)
+int
+insane_bidir_stamp(struct stamp_t *stamp, struct stamp_t *laststamp)
 {
 	/* Sanity check if two consecutive stamps are identical
 	 *
@@ -410,46 +411,50 @@ int insane_bidir_stamp(struct stamp_t *stamp, struct stamp_t *laststamp)
 	 * implies we cannot check the stamp at i=0 (but that is obviously OK)
 	 */
 
-	if ( stamp->type != laststamp->type )
-	{
+	if (stamp->type != laststamp->type) {
 		verbose(LOG_ERR, "Trying to compare two stamps of different types %d and %d",
 				stamp->type, laststamp->type);
-		return 1;
+		return (1);
 	}
 
-	if ( memcmp(stamp, laststamp, sizeof(struct stamp_t)) == 0 ) {
+	if (memcmp(stamp, laststamp, sizeof(struct stamp_t)) == 0) {
 		verbose(LOG_WARNING, "Two identical consecutive stamps detected");
-		return 1;
+		return (1);
 	}
 
 	/* Non existent stamps */
-	if ( 	(BST(stamp)->Ta == 0) || (BST(stamp)->Tb == 0) || 
-			(BST(stamp)->Te == 0) || (BST(stamp)->Tf == 0) ) 
-	{
+	if ((BST(stamp)->Ta == 0) || (BST(stamp)->Tb == 0) ||
+			(BST(stamp)->Te == 0) || (BST(stamp)->Tf == 0)) {
 		verbose(LOG_WARNING, "bidir stamp with at least one 0 raw stamp");
-		return 1;
+		return (1);
 	}
 
 	/* Check for strict increment of counter based on previous stamp
-	 * note: maybe we should allow overlap, i.e.
+	 * Previous version was rejecting overlapping stamps, i.e.
+	 * 		stamp->Ta <= laststamp->Tf
+	 * was considered insane. With very large RTT and retransmission of the NTP
+	 * request if the socket has timed out, this is definitely a possible
+	 * scenario. Relax the constraint a bit by limiting to what we know is
+	 * insane for sure:
 	 * 		stamp->Ta <= laststamp->Ta
-	 * but unlikely in reality so, keep the stronger test
 	 */
-	if ( BST(stamp)->Ta <= BST(laststamp)->Tf ) {
-		verbose(LOG_WARNING, "Stamp with not strictly increasing counter");
-		return 1;
+	if (BST(stamp)->Ta <= BST(laststamp)->Tf)
+		verbose(VERB_DEBUG, "Successive stamps overlapping");
+
+	if (BST(stamp)->Ta <= BST(laststamp)->Ta) {
+		verbose(LOG_WARNING, "Successive NTP requests with non-strictly "
+				"increasing counter");
+		return (1);
 	}
 
 	/* RAW stamps completely messed up */
-	if ((BST(stamp)->Tf < BST(stamp)->Ta) || (BST(stamp)->Te < BST(stamp)->Tb)) 
-	{
+	if ((BST(stamp)->Tf < BST(stamp)->Ta) || (BST(stamp)->Te < BST(stamp)->Tb)) {
 		verbose(LOG_WARNING, "bidir stamp broke local causality");
-		return 1;
+		return (1);
 	}
 
 	/* This does not apply to SPY_STAMP for example */ 
-	if ( stamp->type == STAMP_NTP )
-	{
+	if (stamp->type == STAMP_NTP) {
 		/* Sanity checks on null or too small RTT.
 		 * Smallest RTT ever: 100 mus
 		 * Slowest counter  : 1193182 Hz
@@ -459,15 +464,15 @@ int insane_bidir_stamp(struct stamp_t *stamp, struct stamp_t *laststamp)
 		 * 		 HPET =  14318180
 		 * 		 TSC  > 500000000
 		 */
-		if ( (BST(stamp)->Tf - BST(stamp)->Ta) < 120 ) { 
+		if ((BST(stamp)->Tf - BST(stamp)->Ta) < 120) { 
 			verbose(LOG_WARNING, "bidir stamp with RTT impossibly low (< 120)"
 					": %"VC_FMT" cycles", BST(stamp)->Tf - BST(stamp)->Ta);
-			return 1;
+			return (1);
 		}
 	}
 
 	/* If we pass all sanity checks */
-	return 0;
+	return (0);
 }
 
 
