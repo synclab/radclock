@@ -279,7 +279,7 @@ void* thread_ntp_server(void *c_handle)
 		pkt_out->precision		= -18;	/* TODO: should pass min(STA_NANO (or mus), phat) in power of 2 or so */
 		pkt_out->rootdelay 		= htonl( (uint32_t)(rootdelay * 65536. + 0.5));
 		pkt_out->rootdispersion = htonl( (uint32_t)(rootdispersion * 65536. + 0.5));
-		pkt_out->refid		= SERVER_DATA(clock_handle)->refid;
+		pkt_out->refid			= htonl(SERVER_DATA(clock_handle)->refid);
 
 		/* Reference time */
 		build_timestamp_tval(clock_handle, &rdata, rdata.last_changed, &reftime);

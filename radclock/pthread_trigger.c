@@ -150,7 +150,7 @@ create_ntp_request(struct radclock *clock_handle, struct ntp_pkt *pkt, struct ti
 	pkt->precision		= -6;		/* Like ntpdate */
 	pkt->rootdelay		= htonl(FP_SECOND);
 	pkt->rootdispersion	= htonl(FP_SECOND);
-	pkt->refid			= SERVER_DATA(clock_handle)->refid;
+	pkt->refid			= htonl(SERVER_DATA(clock_handle)->refid);
 
 	/* Reference time
 	 * The NTP timestamp format (a bit tricky): 

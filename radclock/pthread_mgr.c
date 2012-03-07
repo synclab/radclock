@@ -33,13 +33,14 @@
 #include "sync_algo.h"
 #include "radclock.h"
 #include "radclock-private.h"
+#include "config_mgr.h"
 #include "ffclock.h"		// this one can go once fixedpoint thread is removed
 #include "fixedpoint.h"		// this one can go once fixedpoint thread is removed
-#include "verbose.h"
+#include "stampinput.h"
 #include "stampoutput.h"
 #include "pthread_mgr.h"
+#include "verbose.h"
 #include "jdebug.h"
-#include "config_mgr.h"
 
 
 
@@ -63,11 +64,12 @@ void init_thread_signal_mgt()
 
 
 
-void* thread_trigger(void *c_handle)
+void *
+thread_trigger(void *c_handle)
 {
-	JDEBUG
-
 	int err;
+
+	JDEBUG
 
 	/* Deal with UNIX signal catching */
 	init_thread_signal_mgt();
@@ -84,7 +86,7 @@ void* thread_trigger(void *c_handle)
 		clock_handle->pthread_flag_stop = PTH_STOP_ALL; 
 	}
 	
-	while ( (clock_handle->pthread_flag_stop & PTH_TRIGGER_STOP) != PTH_TRIGGER_STOP )
+	while ((clock_handle->pthread_flag_stop & PTH_TRIGGER_STOP) != PTH_TRIGGER_STOP)
 	{
 		/* Check if processing thread did grab the lock, we don't want to
 		 * lock repeatidly for ever. If we marked data ready to be processed, then
@@ -145,6 +147,7 @@ void* thread_data_processing(void *c_handle)
 	clock = (struct radclock*) c_handle;
 
 	/* Init peer stamp counter, everything rely on this starting at 0 */
+	peer.q = NULL;
 	peer.stamp_i = 0;
 	
 	// TODO XXX Need to manage peers better !!
@@ -174,6 +177,13 @@ void* thread_data_processing(void *c_handle)
 		/* Process rawdata until there is something to process */
 		do {
 			err = process_rawdata(clock, &peer);
+			
+			/* Something really bad, get out of here */
+			if (err == -1) {
+				clock->pthread_flag_stop = PTH_STOP_ALL;
+				source_breakloop(clock, (struct stampsource *)clock->stamp_source);
+				break;
+			}
 		} while (err == 0); 
 
 		pthread_mutex_unlock(&clock->wakeup_mutex);

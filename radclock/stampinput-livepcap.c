@@ -142,7 +142,7 @@ int insert_sll_header(radpcap_packet_t *packet)
 	/* Copy the payload remaining after ethernet header */
 	memcpy(tmpbuffer +sizeof(struct pcap_pkthdr) +sizeof(linux_sll_header_t),
 				packet->payload + lheader_size, /* Remove link header */
-				get_capture_length(packet) -lheader_size);
+				((struct pcap_pkthdr *)packet->header)->caplen - lheader_size);
 	
 	/* We made a copy so get rid of the former buffer */
 	JDEBUG_MEMORY(JDBG_FREE, packet->buffer);
@@ -207,31 +207,35 @@ void set_vcount_in_sll(radpcap_packet_t *packet, vcounter_t vcount)
  * any) before passing the data to the sync algo. The link layer header is
  * replaced by a Linux SLL header and the vcount is stored in its address field.
  */
-static int get_packet_livepcap(struct radclock *handle, void *userdata, radpcap_packet_t **packet_p)
+static int
+get_packet_livepcap(struct radclock *handle, void *userdata,
+		radpcap_packet_t **packet_p)
 {
-	JDEBUG
-
-//	struct pcap_pkthdr *header;    /* The header that pcap gives us */
-	vcounter_t vcount		= 0;
-	vcounter_t vcount_debug = 0;
+	struct livepcap_data *data;
+	pcap_dumper_t *traceoutput;
+	radpcap_packet_t *packet;
+	vcounter_t vcount;
+	vcounter_t vcount_debug;
 	int ret;
 
-	struct livepcap_data *data = (struct livepcap_data *) userdata;
-	pcap_dumper_t *traceoutput = data->trace_output;
-	
-	radpcap_packet_t *packet = *packet_p;
+	JDEBUG
+
+	vcount = 0;
+	vcount_debug = 0;
+	data = (struct livepcap_data *) userdata;
+	traceoutput = data->trace_output;
+	packet = *packet_p;
 
 	/* Retrieve the next packet from the raw data buffer */
 	ret = deliver_rawdata_ntp(handle, packet, &vcount);
-	if (ret < 0 )
-	{
+	if (ret < 0) {
 		/* Raw data buffer is empty */
-		return ret; 
+		return ret;
 	}
 
 	/* Replace the link layer header by the Linux SLL header for generic
 	 * encapsulation of the IP payload */
-	if ( insert_sll_header(packet) ) {
+	if (insert_sll_header(packet)) {
 		verbose(LOG_ERR, "Could not insert Linux SLL header");
 	}
 
@@ -242,12 +246,10 @@ static int get_packet_livepcap(struct radclock *handle, void *userdata, radpcap_
 
 	/* Write out raw data if -w option active in main program */
 	if (traceoutput) {
-		
-		pcap_dump(  (u_char*) traceoutput, 
-					(struct pcap_pkthdr*) packet->header, 
-					(u_char*) packet->payload );
+		pcap_dump((u_char *)traceoutput, (struct pcap_pkthdr *)packet->header,
+				(u_char *)packet->payload);
 
-		if ( pcap_dump_flush(traceoutput) < 0 )
+		if (pcap_dump_flush(traceoutput) < 0)
 			verbose(LOG_ERR, "Error dumping packet");
 	}
 	*packet_p = packet;
@@ -548,7 +550,8 @@ pcap_err:
 
 
 
-static int livepcapstamp_init(struct radclock *handle, struct stampsource *source)
+static int
+livepcapstamp_init(struct radclock *handle, struct stampsource *source)
 {
 	/* Create the handle to be sure to dump the packet in the right format while
 	 * being able to support any link layer type thanks to the LINUX_SLL
@@ -670,16 +673,16 @@ static int
 livepcapstamp_get_next(struct radclock *handle, struct stampsource *source,
 	struct stamp_t *stamp)
 {
-	JDEBUG
-
 	int err;
+
+	JDEBUG
 
 	/* Ensure default stamp quality before filling timestamps */
 	stamp->qual_warning = 0;
 	stamp->type = STAMP_NTP;
-	
+
 	/* Call for get_bidir_stamp to read through a BPF device */
-	err = get_bidir_stamp(
+	err = get_network_stamp(
 			handle,
 			(void *)LIVEPCAP_DATA(source),
 			get_packet_livepcap,
@@ -687,11 +690,12 @@ livepcapstamp_get_next(struct radclock *handle, struct stampsource *source,
 			&source->ntp_stats,
 			LIVEPCAP_DATA(source)->src_ipaddr);
 
+	return (err);
 	/* Used to be EOF or capture break, but now only signals empty buffer */
-	if (err < 0) {
-		return err;
-	}
-	return 0;
+//	if (err < 0) {
+//		return err;
+//	}
+//	return 0;
 }
 
 

@@ -19,30 +19,8 @@
  * 02110-1301, USA.
  */
 
-
-
-
-
-/*
- * Network level functions called by main to get packet data
- * 
- * This file contains the functions required to extract or process data from 
- * a given source (live capture or trace file; ascii do not need).
- * The first set of functions implemented here are given a radpcap_packet 
- * (or higher network protocol layers) and are used to extract data (e.g ntp
- * payload, vcount stored in ethernet header, etc.)
- * The second key part is the actual processing of these data by the 
- * get_bidir_stamp() fucntion.
- *
- */
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/time.h>
 #include <sys/socket.h>
-#include <assert.h>
-#include <pcap.h>
+
 #include <net/if.h>
 #include <netinet/in_systm.h>
 #include <netinet/in.h>
@@ -50,42 +28,54 @@
 #include <netinet/ip.h>
 #include <net/ethernet.h>
 #include <arpa/inet.h>
-#include <string.h>
-#include <math.h>
+
 #include <syslog.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 
 #include "../config.h"
-#include <radclock.h>
+#include "radclock.h"
 #include "radclock-private.h"
 #include "verbose.h"
 #include "proto_ntp.h"
 #include "sync_algo.h"        /* Because need  struct bidir_stamp defn */
-#include "pthread_mgr.h"
-#include "create_stamp.h"
 #include "ntohll.h"
+#include "create_stamp.h"
 #include "jdebug.h"
-
 
 
 # ifndef useconds_t
 typedef uint32_t useconds_t;
 # endif
 
+struct stamp_queue {
+	struct stamp_t stamp;
+	struct stamp_queue *prev;
+	struct stamp_queue *next;
+};
 
-
-/* Converts fixedpt NTP timestamp structure to an easily manipulable TS in [sec] */
-long double  ntpTS_to_UNIXsec(l_fp ntpTS) 
+/*
+ * Converts fixed point NTP timestamp to floating point UNIX time
+ */
+long double
+ntp_stamp_to_fp_unix_time(l_fp ntp_ts)
 {
 	long double  sec;
-	sec  = (long double)(ntohl(ntpTS.l_int) - JAN_1970);
-	sec += (long double)(ntohl(ntpTS.l_fra))/4294967296.0; // 
-	return(sec);
+	sec  = (long double)(ntohl(ntp_ts.l_int) - JAN_1970);
+	sec += (long double)(ntohl(ntp_ts.l_fra)) / 4294967296.0;
+	return (sec);
 }
 
 
 
-radpcap_packet_t* create_radpcap_packet() {
-	radpcap_packet_t *pkt = NULL;
+radpcap_packet_t *
+create_radpcap_packet()
+{
+	radpcap_packet_t *pkt;
+
+	JDEBUG
 
 	pkt = (radpcap_packet_t*) malloc(sizeof(radpcap_packet_t));
 	JDEBUG_MEMORY(JDBG_MALLOC, pkt);
@@ -93,25 +83,27 @@ radpcap_packet_t* create_radpcap_packet() {
 	pkt->buffer 	= (void *) malloc(RADPCAP_PACKET_BUFSIZE);
 	JDEBUG_MEMORY(JDBG_MALLOC, pkt->buffer);
 
-	pkt->header 	= NULL;
-	pkt->payload 	= NULL;
-	pkt->type 		= 0;
-	pkt->size 		= 0;
-	return pkt;
+	pkt->header = NULL;
+	pkt->payload = NULL;
+	pkt->type = 0;
+	pkt->size = 0;
+
+	return (pkt);
 }
 
-void destroy_radpcap_packet(radpcap_packet_t *packet) 
+void
+destroy_radpcap_packet(radpcap_packet_t *packet)
 {
 	JDEBUG
 
-	packet->header  = NULL;
+	packet->header = NULL;
 	packet->payload = NULL;
-	if (packet->buffer)
-	{
+
+	if (packet->buffer) {
 		JDEBUG_MEMORY(JDBG_FREE, packet->buffer);
 		free(packet->buffer);
 	}
-	packet->buffer  = NULL;
+	packet->buffer = NULL;
 
 	JDEBUG_MEMORY(JDBG_FREE, packet);
 	free(packet);
@@ -119,24 +111,20 @@ void destroy_radpcap_packet(radpcap_packet_t *packet)
 }
 
 
-/* Get the length of packet capured */
-inline unsigned int get_capture_length(radpcap_packet_t *packet) {
-	assert(packet->size<65536);
-	return ((struct pcap_pkthdr*)packet->header)->caplen;
-}
-
-
-/* Get the IP payload from the radpcap_packet_t packet.
- * Here also (in addition to get_vcount) we handle backward compatibility since we
- * changed the way the vcount and the link layer header are managed. 
+/*
+ * Get the IP payload from the radpcap_packet_t packet.  Here also (in addition
+ * to get_vcount) we handle backward compatibility since we changed the way the
+ * vcount and the link layer header are managed.
+ *
  * We handle 3 formats:
  * 1- [pcap][ether][IP] : oldest format (vcount in pcap header timeval)
  * 2- [pcap][sll][ether][IP] : libtrace-3.0-beta3 format, vcount is in sll header
  * 3- [pcap][sll][IP] : remove link layer header, no libtrace, vcount in sll header
  * In live capture, the ssl header MUST be inserted before calling this function
  */
-struct ip* get_ip (radpcap_packet_t *packet, unsigned int *remaining) {
-
+struct ip *
+get_ip(radpcap_packet_t *packet, unsigned int *remaining)
+{
 	struct ip *ipptr 		= NULL;
 	linux_sll_header_t *hdr = NULL;
 	size_t offset			= 0;
@@ -171,7 +159,7 @@ struct ip* get_ip (radpcap_packet_t *packet, unsigned int *remaining) {
 	}
 	/* Descend into frame to get IP data */
 	ipptr = (struct ip *)(packet->payload + offset);
-	*remaining = *remaining - offset;	
+	*remaining = *remaining - offset;
 
 	/* Check we got a valid IP packet */
 	if (ipptr->ip_v != 4) {
@@ -181,9 +169,8 @@ struct ip* get_ip (radpcap_packet_t *packet, unsigned int *remaining) {
 	return ipptr;
 }
 
-
-
-struct udphdr* get_udp_from_ip(struct ip *ipptr, unsigned int *remaining) 
+struct udphdr *
+get_udp_from_ip(struct ip *ipptr, unsigned int *remaining)
 {
 	struct udphdr *udp = NULL;
 	/* Check for UDP protocol only */
@@ -207,468 +194,610 @@ struct udphdr* get_udp_from_ip(struct ip *ipptr, unsigned int *remaining)
 	return udp;
 }
 
-
-void *get_udp_payload(struct udphdr *udp, unsigned int *remaining)
+void *
+get_udp_payload(struct udphdr *udp, unsigned int *remaining)
 {
     if (remaining) {
         if (*remaining < sizeof(struct udphdr))
             return NULL;
         *remaining -= sizeof(struct udphdr);
     }
-    return (void*)((char*)udp+sizeof(struct udphdr));
+    return (void*)((char *)udp + sizeof(struct udphdr));
 }
 
 
-/* Retrieve the vcount value stored in the pcap header timestamp field.
+/*
+ * Retrieve the vcount value stored in the pcap header timestamp field.
  * This function is here for backward compatibility and may disappear one day,
  * especially because the naming convention is confusing. The ethernet frame is
  * used only for distinguishing the first raw file format.
  */
-int get_vcount_from_etherframe(radpcap_packet_t *packet, vcounter_t *vcount)
+int
+get_vcount_from_etherframe(radpcap_packet_t *packet, vcounter_t *vcount)
 {
+	JDEBUG
+
 	if (packet->size < sizeof(struct pcap_pkthdr)) {
 		verbose(LOG_ERR, "No PCAP header found.");
-		return -1;
+		return (-1);
 	}
-		   
+
 	// TODO : Endianness !!!!
 	/* This is the oldest raw file format where the vcount was stored into the
 	 * timestamp field of the pcap header.
-	 * tv_sec holds the left hand of the counter, then put right hand of the 
+	 * tv_sec holds the left hand of the counter, then put right hand of the
 	 * counter into empty RHS of vcount
 	 */
 	*vcount  = (u_int64_t) (((struct pcap_pkthdr*)packet->header)->ts.tv_sec) << 32;
 	*vcount += (u_int32_t) ((struct pcap_pkthdr*)packet->header)->ts.tv_usec;
 
-	return 0;
+	return (0);
 }
 
-
-
-/* Retrieve the vcount value from the address field of the LINUX SLL
+/*
+ * Retrieve the vcount value from the address field of the LINUX SLL
  * encapsulation header
  */
-int get_vcount_from_sll(radpcap_packet_t *packet, vcounter_t *vcount)
+int
+get_vcount_from_sll(radpcap_packet_t *packet, vcounter_t *vcount)
 {
 	vcounter_t aligned_vcount;
 
+	JDEBUG
+
 	if (packet->size < sizeof(struct pcap_pkthdr) + sizeof(linux_sll_header_t)) {
 		verbose(LOG_ERR, "No PCAP or SLL header found.");
-		return -1;
+		return (-1);
 	}
 	
 	linux_sll_header_t *hdr = packet->payload;
-	if (!hdr)
-	{
+	if (!hdr) {
 		verbose(LOG_ERR, "No SLL header found.");
-		return -1;
+		return (-1);
 	}
+	// TODO What does this comment mean?
 	/* memcopy to ensure word alignedness and avoid potential sigbus's */
 	memcpy(&aligned_vcount, hdr->addr, sizeof(vcounter_t));
 	*vcount = ntohll(aligned_vcount);
-	
+
 	return 0;
 }
 
 
 
-/* Generic function to retrieve the vcount. Depending on the link layer type it
+/*
+ * Generic function to retrieve the vcount. Depending on the link layer type it
  * calls more specific one. This ensures backward compatibility with older format
  */
-int get_vcount(radpcap_packet_t *packet, vcounter_t *vcount) {
+int
+get_vcount(radpcap_packet_t *packet, vcounter_t *vcount) {
 
-	int ret = -1;
-	
+	int ret;
+
+	JDEBUG
+
+	ret = -1;
 	switch ( packet->type ) {
-		case DLT_EN10MB:
-			ret = get_vcount_from_etherframe(packet, vcount);
-			break;
-		case DLT_LINUX_SLL:
-			ret = get_vcount_from_sll(packet, vcount);
-			break;
-		default:
-			verbose(LOG_ERR, "Unsupported MAC layer.");
-			break;
+	case DLT_EN10MB:
+		ret = get_vcount_from_etherframe(packet, vcount);
+		break;
+	case DLT_LINUX_SLL:
+		ret = get_vcount_from_sll(packet, vcount);
+		break;
+	default:
+		verbose(LOG_ERR, "Unsupported MAC layer.");
+		break;
 	}
 	return ret;
 }
 
 
+/*
+ * Insert a client or server NTP packet into the stamp queue. This routine
+ * effectively pairs matching requests and replies. The stamp queue has been
+ * introduced to allow matching of out of order NTP packets.
+ * If no matching stamp is found, the new packet is inserted with partial
+ * information. If a matching partial stamp exists, missing information is added
+ * to the stamp.
+ */
+int
+insert_stamp_queue(struct stamp_queue **q, struct stamp_t *new, int mode)
+{
+	struct stamp_queue *stq;
+	struct stamp_queue *tmp;
+	struct stamp_t *stamp;
+	int found;
 
+	JDEBUG
 
+	if ((mode != MODE_CLIENT) && (mode != MODE_SERVER)) {
+		verbose(LOG_ERR, "Unsupported NTP packet mode: %d", mode);
+		return (-1);
+	}
 
+	found = 0;
+	stq = *q;
+	tmp = *q;
+	while (stq != NULL) {
+		stamp = &stq->stamp;
+		if (stamp->id > new->id)
+			tmp = stq;
+		if ((stamp->type == STAMP_NTP) && (stamp->id == new->id)) {
+
+			if (mode == MODE_CLIENT) {
+				if (BST(stamp)->Ta != 0) {
+					verbose(LOG_ERR, "Found duplicate NTP client request.");
+					return (-1);
+				}
+			} else {
+				if (BST(stamp)->Tf != 0) {
+					verbose(LOG_ERR, "Found duplicate NTP server request.");
+					return (-1);
+				}
+			}
+			/* Found half-baked stamp to finish filling */
+			found = 1;
+			break;
+		}
+		stq = stq->next;
+	}
+
+	/*
+	 * Haven't found an existing server stamp, which is quite normal. Create a
+	 * new half-baked stamp and insert it in the peer queue structure.
+	 */
+	if (!found) {
+		stq = (struct stamp_queue *) calloc(1, sizeof(struct stamp_queue));
+		stq->prev = NULL;
+		stq->next = NULL;
+		if (tmp != NULL) {
+			if (tmp->next != NULL)
+				tmp->next->prev = stq;
+			stq->next = tmp->next;
+			tmp->next = stq;
+			stq->prev = tmp;
+		}
+		if (*q == NULL)
+			*q = stq;
+	}
+
+	/* Selectively copy content of new stamp over */
+	stamp = &stq->stamp;
+	stamp->type = STAMP_NTP;
+	if (mode == MODE_CLIENT) {
+		stamp->id = new->id;
+		BST(stamp)->Ta = BST(new)->Ta;
+	} else {
+		stamp->id = new->id;
+		strncpy(stamp->server_ipaddr, new->server_ipaddr, 16);
+		stamp->ttl = new->ttl;
+		stamp->refid = new->refid;
+		stamp->stratum = new->stratum;
+		stamp->leapsec = new->leapsec;
+		stamp->rootdelay = new->rootdelay;
+		stamp->rootdispersion = new->rootdispersion;
+		BST(stamp)->Tb = BST(new)->Tb;
+		BST(stamp)->Te = BST(new)->Te;
+		BST(stamp)->Tf = BST(new)->Tf;
+	}
+
+	if (found)
+		return (0);
+	else
+		return (1);
+}
 
 
 /*
- * Look for client-server NTP packet pairs and extract timestamps and some 
- * server and route state information, convert and store in stamp structure
- * for sync algorithms.  This bidirectional version expects client-server 
- * interaction, it looks for NTP's MODE_CLIENT or MODE_SERVER codes (ntp.h) and
- * encodes the departure timestamp at the client as a very likely unique key 
- * for matching the returning server pkt.  Bpf filter already only passing NTP
- * pkts matching host IP address.  If inappropriate in other ways then they are 
- * discarded. If dangerous but not fatal conditions are detected, abstracted as
- * simple warning to algos (see below for details).  
- * - Could be extended to handle bpf based uni-directional case (eg using 
- *   MODE_BROADCAST), but dedicated unidir version probably preferable.  
- * - As it is called once per pair, an argument pointer is passed to keep track
- *   of stats like number of pkts/pairs rejected.
- * - Detects leapseconds and allows main to keep track of leapsec total. Leap 
- *   seconds removed from server stamps to avoid giving a spurious jump to 
- *   process_bidir_stamp, reinstated in main after.
- *
- * Return values:
- *  0: found matching packets, returns timestamp
- * -1: nothing to process anymore or no match found
+ * Check the client's request.
+ * The radclock may serve NTP clients over the network. The BPF filter may not
+ * be tight enough either. Make sure that requests from clients are discarded.
  */
-int get_bidir_stamp(struct radclock *handle,
-			void * userdata,
-			int (*get_packet)(struct radclock *handle, void *user, radpcap_packet_t **packet),
-			struct stamp_t *stamp,
-			uint64_t *stamp_id,
-			struct timeref_stats *stats,
-			char *src_ipaddr
-			)
+int
+bad_packet_client(struct ip *ip, struct ntp_pkt *ntp, char *src_ipaddr,
+		struct timeref_stats *stats)
 {
+	if (strcmp(inet_ntoa(ip->ip_dst), src_ipaddr) == 0) {
+		verbose(LOG_WARNING, "Destination address in client packet. "
+				"Check the capture filter.");
+		return (1);
+	}
+	return (0);
+}
+
+/*
+ * Check the server's reply.
+ * Make sure that this is not one of our reply to our NTP clients.
+ * Make sure the leap second indicator is ok.
+ * Make sure the server's stratum is not insane.
+ */
+int
+bad_packet_server(struct ip *ip, struct ntp_pkt *ntp, char *src_ipaddr,
+		struct timeref_stats *stats)
+{
+	/* Make sure to discard replies to our own NTP clients */
+	if (strcmp(inet_ntoa(ip->ip_src), src_ipaddr) == 0) {
+		verbose(LOG_WARNING, "Source address in server packet. "
+				"Check the capture filter.");
+		return (1);
+	}
+
+	/* If the server is unsynchronised we skip this packet */
+	if (PKT_LEAP(ntp->li_vn_mode) == LEAP_NOTINSYNC) {
+		verbose(LOG_WARNING, "NTP server says LEAP_NOTINSYNC, packet ignored.");
+		stats->badqual_count++;
+		return (1);
+	}
+
+	/* Check if the server clock is synchroninsed or not */
+	if (ntp->stratum == STRATUM_UNSPEC) {
+		verbose(LOG_WARNING, "Stratum unspecified, server packet ignored.");
+		return (1);
+	}
+
+	return (0);
+}
+
+/*
+ * Create a stamp structure, fill it with client side information and pass it
+ * for insertion in the peer's stamp queue.
+ */
+int
+push_stamp_client(struct stamp_queue **q, struct ntp_pkt *ntp, vcounter_t *vcount)
+{
+	struct stamp_t stamp;
+
 	JDEBUG
 
-	vcounter_t vcount = 0;					// PKT capture level:  raw vcount timestamp from pkt capture header
-	struct ntp_pkt *ntp; 				// NTP packet ... fun name for a packet structure ... pfff
-	u_int64_t key_request = 0; 				// NTP level: for matching client and server pkts
-	u_int64_t key_reply = 1; 				// NTP level: for matching client and server pkts
-	static u_int32_t prev_serverid = 0; 	// NTP level: for checking change in server
-	static long  prev_ttl = -1; 	// IP level:  for detecting route changes
-	int searching = 1;
-	int found_client = 0;
-	int port = 0;
-	int err = 0;
+	stamp.id = ((uint64_t) ntohl(ntp->xmt.l_int)) << 32;
+	stamp.id |= (uint64_t) ntohl(ntp->xmt.l_fra);
+	stamp.type = STAMP_NTP;
+	BST(&stamp)->Ta = *vcount;
 
-	/* Initial waiting time calibrated for LAN RTT, and max of 525.5 ms after 20
-	 * attempts. If we wait for that long, the server may never reply
-	 */
-	int attempt = 20;
-	unsigned int attempt_wait = 500;
+	verbose(VERB_DEBUG, "Stamp queue: inserting client stamp->id: %llu",
+			(long long unsigned)stamp.id);
 
-	char refid[16];
-	char *refid_str = refid;
-	char *refid_char = NULL;
+	return (insert_stamp_queue(q, &stamp, MODE_CLIENT));
+}
 
+
+/*
+ * Create a stamp structure, fill it with server side information and pass it
+ * for insertion in the peer's stamp queue.
+ */
+int
+push_stamp_server(struct stamp_queue **q, struct ip *ip, struct ntp_pkt *ntp,
+	vcounter_t *vcount)
+{
+	struct stamp_t stamp;
+
+	JDEBUG
+
+	stamp.type = STAMP_NTP;
+	stamp.id = ((uint64_t) ntohl(ntp->org.l_int)) << 32;
+	stamp.id |= (uint64_t) ntohl(ntp->org.l_fra);
+	strncpy(stamp.server_ipaddr, inet_ntoa(ip->ip_src), 16);
+	stamp.ttl = ip->ip_ttl;
+	stamp.refid = ntohl(ntp->refid);
+	stamp.stratum = ntp->stratum;
+	stamp.leapsec = PKT_LEAP(ntp->li_vn_mode);
+	stamp.rootdelay = ntohl(ntp->rootdelay) / 65536.;
+	stamp.rootdispersion = ntohl(ntp->rootdispersion) / 65536.;
+	BST(&stamp)->Tb = ntp_stamp_to_fp_unix_time(ntp->rec);
+	BST(&stamp)->Te = ntp_stamp_to_fp_unix_time(ntp->xmt);
+	BST(&stamp)->Tf = *vcount;
+
+	verbose(VERB_DEBUG, "Stamp queue: inserting server stamp->id: %llu",
+			(long long unsigned)stamp.id);
+
+	return (insert_stamp_queue(q, &stamp, MODE_SERVER));
+}
+
+
+/*
+ * Check that packet captured is a sane input, independent from its direction
+ * (client request or server reply). Pass it to subroutines for additional
+ * checks and insertion/matching in the peer's stamp queue.
+ */
+int
+update_stamp_queue(struct stamp_queue **q, radpcap_packet_t *packet,
+		struct timeref_stats *stats, char *src_ipaddr)
+{
 	struct ip *ip;
 	struct udphdr *udp;
+	struct ntp_pkt *ntp;
 	unsigned int remaining;
+	vcounter_t vcount;
+	int err;
 
-	radpcap_packet_t *packet = create_radpcap_packet();
-	memset(stamp, 0, sizeof (struct stamp_t));
-
-
-/* search until a matching, valid client-server pair is found */
-while (searching) {
-
-	/* Re-initialise packet inspectors */
-	ip = NULL;
-	udp = NULL;
-	remaining = 0;
-	*stamp_id = 0;
-
-	/* We may loop in here for a long time, break if received a TERM signal */
-	if ((handle->pthread_flag_stop & PTH_DATA_PROC_STOP) == PTH_DATA_PROC_STOP )
-	{
-		err = -2;
-		break;
-	}
-
-	/* Read the next captured packet.
-	 * Note:  0 on success (found a packet)
-	 *     : -1 the rdb list is empty
-	 */
-	err = get_packet(handle, userdata, &packet);
-	if (err < 0)
-	{
-		/* We are replaying a trace, reached the end of data file. */
-		if (handle->run_mode == RADCLOCK_SYNC_DEAD) 
-		{
-			err = -1;
-			break;
-		}
-		/* Running live, no more pkts in the buffer and no client packet found.
-		 * Signal uppper loop to break out and come back later.
-		 * If a client has been found but no server packet or the server packet
-		 * has been discarded (since still searching), the stamp structure is 
-		 * bogus. Give up on that client, but signal the caller it can keep looking
-		 */
-		if (found_client == 0)
-		{
-			err = -1;
-			break;
-		}
-
-		/* Here we found a client packet, but no server packet and the buffer is
-		 * empty. 2 cases:
-		 * - we are piggy backing and been awaken at a bad time
-		 * - the trigger thread timed out and woke us up, but the server hasn't
-		 *   replied yet (ie, timeout < RTT).
-		 * In both cases we don't want to return and loose the client packet.
-		 * Keep the wakeup_mutex, sleep a bit and give the server some time.
-		 * Eventually, we give up on it.
-		 */
-		if ( attempt == 0 )
-		{
-			verbose(LOG_NOTICE, "No valid server reply after 500ms, giving up");
-			err = -1;
-			break;
-		}
-		verbose(VERB_DEBUG, "Buffer empty but keep looking (sleep %u)", attempt_wait);
-		usleep((useconds_t)attempt_wait);
-		/* The RTT can be quite large let's say a top of 500ms so add bigger and
-		 * bigger chunks 20 times for napping
-		 */
-		attempt_wait += 2500;
-		attempt--;
-		continue;
-	}
-
-	/* Counts pkts, regardless of content (initialised to 0 in main) */
-	stats->ref_count++;
-
+	JDEBUG
 
 	/* Retrieve vcount from link layer header, if this fails, things are bad */
 	if (get_vcount(packet, &vcount)) {
 		verbose(LOG_ERR, "Error getting raw vcounter from link layer.\n");
-		err = -1;
-		break;
+		return (-1);
 	}
-	
+
 	/* Descend into IP[UDP[NTP]] pkt to get NTP data */
-	remaining = get_capture_length(packet);
+	// XXX is caplen correct after we chopped the mac header and replaced it
+	// with a SLL header?
+	remaining = ((struct pcap_pkthdr *)packet->header)->caplen;
 	ip = get_ip(packet, &remaining);
 	if (!ip) {
 		verbose(LOG_WARNING, "Not an IP packet.");
-		continue;
+		return (1);
 	}
 	
 	udp = get_udp_from_ip(ip, &remaining);
 	if (!udp) {
 		verbose(LOG_WARNING, "Not an UDP packet.");
-		continue;
+		return (1);
 	}
 
 	ntp = get_udp_payload(udp, &remaining);
 	if (!ntp) {
 		verbose(LOG_WARNING, "Not an NTP packet.");
-		continue;
+		return (1);
 	}
 
-	/* 
-	 * Here, we only want to check there is enough data to keep processing. A
-	 * normal NTP packet is at least 48 bytes long, but a control or private
-	 * request is as small as 12 bytes.
-	 */ 
-	if ( remaining < 12 ) {
+	/*
+	 * Make sure the NTP packet is not truncated. A normal NTP packet is at
+	 * least 48 bytes long, but a control or private request is as small as 12
+	 * bytes.
+	 */
+	if (remaining < 12) {
 		verbose(LOG_WARNING, "NTP packet truncated, payload is %d bytes "
-				"instead of at least 12 bytes", remaining);
-		continue;
+			"instead of at least 12 bytes", remaining);
+		return (1);
 	}
 
-	/* Perform matching between client pkt and server reply pair, and testing. 
-	Pairs ignored if:   
-	server not stratum-0 or 1  
-	mode is not MODE_CLIENT or MODE_SERVER  (from client or server)
-	leap mode is ALARM, a signal that the 0erver is unsynchonised
-	unmatched client pkts  (lost replies or unexpected pkts from any server)  
-	very late (out of order) replies  (next client pkt will overwrite)
-	Pair accepted but warning passed to sync algos via stamp structure if:
-	server id changes    (if someone changes target server)
-	TTL change in reply IP pkt (could mean route and therefore minRTT change)
-	*/
-
-	// stratum doesn't matter there, not the server
-	// need key different for each pkt, careful if pkt not generated by SW-NTP
-	
+	err = 0;
 	switch (PKT_MODE(ntp->li_vn_mode)) {
-
 	case MODE_BROADCAST:
 		verbose(VERB_DEBUG,"Received NTP broadcast packet from %s (Silent discard)",
-						inet_ntoa(ip->ip_src));
+			inet_ntoa(ip->ip_src));
 		break;
-
 
 	case MODE_CLIENT:
-
-		verbose(VERB_DEBUG, "Found a CLIENT NTP packet");
-
-		/* Possible we receive ntp requests. But should not handle this kind of
-		 * packets. This case should not be triggered since the bpf filter
-		 * string makes a tight filter. But in case of a loose configuration ...
-		 */
-		if ( strcmp(inet_ntoa(ip->ip_dst), src_ipaddr) == 0) {
-			verbose(LOG_WARNING, "Dst address in a client packet, check the capture filter.");
+		err = bad_packet_client(ip, ntp,src_ipaddr, stats);
+		if (err)
 			break;
-		}
-
-		/* Create the key based on Ta to match reply from server
-		 * Be sure we convert to host representation before creating the key.
-		 * Also work with 64 bits entities to avoid stupid result
-		 */
-		key_request = ((uint64_t)ntohl(ntp->xmt.l_int)) << 32;
-		key_request |= (uint64_t) ntohl(ntp->xmt.l_fra);
-		found_client = 1;
-		
-		/* Store vcount from the lower layer */
-		BST(stamp)->Ta = vcount;
-
+		err = push_stamp_client(q, ntp, &vcount);
 		break;
 
-
-
 	case MODE_SERVER:
-
-		err = 0;
-
-		verbose(VERB_DEBUG, "Found a SERVER NTP packet");
-
-		/* We start with all possible conditions to reject packet */
-
-		/* Possible we answer ntp requests. But should not handle this kind of 
-		 * packets. This case should not be triggered since the bpf filter string
-		 * makes a tight filter. But in case of a loose configuration ...
-		 */
-		if ( strcmp(inet_ntoa(ip->ip_src), src_ipaddr) == 0) {
-			verbose(LOG_WARNING, "Src address in a server packet");
+		err = bad_packet_server(ip, ntp,src_ipaddr, stats);
+		if (err)
 			break;
-		}
-							
-		/* If the server is unsynchronised we skip this packet */
-		if ( PKT_LEAP(ntp->li_vn_mode) == LEAP_NOTINSYNC )
-		{
-			verbose(LOG_WARNING, "NTP server says LEAP_NOTINSYNC, packet ignored.");
-			stats->badqual_count++;
-			break;
-		}
-
-		/* Check the packet corresponding to the server reply matches the client
-		 * request we sent. Again, works on host representation 64 bits
-		 * containers.
-		 */
-		key_reply = ((uint64_t) ntohl(ntp->org.l_int)) << 32;
-		key_reply |= (uint64_t) ntohl(ntp->org.l_fra);
-		if (key_request != key_reply) {
-			verbose(VERB_DEFAULT, "key_request (%llu) and key_reply (%llu) do "
-					"not match on %d th NTP packet, server packet ignored", 
-					key_request, key_reply, stats->ref_count);
-			break;
-		}
-
-		/* The key matches so we have a valid pair */
-		*stamp_id = key_reply;
-
-		/* Check if the server clock is synchroninsed or not */
-		if ( ntp->stratum == STRATUM_UNSPEC )
-		{
-			verbose(LOG_WARNING, "Stratum unspecified, server packet ignored.");
-			break;
-		}
-
-		/* We passed all sanity checks, so now monitor route changes etc */
-
-		/* The refid field has a different interpretation depending on the stratum.
-		 * We should also take into account IPv4 vs. IPv6 ... one day maybe
-		 */
-		refid_char = (char*) &(ntp->refid);
-		if (ntp->stratum == STRATUM_REFPRIM) {
-			snprintf(refid_str, 16, "%c%c%c%c", 
-			*refid_char, *(refid_char+1), *(refid_char+2), *(refid_char+3)); 
-		}
-		else {
-			snprintf(refid_str, 16, "%i.%i.%i.%i", 
-			*refid_char, *(refid_char+1), *(refid_char+2), *(refid_char+3)); 
-		}
-		refid_char = NULL;
-
-		if ( 	( ((struct bidir_output*)handle->algo_output)->n_stamps == 0 )
-			|| 	( ip->ip_ttl != prev_ttl )
-			|| 	( ntp->refid != prev_serverid )) 
-		{
-			verbose(LOG_WARNING, "New NTP server info on packet %u:", stats->ref_count);
-			verbose(LOG_WARNING, "SERVER - IP: %s, STRATUM: %d, TTL: %lu, ID: %s, MODE: %u, LEAPINFO: %u",
-				inet_ntoa(ip->ip_src), ntp->stratum, ip->ip_ttl, refid_str, 
-				PKT_MODE(ntp->li_vn_mode), PKT_LEAP(ntp->li_vn_mode));
-			verbose(LOG_WARNING, "HOST   - IP: %s, DST_PORT: %d", inet_ntoa(ip->ip_dst), port);
-
-			/* warn of possible change in route or server, or unsync server */
-			if (stamp->qual_warning == 0)
-				stamp->qual_warning = 1;
-		}
-
-		/* Store the server refid will pass on to our potential NTP clients */
-		memcpy(&(SERVER_DATA(handle)->refid), &(ip->ip_src), sizeof(in_addr_t));
-
-
-		/* Store timestamps */
-		BST(stamp)->Tb = ntpTS_to_UNIXsec(ntp->rec);
-		BST(stamp)->Te = ntpTS_to_UNIXsec(ntp->xmt);   // xmt is now xmt'ed from server
-		BST(stamp)->Tf = vcount;
-
-		/* Record type */
-		stamp->type = STAMP_NTP;
-
-
-		/* Make leap second adjustments 
-		 * Detect when first past a new leap second change, record total
-		 */
-		switch ( PKT_LEAP(ntp->li_vn_mode) )
-		{
-			case LEAP_ADDSECOND:
-				((struct bidir_output*)handle->algo_output)->leapsectotal+=1;
-				verbose(LOG_WARNING, "Leap second change!! leapsecond total is now %d",
-					((struct bidir_output*)handle->algo_output)->leapsectotal);
-				break;
-			case LEAP_DELSECOND:
-				((struct bidir_output*)handle->algo_output)->leapsectotal-=1;
-				verbose(LOG_WARNING, "Leap second change!! leapsecond total is now %d",
-					((struct bidir_output*)handle->algo_output)->leapsectotal);
-				break;
-			case LEAP_NOTINSYNC:
-			case LEAP_NOWARNING:
-			default:
-				break;
-		}
-		/* Remove total detected leapseconds from UNIX timestamps taken 
-		 * from server if clock jumps back, this brings it forward again */
-		BST(stamp)->Tb += ((struct bidir_output*)handle->algo_output)->leapsectotal;
-		BST(stamp)->Te += ((struct bidir_output*)handle->algo_output)->leapsectotal;
-
-		/* If we passed all of this, update tracking of previous values and 
-		 * then we're all good and can stop searching 
-		 */
-		prev_ttl 		= ip->ip_ttl;
-		prev_serverid 	= ntp->refid;
-		found_client	= 0;
-		searching 		= 0;
-
-		/* Record NTP protocol specific values but only if not crazy */
-		if (   (ntp->stratum > STRATUM_REFCLOCK)
-			&& (ntp->stratum < STRATUM_UNSPEC)	
-			&& (PKT_LEAP(ntp->li_vn_mode) != LEAP_NOTINSYNC) )
-		{
-			SERVER_DATA(handle)->stratum 		= ntp->stratum;
-			SERVER_DATA(handle)->rootdelay 		= ntohl(ntp->rootdelay) / 65536.;
-			SERVER_DATA(handle)->rootdispersion = ntohl(ntp->rootdispersion) / 65536.;
-			verbose(VERB_DEBUG, "Received pkt stratum= %u, rootdelay= %.9f, roodispersion= %.9f",
-				   	SERVER_DATA(handle)->stratum, SERVER_DATA(handle)->rootdelay, SERVER_DATA(handle)->rootdispersion);
-		}
-
+		err = push_stamp_server(q, ip, ntp, &vcount);
 		break;
 
 	default:
 		// `silent' cause is lost server pkt
-		verbose(VERB_DEBUG,"Missed pkt due to invalid mode: mode = %d", PKT_MODE(ntp->li_vn_mode));
+		verbose(VERB_DEBUG,"Missed pkt due to invalid mode: mode = %d",
+			PKT_MODE(ntp->li_vn_mode));
+		err = 1;
 		break;
-	} // switch
+	}
 
-}  // While (searching)
+	return (err);
+}
 
+
+/*
+ * Pull a full bidirectional stamp from the stamp queue. Since the stamp queue
+ * allow out of order arrival of NTP packets, there is no intrinsic guarantee
+ * that all stamps in the stamp queue will be valid. Start from the oldest stamp
+ * and progress our way to the most recent one. First full stamp found is
+ * returned. Any half-baked stamped earlier than first full stamp is destroyed.
+ */
+int
+get_stamp_from_queue(struct stamp_queue **q, struct stamp_t *stamp)
+{
+	struct stamp_queue *stq;
+	struct stamp_queue *endq;
+	struct stamp_t *st;
+	int found;
+	int qsize, fsize;
+
+	JDEBUG
+
+	/* Empty queue, won't find anything here */
+	if (*q == NULL) {
+		verbose (VERB_DEBUG, "stamp queue is empty, no stamp returned");
+		return (1);
+	}
+
+	/* Ok, it is a bit ugly, but the queue should never be very long */
+	qsize = 1;
+	fsize = 0;
+	endq = *q;
+	while (endq->next != NULL) {
+		endq = endq->next;
+		qsize++;
+	}
+
+	found = 0;
+	stq = endq;
+	while (stq != NULL) {
+		st = &stq->stamp;
+		if ((BST(stamp)->Ta != 0) && (BST(stamp)->Tf != 0)) {
+			found = 1;
+			memcpy(stamp, st, sizeof(struct stamp_t));
+			break;
+		}
+		stq = stq->prev;
+	}
+
+	if (!found)
+		return (1);
+
+	if (stq == *q)
+		*q = NULL;
+
+	while ((endq->prev != NULL) && (endq != stq)) {
+		endq = endq->prev;
+		free(endq->next);
+		fsize++;
+	}
+
+	if (stq->prev != NULL)
+		stq->prev->next = NULL;
+
+	free(stq);
+	fsize++;
+
+	verbose(VERB_DEBUG, "Stamp queue had %d stamps, freed %d, %d left",
+		qsize, fsize, qsize - fsize);
+
+	return (0);
+}
+
+
+
+/*
+ * Retrieve network packet from live or dead pcap device. This routine tries to
+ * handle out of order arrival of packets (note this is true for both dead and
+ * live input) by adding an extra stamp queue to serialise stamps. There are a
+ * few tricks to handle delayed packets when running live. Delayed packets
+ * translate into an empty raw data buffer and the routine makes several
+ * attempts to get delayed packets. Delays can be caused by a large RTT in
+ * piggy-backing mode (asynchronous wake), or busy system where pcap path is
+ * longer than NTP client UDP socket path.
+ */
+int
+get_network_stamp(struct radclock *clock, void *userdata,
+	int (*get_packet)(struct radclock *, void *, radpcap_packet_t **),
+	struct stamp_t *stamp, struct timeref_stats *stats, char *src_ipaddr)
+{
+	struct bidir_peer *peer;
+	radpcap_packet_t *packet;
+	int attempt;
+	int err;
+	useconds_t attempt_wait;
+	char *c;
+	char refid [16];
+
+	JDEBUG
+
+	// TODO manage peeers better
+	peer = clock->active_peer;
+
+	attempt_wait = 500;					/* Loosely calibrated for LAN RTT */
+	err = 0;
+	packet = create_radpcap_packet();
+
+	for (attempt=15; attempt>=0; attempt--) {
+
+		/*
+		 * Read packet from raw data queue or pcap tracefile. There are a few
+		 * tricks with error code because of the source abstraction:
+		 * -2: run from tracefile and reached end of input
+		 * -1: run from tracefile and read error
+		 * -1: read live and raw data buffer is empty
+		 */
+		err = get_packet(clock, userdata, &packet);
+
+		if (err == -2)
+			return (-1);
+		if (err < 0) {
+			if (attempt == 0) {
+				verbose(VERB_DEBUG, "Empty raw data queue after all attempts");
+				err = 1;
+				break;
+			} else {
+				usleep(attempt_wait);
+				attempt_wait += 3000;
+				continue;
+			}
+		}
+
+		/* Counts pkts, regardless of content (initialised to 0 in main) */
+		stats->ref_count++;
+
+		/* Convert packet to stamp and push it to the stamp queue */
+		err = update_stamp_queue(&peer->q, packet, stats, src_ipaddr);
+
+		/* Low level / input problem worth stopping */
+		if (err == -1)
+			break;
+
+		/*
+		 * If err == 0, there is at least one valid full fledged stamp in the
+		 * queue. If running dead trace, this could fill the stamp queue with
+		 * the entire trace file. Instead, break pcap_loog and process stamp.
+		 */
+		if (err == 0)
+			break;
+		/*
+		 * If err == 1, inserted packet in queue, but did not pair it. Half
+		 * baked stamp not worth processing, we try to read from the device
+		 * again after a little while. The wait grows bigger on each attempt.
+		 * Number of attempts bounded since we cannot stay here for ever.
+		 */
+		if (err == 1) {
+			usleep(attempt_wait);
+			attempt_wait += 3000;
+		}
+	}
+	/* Make sure we don't leak memory */
 	destroy_radpcap_packet(packet);
+	
+	/* Error, something wrong worth killing everything */
+	if (err == -1)
+		return (-1);
 
-	return err;
+	/* Nothing to do, no need to attempt to get a stamp from the stamp queue */
+	if (err == 1)
+		return (1);
+
+	/* At least one stamp in the queue, go and get it. Should not fail but... */
+	err = get_stamp_from_queue(&peer->q, stamp);
+	if (err)
+		return (1);
+
+	verbose(VERB_DEBUG, "Popped stamp queue: %llu %.6Lf %.6Lf %llu %llu",
+			(long long unsigned) BST(stamp)->Ta, BST(stamp)->Tb, BST(stamp)->Te,
+			(long long unsigned) BST(stamp)->Tf, (long long unsigned) stamp->id);
+
+	/* Monitor change in server: logging and quality warning flag */
+	if ((peer->ttl != stamp->ttl) || (peer->leapsec != stamp->leapsec) ||
+			(peer->refid != stamp->refid) || (peer->stratum != stamp->stratum)) {
+		if (stamp->qual_warning == 0)
+			stamp->qual_warning = 1;
+
+		c = (char *) &(stamp->refid);
+		if (stamp->stratum == STRATUM_REFPRIM)
+			snprintf(refid, 16, "%c%c%c%c", *c, *(c+1), *(c+2), *(c+3));
+		else
+			snprintf(refid, 16, "%i.%i.%i.%i", *c, *(c+1), *(c+2), *(c+3));
+		verbose(LOG_WARNING, "New NTP server info on packet %u:",
+				stats->ref_count);
+		verbose(LOG_WARNING, "SERVER: %s, STRATUM: %d, TTL: %d, ID: %s, "
+				"LEAP: %u", stamp->server_ipaddr, stamp->stratum, stamp->ttl,
+				refid, stamp->leapsec);
+	}
+
+	/* Store the server refid will pass on to our potential NTP clients */
+	// TODO do we have to keep this in both structures ?
+	// TODO: the SERVER_DATA one should not be the refid but the peer's IP
+	SERVER_DATA(clock)->refid = stamp->refid;
+	peer->refid = stamp->refid;
+	peer->ttl = stamp->ttl;
+	peer->stratum = stamp->stratum;
+	peer->leapsec = stamp->leapsec;
+
+	/* Record NTP protocol specific values but only if not crazy */
+	if ((stamp->stratum > STRATUM_REFCLOCK) && (stamp->stratum < STRATUM_UNSPEC) &&
+			(stamp->leapsec != LEAP_NOTINSYNC)) {
+		SERVER_DATA(clock)->stratum = stamp->stratum;
+		SERVER_DATA(clock)->rootdelay = stamp->rootdelay;
+		SERVER_DATA(clock)->rootdispersion = stamp->rootdispersion;
+		verbose(VERB_DEBUG, "Received pkt stratum= %u, rootdelay= %.9f, "
+				"roodispersion= %.9f", stamp->stratum, stamp->rootdelay,
+				stamp->rootdispersion);
+	}
+
+	return (0);
 }
 

@@ -44,7 +44,7 @@
 
 
 #ifdef WITH_RADKERNEL_NONE
-int update_system_clock(struct radclock *clock_handle) { return (0); }
+int update_system_clock(struct radclock *clock) { return (0); }
 static int update_ipc_shared_memory(struct radclock *clock) { return (0); };
 #else
 
@@ -119,7 +119,7 @@ update_ipc_shared_memory(struct radclock *clock)
 
 /* Report back to back timestamps of RADclock and system clock */
 static inline void
-read_clocks(struct radclock *clock_handle, struct timeval *sys_tv,
+read_clocks(struct radclock *clock, struct timeval *sys_tv,
 	struct timeval *rad_tv, vcounter_t *counter)
 {
 	vcounter_t before;
@@ -133,20 +133,20 @@ read_clocks(struct radclock *clock_handle, struct timeval *sys_tv,
 	 * (arbitrary) bracket threshold: 5 mus.
 	 */
 	for (i=0; i<5; i++) {
-		radclock_get_vcounter(clock_handle, &before);
+		radclock_get_vcounter(clock, &before);
 		gettimeofday(sys_tv, NULL);
-		radclock_get_vcounter(clock_handle, &after);
+		radclock_get_vcounter(clock, &after);
 
-		if ((after - before) < (5e-6 / RAD_DATA(clock_handle)->phat))
+		if ((after - before) < (5e-6 / RAD_DATA(clock)->phat))
 			break;
 	}
 	verbose(VERB_DEBUG, "System clock read_clocks bracket: "
 		"%"VC_FMT" [cycles], %.03f [mus]",
 		(after - before),
-		(after - before) * RAD_DATA(clock_handle)->phat * 1e6 );
+		(after - before) * RAD_DATA(clock)->phat * 1e6 );
 
 	*counter = (vcounter_t) ((before + after)/2);
-	counter_to_time(clock_handle, counter, &time);
+	counter_to_time(clock, counter, &time);
 	timeld_to_timeval(&time, rad_tv);
 }
 
@@ -175,10 +175,10 @@ subtract_tv(struct timeval *delta, struct timeval tv1, struct timeval tv2)
 }
 
 
-/*	There are a few assumptions on the kernel capabilities, i.e. RFC1589
- *	compatible. Should be fairly safe with recent systems these days.
- *	The code in here is in packets chronological order, could have made it
- *	prettier with a little state machine.
+/* There are a few assumptions on the kernel capabilities, i.e. RFC1589
+ * compatible. Should be fairly safe with recent systems these days.  The code
+ * in here is in packets chronological order, could have made it prettier with a
+ * little state machine.
  */
 int
 update_system_clock(struct radclock *clock)
@@ -477,10 +477,8 @@ int insane_bidir_stamp(struct stamp_t *stamp, struct stamp_t *laststamp)
  * XXX TODO: so far we suppose bidir paradigm only and a single source at a time!!
  */
 int
-process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
+process_rawdata(struct radclock *clock, struct bidir_peer *peer)
 {
-	JDEBUG
-
 	/* Bi-directionnal stamp passed to the algo for processing */
 	struct stamp_t stamp;
 	static struct stamp_t laststamp;
@@ -492,7 +490,7 @@ process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 	double error_bound 		= 0;
 	double error_bound_avg 	= 0;
 	double error_bound_std 	= 0;
-	int poll_period = 0;	
+	int poll_period = 0;
 	int err;
 	
 	/* Check hardware counter has not changed */
@@ -502,42 +500,78 @@ process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 	size_t size_ctl;
 #endif
 
-	/* Generic call for creating the stamps depending on the type of the 
+	JDEBUG
+
+	/* Generic call for creating the stamps depending on the type of the
 	 * input source.
 	 */
 	// Need to differentiate ascii input from pcap input
-	err = get_next_stamp(clock_handle, (struct stampsource *)clock_handle->stamp_source, &stamp);
+	err = get_next_stamp(clock, (struct stampsource *)clock->stamp_source, &stamp);
 
-	// TODO why inverting the error code logic in here !!! XXX FIXME XXX
-	if (err < 0)
-		return 1;
+	/* Signal big error */
+	if (err == -1)
+		return (-1);
+
+	/* No error, but no stamp to process */
+	if (err == 1)
+		return (1);
 	
 	/* If the new stamp looks insane just don't pass it for processing, keep
 	 * going and look for the next one. Otherwise, record it.
 	 */
 	// TODO: this should be stored in a proper structure under the clock handle
-	if ( ((struct bidir_output*)clock_handle->algo_output)->n_stamps > 1)
-	{
-		if ( insane_bidir_stamp(&stamp, &laststamp) )
-			return 0;
+	if (((struct bidir_output*)clock->algo_output)->n_stamps > 1) {
+		if (insane_bidir_stamp(&stamp, &laststamp))
+			return (0);
 	}
 	memcpy(&laststamp, &stamp, sizeof(struct stamp_t));
 
 	// TODO: this should be stored in a proper structure under the clock handle
 	/* Stamp obtained, increase total counter and process the stamp */
-	((struct bidir_output*)clock_handle->algo_output)->n_stamps++;
-	
+	((struct bidir_output*)clock->algo_output)->n_stamps++;
+
+
+	// XXX
+	// TODO: all the leap second stuff. Should the timestamp correction be made
+	// before passing the stamp to the algo, or should the algo applied the
+	// correction?
+	// XXX
+/*
+	switch ( PKT_LEAP(ntp->li_vn_mode) ) {
+	case LEAP_ADDSECOND:
+		((struct bidir_output*)clock->algo_output)->leapsectotal+=1;
+		verbose(LOG_WARNING, "Leap second change!! leapsecond total is now %d",
+			((struct bidir_output*)clock->algo_output)->leapsectotal);
+		break;
+	case LEAP_DELSECOND:
+		((struct bidir_output*)clock->algo_output)->leapsectotal-=1;
+		verbose(LOG_WARNING, "Leap second change!! leapsecond total is now %d",
+			((struct bidir_output*)clock->algo_output)->leapsectotal);
+		break;
+	case LEAP_NOTINSYNC:
+	case LEAP_NOWARNING:
+	default:
+		break;
+	}
+
+	// Remove total detected leapseconds from UNIX timestamps taken 
+	// from server if clock jumps back, this brings it forward again
+	BST(stamp)->Tb += ((struct bidir_output*)clock->algo_output)->leapsectotal;
+	BST(stamp)->Te += ((struct bidir_output*)clock->algo_output)->leapsectotal;
+*/
+
+
 	/* Update calibration using new stamp */ 
-	process_bidir_stamp(clock_handle, peer, BST(&stamp), stamp.qual_warning);
+	process_bidir_stamp(clock, peer, BST(&stamp), stamp.qual_warning);
 
 	/*
 	 * Update IPC shared memory segment for all processes to get accurate
 	 * clock parameters
 	 */
-  	if ((clock_handle->run_mode == RADCLOCK_SYNC_LIVE) &&
-			(clock_handle->conf->server_ipc == BOOL_ON)) {
-		if (!HAS_STATUS(clock_handle, STARAD_UNSYNC))
-			update_ipc_shared_memory(clock_handle);
+  	if ((clock->run_mode == RADCLOCK_SYNC_LIVE) &&
+			(clock->conf->server_ipc == BOOL_ON)) {
+		if (!HAS_STATUS(clock, STARAD_UNSYNC))
+			update_ipc_shared_memory(clock);
 	}
 
 	/* To improve data accuracy, we kick a fixed point data update just after we
@@ -547,12 +581,12 @@ process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 	 * be better than ours after the very first stamp. Let's make sure we do not
 	 * push something too stupid, too quickly
 	 */
-	if (clock_handle->run_mode == RADCLOCK_SYNC_LIVE &&
-			clock_handle->conf->adjust_sysclock == BOOL_ON &&
-			!HAS_STATUS(clock_handle, STARAD_UNSYNC)) {
+	if (clock->run_mode == RADCLOCK_SYNC_LIVE &&
+			clock->conf->adjust_sysclock == BOOL_ON &&
+			!HAS_STATUS(clock, STARAD_UNSYNC)) {
 
-		if ( clock_handle->kernel_version < 2 ) {
-			update_kernel_fixed(clock_handle);
+		if ( clock->kernel_version < 2 ) {
+			update_kernel_fixed(clock);
 			verbose(VERB_DEBUG, "Sync pthread updated fixed point data to kernel.");
 		} else {
 
@@ -563,43 +597,43 @@ process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 			err = sysctlbyname("kern.timecounter.hardware", &hw_counter[0], &size_ctl, NULL, 0);
 			if (err == -1) {
 				verbose(LOG_ERR, "Cannot find kern.timecounter.hardware in sysctl");
-				return 1;
+				return (-1);
 			}
 			
-			if (strcmp(clock_handle->hw_counter, hw_counter) != 0) {
+			if (strcmp(clock->hw_counter, hw_counter) != 0) {
 				verbose(LOG_WARNING, "Hardware counter has changed (%s -> %s)."
-					" Reinitialising radclock.", clock_handle->hw_counter,
+					" Reinitialising radclock.", clock->hw_counter,
 					hw_counter);
-				OUTPUT(clock_handle, n_stamps) = 0;
+				OUTPUT(clock, n_stamps) = 0;
 				peer->stamp_i = 0;
-				clock_handle->server_data->burst = NTP_BURST;
-				strcpy(clock_handle->hw_counter, hw_counter);
+				clock->server_data->burst = NTP_BURST;
+				strcpy(clock->hw_counter, hw_counter);
 // XXX TODO: Reinitialise the stats structure as well?
-				return 0;
+				return (0);
 			}
 #endif
 
-			set_kernel_ffclock(clock_handle);
+			set_kernel_ffclock(clock);
 			verbose(VERB_DEBUG, "Feed-forward kernel clock has been set.");
 		}
 
 		/* Update any virtual machine store if configured */
-		RAD_VM(clock_handle)->push_data(clock_handle);
+		RAD_VM(clock)->push_data(clock);
 	}
 
 
 	/* Adjust the system clock, we only pass in here if we are not piggybacking
 	 * on ntp daemon.
 	 */
-	if ((clock_handle->run_mode == RADCLOCK_SYNC_LIVE) &&
-			(clock_handle->conf->adjust_sysclock == BOOL_ON)) {
+	if ((clock->run_mode == RADCLOCK_SYNC_LIVE) &&
+			(clock->conf->adjust_sysclock == BOOL_ON)) {
 		// TODO: catch errors
-		update_system_clock(clock_handle);
+		update_system_clock(clock);
 	}
 
 
 	/* Write algo output to matlab file, much less urgent than previous tasks */
-	print_out_files(clock_handle, &stamp);
+	print_out_files(clock, &stamp);
 	
 	/* View updated RADclock data and compare with NTP server stamps in nice
 	 * format. The first 10 then every 6 hours (poll_period can change, but
@@ -608,23 +642,23 @@ process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 	 * Note: ->n_stamps has been incremented by the algo to prepare for next
 	 * stamp.
 	 */
-	poll_period = ((struct bidir_peer*)(clock_handle->active_peer))->poll_period;
-	if (VERB_LEVEL &&   ( (OUTPUT(clock_handle, n_stamps) < 10)
-					|| !(OUTPUT(clock_handle, n_stamps) % ((int)(3600*6/poll_period))) )) 
+	poll_period = ((struct bidir_peer*)(clock->active_peer))->poll_period;
+	if (VERB_LEVEL &&   ( (OUTPUT(clock, n_stamps) < 10)
+					|| !(OUTPUT(clock, n_stamps) % ((int)(3600*6/poll_period))) )) 
 	{
-		counter_to_time(clock_handle, &(RAD_DATA(clock_handle)->last_changed), &currtime);
-		min_RTT = RAD_ERROR(clock_handle)->min_RTT;
+		counter_to_time(clock, &(RAD_DATA(clock)->last_changed), &currtime);
+		min_RTT = RAD_ERROR(clock)->min_RTT;
 		timediff = (double) (currtime - (long double) BST(&stamp)->Te);
 
 		verbose(VERB_CONTROL, "i=%ld: NTPserver stamp %.6Lf, RAD - NTPserver = %.3f [ms], RTT/2 = %.3f [ms]",
-				((struct bidir_output*)clock_handle->algo_output)->n_stamps - 1,
+				((struct bidir_output*)clock->algo_output)->n_stamps - 1,
 				BST(&stamp)->Te, timediff * 1000, min_RTT / 2 * 1000);
 
-		error_bound = RAD_ERROR(clock_handle)->error_bound;
-		error_bound_avg = RAD_ERROR(clock_handle)->error_bound_avg;
-		error_bound_std = RAD_ERROR(clock_handle)->error_bound_std;
+		error_bound = RAD_ERROR(clock)->error_bound;
+		error_bound_avg = RAD_ERROR(clock)->error_bound_avg;
+		error_bound_std = RAD_ERROR(clock)->error_bound_std;
 		verbose(VERB_CONTROL, "i=%ld: Clock Error Bound (cur,avg,std) %.6f %.6f %.6f [ms]",
-				((struct bidir_output*)clock_handle->algo_output)->n_stamps - 1,
+				((struct bidir_output*)clock->algo_output)->n_stamps - 1,
 				error_bound * 1000, error_bound_avg * 1000, error_bound_std * 1000);
 	}
 
@@ -632,19 +666,17 @@ process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer)
 	 * We don't want to reinit plocal each time we receive a packet, but only 
 	 * on reload of the configuration file. So this does the trick.
 	 */
-	if (clock_handle->conf->start_plocal == PLOCAL_RESTART)
-			clock_handle->conf->start_plocal = PLOCAL_START;
+	if (clock->conf->start_plocal == PLOCAL_RESTART)
+			clock->conf->start_plocal = PLOCAL_START;
 
 	/* Set initial state of 'signals' - important !! 
 	 * Has to be placed here, after the algo handled the possible new
 	 * parameters, with the next packets coming.
 	 */
-	clock_handle->conf->mask = UPDMASK_NOUPD;
-
+	clock->conf->mask = UPDMASK_NOUPD;
 
 	JDEBUG_RUSAGE
-
-	return 0;
+	return (0);
 }
 
 

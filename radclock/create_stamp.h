@@ -64,8 +64,6 @@
 #define RADPCAP_PACKET_BUFSIZE 65535
 
 
-
-
 /* 
  * store simple stats in incoming reference time information. Extensible.
  */
@@ -100,23 +98,17 @@ typedef struct radpcap_packet_t {
 } radpcap_packet_t;
 
 
-
-
-
 /*
  * So far still pcap based
  */
-int get_bidir_stamp(struct radclock *handle,
+int get_network_stamp(struct radclock *handle,
 		void * userdata,
-		int (*get_packet)(struct radclock *handle, void *user, radpcap_packet_t **packet),
+		int (*get_packet)(struct radclock *, void *, radpcap_packet_t **),
 		struct stamp_t *stamp,
 		struct timeref_stats *stats,
 		char *src_ipaddr
 );
 
-
-
 int get_vcount(radpcap_packet_t *packet, vcounter_t *vcount);
-unsigned int get_capture_length(radpcap_packet_t *packet);
 
 #endif

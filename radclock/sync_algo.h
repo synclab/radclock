@@ -158,8 +158,8 @@ struct stamp_t {
 	char server_ipaddr[16];
 	int ttl;
 	int stratum;
-	uint32_t refid;
 	int leapsec;
+	uint32_t refid;
 	double rootdelay;
 	double rootdispersion;
 	union stamp_u {
@@ -225,6 +225,12 @@ struct bidir_peer
 	 * 136 yrs @ 1 stamp/[sec] if 32bit
 	 */
 	index_t stamp_i;
+
+	/* TODO Very NTP centric */
+	int ttl;
+	int stratum;
+	int leapsec;
+	uint32_t refid;
 
 	struct bidir_stamp stamp;	// record previous stamp
 
@@ -312,6 +318,11 @@ struct bidir_peer
 
 	/* Statistics */
 	int stats_sd[3];			// Stats on server delay (good, avg, bad)
+// TODO should this be in source structure or peer structure?
+//	struct timeref_stats stats;		// FIXME: this is a mess
+
+	/* Queue of stamps to be processed */
+	struct stamp_queue *q;
 };
 
 #define	PEER_ERROR(x)	(&(x->peer_err))
