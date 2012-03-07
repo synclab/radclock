@@ -323,7 +323,6 @@ insert_stamp_queue(struct stamp_queue **q, struct stamp_t *new, int mode)
 		if (stamp->id > new->id)
 			tmp = stq;
 		if ((stamp->type == STAMP_NTP) && (stamp->id == new->id)) {
-
 			if (mode == MODE_CLIENT) {
 				if (BST(stamp)->Ta != 0) {
 					verbose(LOG_ERR, "Found duplicate NTP client request.");
@@ -351,13 +350,11 @@ insert_stamp_queue(struct stamp_queue **q, struct stamp_t *new, int mode)
 		stq->prev = NULL;
 		stq->next = NULL;
 		if (tmp != NULL) {
-			if (tmp->next != NULL)
-				tmp->next->prev = stq;
-			stq->next = tmp->next;
-			tmp->next = stq;
-			stq->prev = tmp;
+			stq->next = tmp;
+			tmp->prev = stq;
+			stq->prev = tmp->prev;
 		}
-		if (*q == NULL)
+		if (*q == tmp)
 			*q = stq;
 	}
 
@@ -379,6 +376,15 @@ insert_stamp_queue(struct stamp_queue **q, struct stamp_t *new, int mode)
 		BST(stamp)->Tb = BST(new)->Tb;
 		BST(stamp)->Te = BST(new)->Te;
 		BST(stamp)->Tf = BST(new)->Tf;
+	}
+
+	stq = *q;
+	while (stq != NULL) {
+		stamp = &stq->stamp;
+		verbose(VERB_DEBUG, "  stamp queue: %llu %.6Lf %.6Lf %llu %llu",
+				(long long unsigned) BST(stamp)->Ta, BST(stamp)->Tb, BST(stamp)->Te,
+				(long long unsigned) BST(stamp)->Tf, (long long unsigned) stamp->id);
+		stq = stq->next;
 	}
 
 	if (found)
@@ -621,7 +627,7 @@ get_stamp_from_queue(struct stamp_queue **q, struct stamp_t *stamp)
 	stq = endq;
 	while (stq != NULL) {
 		st = &stq->stamp;
-		if ((BST(stamp)->Ta != 0) && (BST(stamp)->Tf != 0)) {
+		if ((BST(st)->Ta != 0) && (BST(st)->Tf != 0)) {
 			found = 1;
 			memcpy(stamp, st, sizeof(struct stamp_t));
 			break;
@@ -661,9 +667,10 @@ get_stamp_from_queue(struct stamp_queue **q, struct stamp_t *stamp)
  * live input) by adding an extra stamp queue to serialise stamps. There are a
  * few tricks to handle delayed packets when running live. Delayed packets
  * translate into an empty raw data buffer and the routine makes several
- * attempts to get delayed packets. Delays can be caused by a large RTT in
- * piggy-backing mode (asynchronous wake), or busy system where pcap path is
- * longer than NTP client UDP socket path.
+ * attempts to get delayed packets (by waiting along a geometric sleep time
+ * progression). Delays can be caused by a large RTT in piggy-backing mode
+ * (asynchronous wake), or busy system where pcap path is longer than NTP client
+ * UDP socket path.
  */
 int
 get_network_stamp(struct radclock *clock, void *userdata,
@@ -687,8 +694,7 @@ get_network_stamp(struct radclock *clock, void *userdata,
 	err = 0;
 	packet = create_radpcap_packet();
 
-	for (attempt=15; attempt>=0; attempt--) {
-
+	for (attempt=12; attempt>=0; attempt--) {
 		/*
 		 * Read packet from raw data queue or pcap tracefile. There are a few
 		 * tricks with error code because of the source abstraction:
@@ -702,12 +708,13 @@ get_network_stamp(struct radclock *clock, void *userdata,
 			return (-1);
 		if (err < 0) {
 			if (attempt == 0) {
-				verbose(VERB_DEBUG, "Empty raw data queue after all attempts");
+				verbose(VERB_DEBUG, "Empty raw data buffer after all attempts "
+						"(%.3f [ms])", attempt_wait / 1000.0);
 				err = 1;
 				break;
 			} else {
 				usleep(attempt_wait);
-				attempt_wait += 3000;
+				attempt_wait += attempt_wait;
 				continue;
 			}
 		}
@@ -737,7 +744,7 @@ get_network_stamp(struct radclock *clock, void *userdata,
 		 */
 		if (err == 1) {
 			usleep(attempt_wait);
-			attempt_wait += 3000;
+			attempt_wait += attempt_wait;
 		}
 	}
 	/* Make sure we don't leak memory */

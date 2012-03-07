@@ -191,33 +191,32 @@ create_ntp_request(struct radclock *clock_handle, struct ntp_pkt *pkt, struct ti
 }
 
 
-/**
+/*
  * So far this is a very basic test, we should probably do something a bit
  * smarter at one point
  */
-int match_ntp_pair(struct ntp_pkt *spkt, struct ntp_pkt *rpkt)
+int
+unmatched_ntp_pair(struct ntp_pkt *spkt, struct ntp_pkt *rpkt)
 {
 	JDEBUG
 
-	if ( 	(spkt->xmt.l_int == rpkt->org.l_int)
-		&& 	(spkt->xmt.l_fra == rpkt->org.l_fra) )
-		return 1;
+	if ((spkt->xmt.l_int == rpkt->org.l_int) &&	
+			(spkt->xmt.l_fra == rpkt->org.l_fra))
+		return (0);
 	else
-		verbose(LOG_WARNING, "NTP protocal client got a non matching pair"); 
-	return 0;
+		return (1);
 }
 
 
 
 
-int ntp_client(struct radclock * clock_handle)
+int
+ntp_client(struct radclock * clock_handle)
 {
-	JDEBUG
-
 	/* Timer and polling grid data */
 	float adjusted_period;
-	float starve_ratio = 1.0;
-	int attempt = 3;
+	float starve_ratio;
+	int attempt;
 
 	/* Packet stuff */
 	struct ntp_pkt spkt;
@@ -228,6 +227,10 @@ int ntp_client(struct radclock * clock_handle)
 	/* Essentially for debug */
 	struct timeval xmt;
 
+	JDEBUG
+
+	starve_ratio = 1.0;
+	attempt = 3;
 	socklen = sizeof(struct sockaddr_in);
 
 	/* We are a client so we know nothing happens until we send and receive some
@@ -237,13 +240,10 @@ int ntp_client(struct radclock * clock_handle)
 	 * grid. A bit of a luxury to benefit from the POSIX timer in here but it
 	 * makes the code cleaner ... so why not :)
 	 */
-	if ( clock_handle->server_data->burst > 0 )
-	{
+	if (clock_handle->server_data->burst > 0) {
 		clock_handle->server_data->burst -= 1;
 		adjusted_period = BURST_DELAY;
-	}
-	else
-	{
+	} else {
 		/* The logic to change the rate of polling due to starvation is
 		 * delegated to the sync algo
 		 */
@@ -251,29 +251,24 @@ int ntp_client(struct radclock * clock_handle)
 		// TODO implement logic for starvation ratio for sleep defined by the sync algo
 		adjusted_period = clock_handle->conf->poll_period / starve_ratio;
 	}
-	
 
 	/* Limit the number of attempts to be sure attempt*SO_RCV_TIMEOUT never
 	 * exceeds the poll period or we end up in unnecessary complex situation. Of
 	 * course it doesn't help us in case RTT > RAD_MINPOLL.
-	 */ 
-	if ( attempt > adjusted_period / (SO_RCV_TIMEOUT * 1e-6) )
-	{
-		attempt = MAX(1, (int) adjusted_period / (SO_RCV_TIMEOUT * 1e-6));	
+	 */
+	if (attempt > adjusted_period / (SO_RCV_TIMEOUT * 1e-6)) {
+		attempt = MAX(1, (int) adjusted_period / (SO_RCV_TIMEOUT * 1e-6));
 	}
 
-
 	/* Timer will hiccup in the 1-2 ms range if reset */
-	assess_ptimer(ntpclient_timerid, adjusted_period);	
-
+	assess_ptimer(ntpclient_timerid, adjusted_period);
 
 	/* Sleep until next grid point. Try to do as less as possible in between
-	 * here and the actual sendto() 
+	 * here and the actual sendto()
 	 */
 	pthread_mutex_lock(&alarm_mutex);
 	pthread_cond_wait(&alarm_cwait, &alarm_mutex);
 	pthread_mutex_unlock(&alarm_mutex);
-
 
 	/* Keep trying to send requests that make sense.
 	 * The receive call will timeout if we do not get a reply quick enough. This
@@ -282,45 +277,49 @@ int ntp_client(struct radclock * clock_handle)
 	 * On the other hand, we do not want to try continuously if the server is
 	 * dead or not reachable. So limit to a certain number of attempts.
 	 */
-	while ( attempt > 0)
-	{
+	while (attempt > 0) {
 		/* Create and send an NTP packet */
 		ret = create_ntp_request(clock_handle, &spkt, &xmt);
 		if (ret)
 			continue;
 
-		ret = sendto(CLIENT_DATA(clock_handle)->socket, 
-				(char *)&spkt, LEN_PKT_NOMAC /* No auth */, 0, 
+		ret = sendto(CLIENT_DATA(clock_handle)->socket,
+				(char *)&spkt, LEN_PKT_NOMAC /* No auth */, 0,
 				(struct sockaddr *) &(CLIENT_DATA(clock_handle)->s_to),
-				socklen );
+				socklen);
 
-		if ( ret < 0 ) {
+		if (ret < 0) {
 			verbose(LOG_ERR, "NTP request failed, sendto: %s", strerror(errno));
-			return 1;
+			return (1);
 		}	
 		
-		verbose(VERB_DEBUG, "Sent NTP request to %s at %lu.%lu",
+		verbose(VERB_DEBUG, "Sent NTP request to %s at %lu.%lu with id %llu",
 				inet_ntoa(CLIENT_DATA(clock_handle)->s_to.sin_addr),
-				xmt.tv_sec, xmt.tv_usec);
+				xmt.tv_sec, xmt.tv_usec,
+				((uint64_t) ntohl(spkt.xmt.l_int)) << 32 |
+				(uint64_t) ntohl(spkt.xmt.l_fra));
 
-		/* This will block then timeout if nothing received 
-		 * (see init of the socket) 
+		/* This will block then timeout if nothing received
+		 * (see init of the socket)
 		 */
-		ret = recvfrom(CLIENT_DATA(clock_handle)->socket, 
-				&rpkt, sizeof(struct ntp_pkt), 0, 
+		ret = recvfrom(CLIENT_DATA(clock_handle)->socket,
+				&rpkt, sizeof(struct ntp_pkt), 0,
 				(struct sockaddr*)&CLIENT_DATA(clock_handle)->s_from,
-				&socklen );
+				&socklen);
 
 		/* If we got something, check it is a valid pair. If it is the case,
 		 * then our job is finished in here. Otherwise, we send a new request.
 		 */
-		if (ret > 0) 
-		{
-			verbose(VERB_DEBUG, "Received NTP reply from %s",
-				inet_ntoa(CLIENT_DATA(clock_handle)->s_from.sin_addr));
+		if (ret > 0) {
+			verbose(VERB_DEBUG, "Received NTP reply from %s with id %llu",
+				inet_ntoa(CLIENT_DATA(clock_handle)->s_from.sin_addr),
+				((uint64_t) ntohl(rpkt.xmt.l_int)) << 32 |
+				(uint64_t) ntohl(rpkt.xmt.l_fra));
 
-			if ( match_ntp_pair(&spkt, &rpkt) )
-				break;
+			if (unmatched_ntp_pair(&spkt, &rpkt))
+				verbose(LOG_WARNING, "NTP client got a non matching pair. "
+						"Increase socket timeout?"); 
+			//	break;
 		}
 		else
 			verbose(VERB_DEBUG, "No reply after 800ms. Socket timed out");
@@ -328,7 +327,7 @@ int ntp_client(struct radclock * clock_handle)
 		attempt--;
 	}
 
-	return 0;
+	return (0);
 }
 
 
