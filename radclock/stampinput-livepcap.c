@@ -59,8 +59,6 @@
 #include "jdebug.h"
 
 
-
-
 /* Defines required by the Linux SLL header */
 #define LINUX_SLL_HOST		0
 #define LINUX_SLL_BROADCAST	1
@@ -69,8 +67,6 @@
 #define LINUX_SLL_OUTGOING	4
 
 
-#define LIVEPCAP_DATA(x) ((struct livepcap_data *)(x->priv_data))
-
 struct livepcap_data
 {
 	pcap_t *live_input;
@@ -78,71 +74,98 @@ struct livepcap_data
 	char src_ipaddr[16];
 };
 
+#define LIVEPCAP_DATA(x) ((struct livepcap_data *)(x->priv_data))
 
 
 
-/* This is a function that replaces the link layer header by a Linux SLL one.
- * While this seems to be an overkill, it is essential. Since we store the
- * vcount read in kernel into the link layer header of the packet saved in raw
- * files, the Linux SLL header allows a generic post processing. Then we can
- * handle any type of link layer the interface is listening to (802.11, PPP,
- * PPPoE ...) 
+/*
+ * Present a somewhat mac layer independent view of packets to higher layers.
+ * This serves several purposes:
+ * - sanitize input to synchronisation algorithm.
+ * - allow to dump any mac layer into a unique DLT type on drive.
+ * - store RAW counter values in abused SLL address field.
+ * These are achieved by replacing the link layer header by a Linux SLL one.
  */
-int insert_sll_header(radpcap_packet_t *packet)
+int
+insert_sll_header(radpcap_packet_t *packet)
 {
+	struct ether_header *eh;
+	linux_sll_header_t *sllh;
+	uint16_t ethertype;
+	size_t etherlen;
+	char *tmpbuffer;
+	struct pcap_pkthdr *pcaph;
+
 	JDEBUG
 
-	char *tmpbuffer;
-	linux_sll_header_t *hdr;
-	uint16_t proto_type = 0;
-	size_t lheader_size = 0;
+	etherlen = 0;
 	
-	switch( packet->type ) {
-		case DLT_LINUX_SLL:
-			/* Nothing to do here */
-			return 0;
+	switch(packet->type) {
+	case DLT_LINUX_SLL:
+		/* Nothing to do here */
+		return (0);
 
-		/* Set the size of the ethernet header and the protocol carried by
-		 * the ethernet frame */
-		// TODO: here we suppose the ethernet frame carries IP(v4) packets
-		// TODO: but we can have several encapsulations (PPPoE, EAP,...)
-		// TODO: the offset to the IP packet should be computed accordingly
-		case DLT_IEEE802_11:
-		case DLT_EN10MB:
-			proto_type   = ((struct ether_header*)packet->payload)->ether_type;
-			if (ntohs(proto_type) != ETHERTYPE_IP) {
-				verbose(LOG_ERR,"It seems we are trying to capture encapsulated packets");
-				return 1;
-			}
-			lheader_size = sizeof(struct ether_header);	
+	case DLT_IEEE802_11:
+	case DLT_EN10MB:
+		eh = (struct ether_header *)packet->payload;
+		ethertype = ntohs(eh->ether_type);
+		etherlen = sizeof(struct ether_header);
+
+		/* Ethernet with 802.2 and maybe SNAP header */
+		if (ethertype < 0x0600) {
+			verbose(LOG_ERR, "Not an ethernet.v2 frame, type not supported.");
+			return (1);
+		}
+
+		/* It is a bit ugly, but easier for cross-platform defs */
+		if (ethertype == ETHERTYPE_VLAN) {
+			ethertype = *(uint16_t *)((char *)packet->payload + 16);
+			etherlen = 18;
+		}
+
+		switch (ethertype) {
+		/* IPv4 */
+		case (ETHERTYPE_IP):
+		/* IPv6 */
+		case (ETHERTYPE_IPV6):
+		/* IEEE 1588 over Ethernet */
+		case (0x88F7):
 			break;
-
 		default:
-			/* failed */
-			verbose(LOG_ERR, "Link Layer type not supported yet");
-			return 1;
+			verbose(LOG_ERR,"It seems we are trying to capture encapsulated packets");
+			verbose(LOG_ERR, "Do not support protocol type %u", ethertype);
+			return (1);
+		}
+		break;
+
+	default:
+		/* failed */
+		verbose(LOG_ERR, "Link Layer DLT type not supported yet");
+		return (1);
 	}
 
-	/* Allocate what will be the new packet buffer once we replace the link
-	 * layer header by a SLL header
-	 * Note: make sure it has the same size than the radpcap_packet_t buffer
+	/*
+	 * Create the new frame using the SLL header. It would have been more
+	 * efficient to avoid copying data, but ethernet header smaller than SLL
+	 * header. Simpler to maintain continuous memory block with same assumptions
+	 * as what has been received from libpcap. 
 	 */
-	tmpbuffer = (void *) malloc(RADPCAP_PACKET_BUFSIZE);
+	tmpbuffer = (char *) malloc(RADPCAP_PACKET_BUFSIZE);
 	JDEBUG_MEMORY(JDBG_MALLOC, tmpbuffer);
 
-	/* Copy the pcap header into the tmp buffer */
-	memcpy(tmpbuffer,packet->header, sizeof(struct pcap_pkthdr));
-	
-	/* Create the Linux SLL header into the temporary buffer */
-	hdr=(void*)((char*)tmpbuffer + sizeof(struct pcap_pkthdr));
-	hdr->pkttype	= htons(LINUX_SLL_OTHERHOST);
-	hdr->hatype		= htons(ARPHRD_ETHER);
-	hdr->protocol	= proto_type; 
+	/* Copy the pcap header */
+	memcpy(tmpbuffer, packet->header, sizeof(struct pcap_pkthdr));
 
-	/* Copy the payload remaining after ethernet header */
-	memcpy(tmpbuffer +sizeof(struct pcap_pkthdr) +sizeof(linux_sll_header_t),
-				packet->payload + lheader_size, /* Remove link header */
-				((struct pcap_pkthdr *)packet->header)->caplen - lheader_size);
+	/* Create the Linux SLL header */
+	sllh = (linux_sll_header_t *) (tmpbuffer + sizeof(struct pcap_pkthdr));
+	sllh->pkttype = htons(LINUX_SLL_OTHERHOST);
+	sllh->hatype = htons(ARPHRD_ETHER);
+	sllh->protocol = htons(ethertype); 
+
+	/* Copy what is encapsulated in ethernet */ 
+	pcaph = (struct pcap_pkthdr *)packet->header; 
+	memcpy((char *)sllh + sizeof(linux_sll_header_t), (char *)eh + etherlen,
+			pcaph->caplen - etherlen);
 	
 	/* We made a copy so get rid of the former buffer */
 	JDEBUG_MEMORY(JDBG_FREE, packet->buffer);
@@ -153,33 +176,24 @@ int insert_sll_header(radpcap_packet_t *packet)
 	packet->header	= tmpbuffer;
 	packet->payload = tmpbuffer + sizeof(struct pcap_pkthdr);
 	packet->type	= DLT_LINUX_SLL;
-	packet->size	= packet->size 
-					  + sizeof(linux_sll_header_t)
-					  - lheader_size;
+	packet->size	= packet->size + sizeof(linux_sll_header_t) - etherlen;
 	
 	/* Update pcap header */
-	((struct pcap_pkthdr*) packet->header)->caplen =
-			((struct pcap_pkthdr*) packet->header)->caplen 
-			+ sizeof(linux_sll_header_t)
-			- lheader_size;
-	((struct pcap_pkthdr*) packet->header)->len =
-			((struct pcap_pkthdr*) packet->header)->len
-			+ sizeof(linux_sll_header_t)
-			- lheader_size;
-	return 0;
+	pcaph->caplen = pcaph->caplen + sizeof(linux_sll_header_t) - etherlen;
+	pcaph->len = pcaph->len + sizeof(linux_sll_header_t) - etherlen;
+	return (0);
 }
 
 
-
-
-
-/* Store the vcount value in place of the MAC adresses in the Linux SLL header 
+/* 
+ * Store the vcount value in place of the MAC adresses in the Linux SLL header 
  */
-void set_vcount_in_sll(radpcap_packet_t *packet, vcounter_t vcount)
+void
+set_vcount_in_sll(radpcap_packet_t *packet, vcounter_t vcount)
 {
-	JDEBUG
-
 	vcounter_t network_vcount;
+
+	JDEBUG
 	
 	/* Format the vcount to write */
 	network_vcount = htonll(vcount);
@@ -192,13 +206,8 @@ void set_vcount_in_sll(radpcap_packet_t *packet, vcounter_t vcount)
 }
 
 
-
-
-
-
-
-
-/* This is the callback passed to get_bidir_stamp().
+/* 
+ * This is the callback passed to get_bidir_stamp().
  * It takes a radpcap_packet_t and fills this structure with the actual packet
  * read from the live interface.
  * The first trick here is to use radpcap_get_packet() that actually retrieves 
@@ -230,7 +239,7 @@ get_packet_livepcap(struct radclock *handle, void *userdata,
 	ret = deliver_rawdata_ntp(handle, packet, &vcount);
 	if (ret < 0) {
 		/* Raw data buffer is empty */
-		return ret;
+		return (ret);
 	}
 
 	/* Replace the link layer header by the Linux SLL header for generic
@@ -255,16 +264,18 @@ get_packet_livepcap(struct radclock *handle, void *userdata,
 	*packet_p = packet;
 
 	/* Return packet quality */
-	return ret;
+	return (ret);
 }
 
 
 
 
-/* Get a free interface if none specified
- * Try to find a corresponding interface if a source host is given 
+/*
+ * Get a free interface if none specified
+ * Try to find a corresponding interface if a source host is given.
  */
-int get_interface(char* if_name, char* ip_addr) 
+int
+get_interface(char* if_name, char* ip_addr)
 {
 	struct ifaddrs *devs;
 	struct ifaddrs *dev;
@@ -278,14 +289,14 @@ int get_interface(char* if_name, char* ip_addr)
 		return 0;
 	}
 
-	/* 3 cases here. 
+	/* 3 cases here.
 	 * - Either the user did specify an interface, and then we trust him blindly
 	 * - If an address has been specified or found before, try to match it to confirm
 	 *   everything is fine
 	 * - Last do our best ...
 	 */
 	
-	/* An interface was specified */ 
+	/* An interface was specified */
 	if ( (!found) && (strlen(if_name) > 0) ) {
 		dev = devs;
 		while(dev) {
@@ -699,25 +710,29 @@ livepcapstamp_get_next(struct radclock *handle, struct stampsource *source,
 }
 
 
-static void livepcapstamp_breakloop(struct radclock *handle, struct stampsource *source)
+
+/*
+ * Wrapper to the pcap_breakloop() call. This is usually called when the daemon
+ * catches a SIGHUP signal. This call does not affect other threads. In other
+ * words, the pcap_get*() functions have to be in the main thread. Will not work
+ * otherwise
+ */
+static void
+livepcapstamp_breakloop(struct radclock *handle, struct stampsource *source)
 {
-	/* Wrapper to the pcap_breakloop() call
-	 * This is usually called when the daemon catches a SIGHUP signal. This 
-	 * call does not affect other threads. In other words, the pcap_get*() functions
-	 * have to be in the main thread. Will not work otherwise
-	 */
 	pcap_breakloop(LIVEPCAP_DATA(source)->live_input);
 	return;
 }
 
 
-static void livepcapstamp_finish(struct radclock *handle, struct stampsource *source)
+static void
+livepcapstamp_finish(struct radclock *handle, struct stampsource *source)
 {
 	if (LIVEPCAP_DATA(source)->trace_output) {
 		pcap_dump_flush(LIVEPCAP_DATA(source)->trace_output);
 		pcap_dump_close(LIVEPCAP_DATA(source)->trace_output);
 	}
-	
+
 	pcap_close(LIVEPCAP_DATA(source)->live_input);
 	JDEBUG_MEMORY(JDBG_FREE, LIVEPCAP_DATA(source));
 	free(LIVEPCAP_DATA(source));
@@ -725,18 +740,18 @@ static void livepcapstamp_finish(struct radclock *handle, struct stampsource *so
 
 
 
-static int livepcapstamp_update_filter(struct radclock *handle, struct stampsource *source)
+static int
+livepcapstamp_update_filter(struct radclock *handle, struct stampsource *source)
 {
-	int strsize = 0;
+	struct bpf_program filter;
 	char fltstr[MAXLINE];               // bpf filter string
-	struct bpf_program filter;       
+	int strsize;
 
 // TODO XXX: should pass IP addresses only to libpcap and not hostnames!
-	strsize = build_BPFfilter(handle, fltstr, MAXLINE,
-                                  handle->conf->hostname,
-                                  handle->conf->time_server); 
+	strsize = build_BPFfilter(handle, fltstr, MAXLINE, handle->conf->hostname,
+			handle->conf->time_server);
 
-	if ( (strsize < 0) || (strsize > MAXLINE-2) ) {     
+	if ((strsize < 0) || (strsize > MAXLINE-2) ) {
 		verbose(LOG_ERR, "BPF filter string error (too long?)");
 		goto err_out;
 	}
@@ -744,69 +759,69 @@ static int livepcapstamp_update_filter(struct radclock *handle, struct stampsour
 
 	// Compile and set up the BPF filter
 	// no need to test broadcast addresses
-	if ( pcap_compile(LIVEPCAP_DATA(source)->live_input, &filter, fltstr, 0, 0) == -1 ) {   
+	if ( pcap_compile(LIVEPCAP_DATA(source)->live_input, &filter, fltstr, 0, 0) == -1 ) {
 		verbose(LOG_ERR, "pcap filter compiling failure, pcap says: %s",
-							pcap_geterr(LIVEPCAP_DATA(source)->live_input));
+				pcap_geterr(LIVEPCAP_DATA(source)->live_input));
 		goto pcap_err;
 	}
-	if ( pcap_setfilter( LIVEPCAP_DATA(source)->live_input,&filter) == -1 )  {
+	if (pcap_setfilter( LIVEPCAP_DATA(source)->live_input,&filter) == -1 ) {
 		verbose(LOG_ERR, "pcap filter setting failure, pcap says: %s",
-							pcap_geterr(LIVEPCAP_DATA(source)->live_input));
+				pcap_geterr(LIVEPCAP_DATA(source)->live_input));
 		goto pcap_err;
 	}
 
-	return 0;
+	return (0);
 
 pcap_err:
 	verbose(LOG_ERR, "Things went really wrong with this update on the live source");
 	pcap_close(LIVEPCAP_DATA(source)->live_input);
 	JDEBUG_MEMORY(JDBG_FREE, LIVEPCAP_DATA(source));
 	free(LIVEPCAP_DATA(source));
+
 err_out:
-	return -1;
+	return (-1);
 }
 
 
-static int livepcapstamp_update_dumpout(struct radclock *handle, struct stampsource *source)
+static int
+livepcapstamp_update_dumpout(struct radclock *handle, struct stampsource *source)
 {
 	if (LIVEPCAP_DATA(source)->trace_output) {
 		pcap_dump_flush(LIVEPCAP_DATA(source)->trace_output);
 		pcap_dump_close(LIVEPCAP_DATA(source)->trace_output);
 	}
-	if (strlen(handle->conf->sync_out_pcap) > 0)
-	{
+
+	if (strlen(handle->conf->sync_out_pcap) > 0) {
 		pcap_t *p_handle_traceout;
 		/* We never close this handle for future safety if libpcap
 		 * changes its interface, and in the future might utilize this
 		 * handle.
 		 */
 		p_handle_traceout = pcap_open_dead(DLT_LINUX_SLL, BPF_PACKET_SIZE);
-		if (!p_handle_traceout)
-		{
+		if (!p_handle_traceout) {
 			verbose(LOG_ERR, "Error creating pcap handle");
 			JDEBUG_MEMORY(JDBG_FREE, LIVEPCAP_DATA(source));
 			free(LIVEPCAP_DATA(source));
-			return -1;
+			return (-1);
 		}
 		
-		LIVEPCAP_DATA(source)->trace_output = pcap_dump_open(p_handle_traceout, handle->conf->sync_out_pcap);
-		if (!LIVEPCAP_DATA(source)->trace_output)
-		{
+		LIVEPCAP_DATA(source)->trace_output = pcap_dump_open(p_handle_traceout,
+				handle->conf->sync_out_pcap);
+
+		if (!LIVEPCAP_DATA(source)->trace_output) {
 			verbose(LOG_ERR, "Error opening raw output: %s",
-				   pcap_geterr(p_handle_traceout));
+					pcap_geterr(p_handle_traceout));
 			JDEBUG_MEMORY(JDBG_FREE, LIVEPCAP_DATA(source));
 			free(LIVEPCAP_DATA(source));
 			pcap_close(p_handle_traceout);
-			return -1;
+			return (-1);
 		}
 	}
 	else
 		LIVEPCAP_DATA(source)->trace_output = NULL;
 
-	return 0;
+	return (0);
 }
-
-
 
 
 struct stampsource_def livepcap_source =
