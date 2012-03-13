@@ -651,7 +651,6 @@ get_stamp_from_queue(struct stamp_queue *q, struct stamp_t *stamp)
 	struct stq_elt *endq;
 	struct stq_elt *stq;
 	struct stamp_t *st;
-	int found;
 	int qsize;
 
 	JDEBUG
@@ -662,42 +661,37 @@ get_stamp_from_queue(struct stamp_queue *q, struct stamp_t *stamp)
 		return (1);
 	}
 
-	found = 0;
 	stq = q->end;
 	while (stq != NULL) {
 		st = &stq->stamp;
 		if ((BST(st)->Ta != 0) && (BST(st)->Tf != 0)) {
-			found = 1;
 			memcpy(stamp, st, sizeof(struct stamp_t));
 			break;
 		}
 		stq = stq->prev;
 	}
 
-	if (!found) {
+	if (stq == NULL) {
 		verbose(VERB_DEBUG, "Did not find any full stamp in stamp queue");
 		return (1);
 	}
 
-	if (stq == q->start)
-		q->start = NULL;
-
 	qsize = q->size;
 	endq = q->end;
-	while ((endq->prev != NULL) && (endq != stq)) {
+	while ((endq != q->start) && (endq != stq)) {
 		endq = endq->prev;
 		free(endq->next);
 		q->size--;
 	}
 
-	if (stq->prev != NULL)
-		endq = stq->prev;
-	else
-		endq = NULL;
-
-	free(stq);
 	q->size--;
-	q->end = endq;
+	if (q->size == 0) {
+		q->start = NULL;
+		q->end = NULL;
+	} else {
+		q->end = stq->prev;
+		q->end->next = NULL;
+	}
 
 	verbose(VERB_DEBUG, "Stamp queue had %d stamps, freed %d, %d left",
 		qsize, qsize - q->size, q->size);
