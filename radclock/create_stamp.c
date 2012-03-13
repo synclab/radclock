@@ -23,11 +23,13 @@
 
 #include <net/if.h>
 #include <netinet/in_systm.h>
-#include <netinet/in.h>
-#include <netinet/udp.h>
-#include <netinet/ip.h>
-#include <net/ethernet.h>
+
 #include <arpa/inet.h>
+#include <net/ethernet.h>
+#include <netinet/in.h>
+#include <netinet/ip.h>
+#include <netinet/ip6.h>
+#include <netinet/udp.h>
 
 #include <syslog.h>
 #include <stdio.h>
@@ -122,98 +124,189 @@ destroy_radpcap_packet(radpcap_packet_t *packet)
 }
 
 
+int
+check_ipv4(struct ip *iph, int remaining)
+{
+	if (iph->ip_v != 4) {
+		verbose(LOG_WARNING, "Failed to parse IPv4 packet");
+		return (1);
+	}
+
+	if ((iph->ip_off & 0xff1f) != 0) {
+		verbose(LOG_WARNING, "Fragmented IP packet");
+		return (1);
+	}
+
+	if (iph->ip_p != 17) {
+		verbose(LOG_WARNING, "Not a UDP packet");
+		return (1);
+	}
+
+	if (remaining < (iph->ip_hl * 4U)) {
+		verbose(LOG_WARNING, "Broken IP packet");
+		return (1);
+	}
+
+	return (0);
+}
+
+
+// TODO should there be more to do?
+int
+check_ipv6(struct ip6_hdr *ip6h, int remaining)
+{
+	if (ip6h->ip6_nxt != 17) {
+		verbose(LOG_ERR, "IPv6 packet with extensions no supported");
+		return (1);
+	}
+
+	if (remaining < 40) {
+		verbose(LOG_WARNING, "Broken IP packet");
+		return (1);
+	}
+
+	return (0);
+}
+
+
 /*
  * Get the IP payload from the radpcap_packet_t packet.  Here also (in addition
  * to get_vcount) we handle backward compatibility since we changed the way the
  * vcount and the link layer header are managed.
  *
- * We handle 3 formats:
- * 1- [pcap][ether][IP] : oldest format (vcount in pcap header timeval)
- * 2- [pcap][sll][ether][IP] : libtrace-3.0-beta3 format, vcount is in sll header
- * 3- [pcap][sll][IP] : remove link layer header, no libtrace, vcount in sll header
+ * We handle 3 formats (historical order):
+ * 1 - [pcap][ether][IP] : oldest format (vcount in pcap header timeval)
+ * 2 - [pcap][sll][ether][IP] : libtrace-3.0-beta3 format, vcount is in sll header
+ * 3 - [pcap][sll][IP] : remove link layer header, no libtrace, vcount in sll header
  * In live capture, the ssl header MUST be inserted before calling this function
+ * Ideally, we would like to get rid of formats 1 and 2 to simplify the code.
  */
-struct ip *
-get_ip(radpcap_packet_t *packet, unsigned int *remaining)
+// TODO and for non NTP packets? (ie 1588)
+// FIXME: the ip pointer is dirty and will break with IPv6 packets
+int
+get_valid_ntp_payload(radpcap_packet_t *packet, struct ntp_pkt **ntp, void **ip,
+		int *ipversion)
 {
-	struct ip *ipptr 		= NULL;
-	linux_sll_header_t *hdr = NULL;
-	size_t offset			= 0;
 
-	switch ( packet->type ) {
-		case DLT_EN10MB:
-			/* This is format 1, skip 14 bytes ethernet header */
-			offset = sizeof(struct ether_header);
+	struct ip *iph;
+	struct ip6_hdr *ip6h;
+	struct udphdr *udph;
+
+	linux_sll_header_t *sllh;
+	uint16_t proto;
+	int remaining;
+	int err;
+
+	JDEBUG
+
+	remaining = ((struct pcap_pkthdr *)packet->header)->caplen;
+
+	switch (packet->type) {
+
+	/*
+	 * This is format #1, skip 14 bytes ethernet header. Only NTP packets ever
+	 * captured in this format are IPv4
+	 */
+	case DLT_EN10MB:
+		iph = (struct ip *)(packet->payload + sizeof(struct ether_header));
+		remaining -= sizeof(struct ether_header);
+		*ipversion = 4;
+		ip6h = NULL;
+		break;
+
+	/*
+	 * This is format #2 and #3. Here we take advantage of a bug in bytes order in
+	 * libtrace-3.0-beta3 to identify the formats.
+	 * - if sllh->hatype = ARPHRD_ETHER (0x0001), we have format 3.
+	 * - if sllh->hatype is 256 (0x0100) it's a libtrace format.
+	*/
+	case DLT_LINUX_SLL:
+		sllh = (linux_sll_header_t*) packet->payload;
+
+		/* Format #2 */
+		if (ntohs(sllh->hatype) != 0x0001) {
+			iph = (struct ip *)(packet->payload + sizeof(struct ether_header) +
+					sizeof(linux_sll_header_t));
+			remaining -= sizeof(struct ether_header);
+			*ipversion = 4;
+			ip6h = NULL;
 			break;
-		case DLT_LINUX_SLL:
-			/* Here we take advantage of a bug in bytes order in
-			 * libtrace-3.0-beta3 to identify the formats. 
-			 * If hdr->hatype = ARPHRD_ETHER (0x0001), we have format 3. 
-			 * If hdr->hatype is 256 (0x0100) it's a libtrace format
-			 */
-			hdr = (linux_sll_header_t*) packet->payload;
-			
-			// TODO: endianness !!!!!
-			if ( ntohs(hdr->hatype) == 0x0001 ) {
-				/* skip 16 sll headers */
-				offset = sizeof(linux_sll_header_t);
-			}
-			else {
-				/* skip (14+16) bytes ethernet and sll headers */
-				offset = sizeof(struct ether_header) + sizeof(linux_sll_header_t);
-			}
-			break;
-		default:
-			verbose(LOG_ERR, "MAC layer type not supported yet.");
-			return NULL;
-			break;
-	}
-	/* Descend into frame to get IP data */
-	ipptr = (struct ip *)(packet->payload + offset);
-	*remaining = *remaining - offset;
-
-	/* Check we got a valid IP packet */
-	if (ipptr->ip_v != 4) {
-		verbose(LOG_ERR, "Not an IPv4 packet, endianness issue? ip_v = %u\n", ipptr->ip_v);
-		return NULL;
-	}
-	return ipptr;
-}
-
-struct udphdr *
-get_udp_from_ip(struct ip *ipptr, unsigned int *remaining)
-{
-	struct udphdr *udp = NULL;
-	/* Check for UDP protocol only */
-	if (ipptr->ip_p == 17) {
-		// TODO : endianness !!!!! 
-		/* If the packet is fragmented, reject it (see flags and fragment offset
-		 * in IP header) */	
-		if ( (ipptr->ip_off & 0xff1f) != 0)
-			return NULL;
-
-		/* If broken packet */
-		if (remaining) {
-			if (*remaining < (ipptr->ip_hl*4U)) {
-				return NULL;
-			}
 		}
 
-		*remaining -= (ipptr->ip_hl * 4);
-		udp = (void *)((char *)ipptr + (ipptr->ip_hl * 4));
-	}
-	return udp;
-}
+		/* This is format 3 */
+		proto = ntohs(sllh->protocol);
+		switch (proto) {
 
-void *
-get_udp_payload(struct udphdr *udp, unsigned int *remaining)
-{
-    if (remaining) {
-        if (*remaining < sizeof(struct udphdr))
-            return NULL;
-        *remaining -= sizeof(struct udphdr);
-    }
-    return (void*)((char *)udp + sizeof(struct udphdr));
+		/* IPv4 */
+		case (ETHERTYPE_IP):
+			ip6h = NULL;
+			iph = (struct ip *)(packet->payload + sizeof(linux_sll_header_t));
+			remaining -= sizeof(linux_sll_header_t);
+			*ipversion = 4;
+
+			err = check_ipv4(iph, remaining);
+			if (err)
+				return (1);
+
+			udph = (struct udphdr *)((char *)iph + (iph->ip_hl * 4));
+			remaining -= sizeof(struct ip);
+			break;
+
+		/* IPv6 */
+		case (ETHERTYPE_IPV6):
+			iph = NULL;
+			ip6h = (struct ip6_hdr *)(packet->payload + sizeof(linux_sll_header_t));
+			remaining -= sizeof(linux_sll_header_t);
+			*ipversion = 6;
+
+			err = check_ipv6(ip6h, remaining);
+			if (err)
+				return (1);
+
+			udph = (struct udphdr *)((char *)ip6h + sizeof(struct ip6_hdr));
+			remaining -= sizeof(struct ip6_hdr);
+			break;
+
+		/* IEEE 1588 over Ethernet */
+		case (0x88F7):
+			verbose(LOG_ERR, "1588 over Ethernet not implemented");
+			return (1);
+
+		default:
+			verbose(LOG_ERR, "Unsupported protocol in SLL header %u", proto);
+			break;
+		}
+
+		break;
+	default:
+		verbose(LOG_ERR, "MAC layer type not supported yet.");
+		return (1);
+		break;
+	}
+
+	// TODO: gross ...
+	*ip = (void *)iph;
+
+	if (remaining < sizeof(struct udphdr)) {
+		verbose(LOG_WARNING, "Broken UDP datagram");
+		return (1);
+	}
+
+	*ntp = (struct ntp_pkt *)((char *)udph + sizeof(struct udphdr));
+	remaining -= sizeof(struct udphdr);
+
+	/*
+	 * Make sure the NTP packet is not truncated. A normal NTP packet is at
+	 * least 48 bytes long, but a control or private request is as small as 12
+	 * bytes.
+	 */
+	if (remaining < 12) {
+		verbose(LOG_WARNING, "NTP packet truncated, payload is %d bytes "
+			"instead of at least 12 bytes", remaining);
+		return (1);
+	}
+
+	return (0);
 }
 
 
@@ -558,11 +651,10 @@ update_stamp_queue(struct stamp_queue *q, radpcap_packet_t *packet,
 		struct timeref_stats *stats, char *src_ipaddr)
 {
 	struct ip *ip;
-	struct udphdr *udp;
 	struct ntp_pkt *ntp;
-	unsigned int remaining;
 	vcounter_t vcount;
 	int err;
+	int ipversion;
 
 	JDEBUG
 
@@ -572,36 +664,9 @@ update_stamp_queue(struct stamp_queue *q, radpcap_packet_t *packet,
 		return (-1);
 	}
 
-	/* Descend into IP[UDP[NTP]] pkt to get NTP data */
-	// XXX is caplen correct after we chopped the mac header and replaced it
-	// with a SLL header?
-	remaining = ((struct pcap_pkthdr *)packet->header)->caplen;
-	ip = get_ip(packet, &remaining);
-	if (!ip) {
-		verbose(LOG_WARNING, "Not an IP packet.");
-		return (1);
-	}
-	
-	udp = get_udp_from_ip(ip, &remaining);
-	if (!udp) {
-		verbose(LOG_WARNING, "Not an UDP packet.");
-		return (1);
-	}
-
-	ntp = get_udp_payload(udp, &remaining);
-	if (!ntp) {
+	err = get_valid_ntp_payload(packet, &ntp, (void **)&ip, &ipversion);
+	if (err) {
 		verbose(LOG_WARNING, "Not an NTP packet.");
-		return (1);
-	}
-
-	/*
-	 * Make sure the NTP packet is not truncated. A normal NTP packet is at
-	 * least 48 bytes long, but a control or private request is as small as 12
-	 * bytes.
-	 */
-	if (remaining < 12) {
-		verbose(LOG_WARNING, "NTP packet truncated, payload is %d bytes "
-			"instead of at least 12 bytes", remaining);
 		return (1);
 	}
 
