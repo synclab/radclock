@@ -147,7 +147,7 @@ void* thread_data_processing(void *c_handle)
 	clock = (struct radclock*) c_handle;
 
 	/* Init peer stamp counter, everything rely on this starting at 0 */
-	peer.q = NULL;
+	init_peer_stamp_queue(&peer); 
 	peer.stamp_i = 0;
 	
 	// TODO XXX Need to manage peers better !!
@@ -188,6 +188,8 @@ void* thread_data_processing(void *c_handle)
 
 		pthread_mutex_unlock(&clock->wakeup_mutex);
 	}
+
+	destroy_peer_stamp_queue(&peer);
 
 	/* Thread exit */
 	verbose(LOG_NOTICE, "Thread data processing is terminating.");

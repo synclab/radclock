@@ -46,15 +46,26 @@
 #include "jdebug.h"
 
 
+// TODO: we should not have to redefine this
 # ifndef useconds_t
 typedef uint32_t useconds_t;
 # endif
 
-struct stamp_queue {
+struct stq_elt {
 	struct stamp_t stamp;
-	struct stamp_queue *prev;
-	struct stamp_queue *next;
+	struct stq_elt *prev;
+	struct stq_elt *next;
 };
+
+struct stamp_queue {
+	struct stq_elt *start;
+	struct stq_elt *end;
+	int size;
+};
+
+/* To prevent allocating heaps of memory if stamps are not paired in queue */
+#define MAX_STQ_SIZE	20
+
 
 /*
  * Converts fixed point NTP timestamp to floating point UNIX time
@@ -67,7 +78,6 @@ ntp_stamp_to_fp_unix_time(l_fp ntp_ts)
 	sec += (long double)(ntohl(ntp_ts.l_fra)) / 4294967296.0;
 	return (sec);
 }
-
 
 
 radpcap_packet_t *
@@ -90,6 +100,7 @@ create_radpcap_packet()
 
 	return (pkt);
 }
+
 
 void
 destroy_radpcap_packet(radpcap_packet_t *packet)
@@ -292,6 +303,31 @@ get_vcount(radpcap_packet_t *packet, vcounter_t *vcount) {
 }
 
 
+void
+init_peer_stamp_queue(struct bidir_peer *peer)
+{
+	peer->q = (struct stamp_queue *) calloc(1, sizeof(struct stamp_queue));
+	peer->q->start = NULL;
+	peer->q->end = NULL;
+	peer->q->size = 0;
+}
+
+void
+destroy_peer_stamp_queue(struct bidir_peer *peer)
+{
+	struct stq_elt *elt;
+
+	elt = peer->q->end;
+	while (elt != peer->q->start) {
+		elt = elt->prev;
+		free(elt);
+	}
+	free(peer->q->start);
+	free(peer->q);
+	peer->q = NULL;
+}
+	
+
 /*
  * Insert a client or server NTP packet into the stamp queue. This routine
  * effectively pairs matching requests and replies. The stamp queue has been
@@ -301,10 +337,10 @@ get_vcount(radpcap_packet_t *packet, vcounter_t *vcount) {
  * to the stamp.
  */
 int
-insert_stamp_queue(struct stamp_queue **q, struct stamp_t *new, int mode)
+insert_stamp_queue(struct stamp_queue *q, struct stamp_t *new, int mode)
 {
-	struct stamp_queue *stq;
-	struct stamp_queue *tmp;
+	struct stq_elt *stq;
+	struct stq_elt *tmp;
 	struct stamp_t *stamp;
 	int found;
 
@@ -316,8 +352,8 @@ insert_stamp_queue(struct stamp_queue **q, struct stamp_t *new, int mode)
 	}
 
 	found = 0;
-	stq = *q;
-	tmp = *q;
+	stq = q->start;
+	tmp = q->start;
 	while (stq != NULL) {
 		stamp = &stq->stamp;
 		if (stamp->id > new->id)
@@ -344,9 +380,18 @@ insert_stamp_queue(struct stamp_queue **q, struct stamp_t *new, int mode)
 	/*
 	 * Haven't found an existing server stamp, which is quite normal. Create a
 	 * new half-baked stamp and insert it in the peer queue structure.
+	 * If the queue is getting bloated, delete the oldest stamp.
 	 */
 	if (!found) {
-		stq = (struct stamp_queue *) calloc(1, sizeof(struct stamp_queue));
+		if (q->size == MAX_STQ_SIZE) {
+			verbose(LOG_WARNING, "Peer stamp queue has hit max size. Check the server?");
+			q->end = q->end->prev;
+			free(q->end->next);
+			q->end->next = NULL;
+			q->size--;
+		}	
+
+		stq = (struct stq_elt *) calloc(1, sizeof(struct stq_elt));
 		stq->prev = NULL;
 		stq->next = NULL;
 		if (tmp != NULL) {
@@ -354,8 +399,11 @@ insert_stamp_queue(struct stamp_queue **q, struct stamp_t *new, int mode)
 			tmp->prev = stq;
 			stq->prev = tmp->prev;
 		}
-		if (*q == tmp)
-			*q = stq;
+		if (q->start == tmp)
+			q->start = stq;
+		if (q->size == 0)
+			q->end = stq;
+		q->size++;
 	}
 
 	/* Selectively copy content of new stamp over */
@@ -378,7 +426,7 @@ insert_stamp_queue(struct stamp_queue **q, struct stamp_t *new, int mode)
 		BST(stamp)->Tf = BST(new)->Tf;
 	}
 
-	stq = *q;
+	stq = q->start;
 	while (stq != NULL) {
 		stamp = &stq->stamp;
 		verbose(VERB_DEBUG, "  stamp queue: %llu %.6Lf %.6Lf %llu %llu",
@@ -449,7 +497,7 @@ bad_packet_server(struct ip *ip, struct ntp_pkt *ntp, char *src_ipaddr,
  * for insertion in the peer's stamp queue.
  */
 int
-push_stamp_client(struct stamp_queue **q, struct ntp_pkt *ntp, vcounter_t *vcount)
+push_stamp_client(struct stamp_queue *q, struct ntp_pkt *ntp, vcounter_t *vcount)
 {
 	struct stamp_t stamp;
 
@@ -472,7 +520,7 @@ push_stamp_client(struct stamp_queue **q, struct ntp_pkt *ntp, vcounter_t *vcoun
  * for insertion in the peer's stamp queue.
  */
 int
-push_stamp_server(struct stamp_queue **q, struct ip *ip, struct ntp_pkt *ntp,
+push_stamp_server(struct stamp_queue *q, struct ip *ip, struct ntp_pkt *ntp,
 	vcounter_t *vcount)
 {
 	struct stamp_t stamp;
@@ -506,7 +554,7 @@ push_stamp_server(struct stamp_queue **q, struct ip *ip, struct ntp_pkt *ntp,
  * checks and insertion/matching in the peer's stamp queue.
  */
 int
-update_stamp_queue(struct stamp_queue **q, radpcap_packet_t *packet,
+update_stamp_queue(struct stamp_queue *q, radpcap_packet_t *packet,
 		struct timeref_stats *stats, char *src_ipaddr)
 {
 	struct ip *ip;
@@ -565,7 +613,7 @@ update_stamp_queue(struct stamp_queue **q, radpcap_packet_t *packet,
 		break;
 
 	case MODE_CLIENT:
-		err = bad_packet_client(ip, ntp,src_ipaddr, stats);
+		err = bad_packet_client(ip, ntp, src_ipaddr, stats);
 		if (err)
 			break;
 		err = push_stamp_client(q, ntp, &vcount);
@@ -598,33 +646,24 @@ update_stamp_queue(struct stamp_queue **q, radpcap_packet_t *packet,
  * returned. Any half-baked stamped earlier than first full stamp is destroyed.
  */
 int
-get_stamp_from_queue(struct stamp_queue **q, struct stamp_t *stamp)
+get_stamp_from_queue(struct stamp_queue *q, struct stamp_t *stamp)
 {
-	struct stamp_queue *stq;
-	struct stamp_queue *endq;
+	struct stq_elt *endq;
+	struct stq_elt *stq;
 	struct stamp_t *st;
 	int found;
-	int qsize, fsize;
+	int qsize;
 
 	JDEBUG
 
 	/* Empty queue, won't find anything here */
-	if (*q == NULL) {
+	if (q->size == 0) {
 		verbose (VERB_DEBUG, "stamp queue is empty, no stamp returned");
 		return (1);
 	}
 
-	/* Ok, it is a bit ugly, but the queue should never be very long */
-	qsize = 1;
-	fsize = 0;
-	endq = *q;
-	while (endq->next != NULL) {
-		endq = endq->next;
-		qsize++;
-	}
-
 	found = 0;
-	stq = endq;
+	stq = q->end;
 	while (stq != NULL) {
 		st = &stq->stamp;
 		if ((BST(st)->Ta != 0) && (BST(st)->Tf != 0)) {
@@ -635,30 +674,36 @@ get_stamp_from_queue(struct stamp_queue **q, struct stamp_t *stamp)
 		stq = stq->prev;
 	}
 
-	if (!found)
+	if (!found) {
+		verbose(VERB_DEBUG, "Did not find any full stamp in stamp queue");
 		return (1);
+	}
 
-	if (stq == *q)
-		*q = NULL;
+	if (stq == q->start)
+		q->start = NULL;
 
+	qsize = q->size;
+	endq = q->end;
 	while ((endq->prev != NULL) && (endq != stq)) {
 		endq = endq->prev;
 		free(endq->next);
-		fsize++;
+		q->size--;
 	}
 
 	if (stq->prev != NULL)
-		stq->prev->next = NULL;
+		endq = stq->prev;
+	else
+		endq = NULL;
 
 	free(stq);
-	fsize++;
+	q->size--;
+	q->end = endq;
 
 	verbose(VERB_DEBUG, "Stamp queue had %d stamps, freed %d, %d left",
-		qsize, fsize, qsize - fsize);
+		qsize, qsize - q->size, q->size);
 
 	return (0);
 }
-
 
 
 /*
@@ -723,7 +768,7 @@ get_network_stamp(struct radclock *clock, void *userdata,
 		stats->ref_count++;
 
 		/* Convert packet to stamp and push it to the stamp queue */
-		err = update_stamp_queue(&peer->q, packet, stats, src_ipaddr);
+		err = update_stamp_queue(peer->q, packet, stats, src_ipaddr);
 
 		/* Low level / input problem worth stopping */
 		if (err == -1)
@@ -749,7 +794,7 @@ get_network_stamp(struct radclock *clock, void *userdata,
 	}
 	/* Make sure we don't leak memory */
 	destroy_radpcap_packet(packet);
-	
+
 	/* Error, something wrong worth killing everything */
 	if (err == -1)
 		return (-1);
@@ -759,7 +804,7 @@ get_network_stamp(struct radclock *clock, void *userdata,
 		return (1);
 
 	/* At least one stamp in the queue, go and get it. Should not fail but... */
-	err = get_stamp_from_queue(&peer->q, stamp);
+	err = get_stamp_from_queue(peer->q, stamp);
 	if (err)
 		return (1);
 

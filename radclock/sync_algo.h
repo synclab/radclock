@@ -333,6 +333,7 @@ struct bidir_peer
 
 int process_bidir_stamp(struct radclock *clock_handle, struct bidir_peer *peer, struct bidir_stamp *input_stamp, int qual_warning);
 
+void init_peer_stamp_queue(struct bidir_peer *peer);
 
 
 #endif

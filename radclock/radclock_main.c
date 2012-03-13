@@ -950,17 +950,18 @@ int main(int argc, char *argv[])
 	{
 		struct bidir_peer peer;
 		/* Some basic initialisation which is required */
-		peer.q = NULL;
+		init_peer_stamp_queue(&peer); 
 		peer.stamp_i = 0;
 		// TODO XXX Need to manage peers better !!
 		/* Register active peer */
 		clock_handle->active_peer = (void *)&peer;
-		while (1)
-		{
+		while (1) {
 			err = process_rawdata(clock_handle, &peer);
 			if (err < 0)
 				break;
 		}
+
+		destroy_peer_stamp_queue(&peer);
 	}
 	else
 	{
