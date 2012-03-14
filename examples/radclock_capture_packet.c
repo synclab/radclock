@@ -168,6 +168,8 @@ int main (int argc, char *argv[])
     }
 	radclock_init(clock_handle);
 
+	radclock_register_pcap(clock_handle, pcap_handle);
+
 
     /* Set the capture mode
 	 * 2 timestamps are always returned for each packet, a tivemal and a RAW
