@@ -3,10 +3,10 @@
  sys/net/bpf.h |   38 +++++++++++++++++++---
  2 files changed, 103 insertions(+), 35 deletions(-)
 
-Index: src/sys/net/bpf.c
+Index: 9.0.0/sys/net/bpf.c
 ===================================================================
---- src.orig/sys/net/bpf.c	2012-02-29 18:10:21.000000000 +1100
-+++ src/sys/net/bpf.c	2012-02-29 18:13:21.000000000 +1100
+--- 9.0.0.orig/sys/net/bpf.c	2012-03-15 02:47:39.000000000 +1100
++++ 9.0.0/sys/net/bpf.c	2012-03-15 02:47:40.000000000 +1100
 @@ -37,20 +37,21 @@
   * SUCH DAMAGE.
   *
@@ -254,10 +254,10 @@ Index: src/sys/net/bpf.c
  	 */
  #ifndef BURN_BRIDGES
  copy:
-Index: src/sys/net/bpf.h
+Index: 9.0.0/sys/net/bpf.h
 ===================================================================
---- src.orig/sys/net/bpf.h	2012-02-29 18:10:21.000000000 +1100
-+++ src/sys/net/bpf.h	2012-02-29 18:12:13.000000000 +1100
+--- 9.0.0.orig/sys/net/bpf.h	2012-03-15 02:47:39.000000000 +1100
++++ 9.0.0/sys/net/bpf.h	2012-03-15 02:47:40.000000000 +1100
 @@ -162,34 +162,57 @@ enum bpf_direction {
  	BPF_D_IN,	/* See incoming packets */
  	BPF_D_INOUT,	/* See incoming and outgoing packets */

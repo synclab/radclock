@@ -18,11 +18,11 @@ Submitted by:	Julien Ridoux (jridoux at unimelb edu au)
  sys/kern/kern_tc.c |   10 +++++-----
  1 file changed, 5 insertions(+), 5 deletions(-)
 
-Index: src/sys/kern/kern_tc.c
+Index: 9.0.0/sys/kern/kern_tc.c
 ===================================================================
---- src.orig/sys/kern/kern_tc.c	2012-02-29 18:07:33.000000000 +1100
-+++ src/sys/kern/kern_tc.c	2012-02-29 18:09:57.000000000 +1100
-@@ -184,56 +184,56 @@ fbclock_binuptime(struct bintime *bt)
+--- 9.0.0.orig/sys/kern/kern_tc.c	2012-03-15 02:47:32.000000000 +1100
++++ 9.0.0/sys/kern/kern_tc.c	2012-03-15 02:47:33.000000000 +1100
+@@ -190,56 +190,56 @@ fbclock_binuptime(struct bintime *bt)
  		*bt = th->th_offset;
  		bintime_addx(bt, th->th_scale * tc_delta(th));
  	} while (gen == 0 || gen != th->th_generation);

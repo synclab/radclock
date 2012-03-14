@@ -8,10 +8,14 @@ Suggested by:	netchild
 Reviewed by:	netchild
 
 ------------------------------------------------------------------------
-Index: sys/kern/kern_ffclock.c
+---
+ sys/kern/kern_ffclock.c |    2 ++
+ 1 file changed, 2 insertions(+)
+
+Index: 9.0.0/sys/kern/kern_ffclock.c
 ===================================================================
---- a/sys/kern/kern_ffclock.c	(revision 227985)
-+++ b/sys/kern/kern_ffclock.c	(revision 227986)
+--- 9.0.0.orig/sys/kern/kern_ffclock.c	2012-03-15 02:47:31.000000000 +1100
++++ 9.0.0/sys/kern/kern_ffclock.c	2012-03-15 02:47:33.000000000 +1100
 @@ -42,20 +42,22 @@ __FBSDID("$FreeBSD$");
  #include <sys/proc.h>
  #include <sys/sbuf.h>

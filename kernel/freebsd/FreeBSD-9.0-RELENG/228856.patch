@@ -21,10 +21,16 @@ For more information, see http://www.synclab.org/radclock/
 In collaboration with:	Julien Ridoux (jridoux at unimelb edu au)
 
 ------------------------------------------------------------------------
-Index: sys/kern/kern_ntptime.c
+---
+ sys/kern/kern_ntptime.c |    4 -
+ sys/kern/kern_tc.c      |  144 ++++++++++++++++++++++++++++++++++++++++++++++--
+ sys/sys/timeffc.h       |   82 +++++++++++++++++++++++----
+ 3 files changed, 211 insertions(+), 19 deletions(-)
+
+Index: 9.0/sys/kern/kern_ntptime.c
 ===================================================================
---- a/sys/kern/kern_ntptime.c	(revision 228855)
-+++ b/sys/kern/kern_ntptime.c	(revision 228856)
+--- 9.0.orig/sys/kern/kern_ntptime.c	2012-03-15 02:23:40.000000000 +1100
++++ 9.0/sys/kern/kern_ntptime.c	2012-03-15 02:24:05.000000000 +1100
 @@ -141,27 +141,27 @@ typedef int64_t l_fp;
   * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
   */
@@ -55,11 +61,11 @@ Index: sys/kern/kern_ntptime.c
  #ifdef PPS_SYNC
  /*
   * The following variables are used when a pulse-per-second (PPS) signal
-Index: sys/kern/kern_tc.c
+Index: 9.0/sys/kern/kern_tc.c
 ===================================================================
---- a/sys/kern/kern_tc.c	(revision 228855)
-+++ b/sys/kern/kern_tc.c	(revision 228856)
-@@ -21,23 +21,21 @@ __FBSDID("$FreeBSD$");
+--- 9.0.orig/sys/kern/kern_tc.c	2012-03-15 02:24:02.000000000 +1100
++++ 9.0/sys/kern/kern_tc.c	2012-03-15 02:24:05.000000000 +1100
+@@ -21,23 +21,21 @@ __FBSDID("$FreeBSD: releng/9.0/sys/kern/
  
  #include <sys/param.h>
  #include <sys/kernel.h>
@@ -270,10 +276,10 @@ Index: sys/kern/kern_tc.c
  
  	u = tc->tc_frequency / tc->tc_counter_mask;
  	/* XXX: We need some margin here, 10% is a guess */
-Index: sys/sys/timeffc.h
+Index: 9.0/sys/sys/timeffc.h
 ===================================================================
---- a/sys/sys/timeffc.h	(revision 228855)
-+++ b/sys/sys/timeffc.h	(revision 228856)
+--- 9.0.orig/sys/sys/timeffc.h	2012-03-15 02:24:03.000000000 +1100
++++ 9.0/sys/sys/timeffc.h	2012-03-15 02:24:05.000000000 +1100
 @@ -74,33 +74,89 @@ extern int sysclock_active;
   */
  #define	FFCLOCK_SKM_SCALE	1024

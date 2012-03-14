@@ -19,11 +19,11 @@ Submitted by:	Julien Ridoux (jridoux at unimelb edu au)
  sys/kern/kern_tc.c |  102 ++++++-----------------------------------------------
  1 file changed, 12 insertions(+), 90 deletions(-)
 
-Index: src/sys/kern/kern_tc.c
+Index: 9.0.0/sys/kern/kern_tc.c
 ===================================================================
---- src.orig/sys/kern/kern_tc.c	2012-02-29 18:10:03.000000000 +1100
-+++ src/sys/kern/kern_tc.c	2012-02-29 18:10:07.000000000 +1100
-@@ -457,52 +457,20 @@ getmicrotime(struct timeval *tvp)
+--- 9.0.0.orig/sys/kern/kern_tc.c	2012-03-15 02:47:34.000000000 +1100
++++ 9.0.0/sys/kern/kern_tc.c	2012-03-15 02:47:36.000000000 +1100
+@@ -463,52 +463,20 @@ getmicrotime(struct timeval *tvp)
  
  int sysclock_active = SYSCLOCK_FBCK;
  
@@ -76,7 +76,7 @@ Index: src/sys/kern/kern_tc.c
  	struct fftimehands	*next;
  };
  
-@@ -781,60 +749,20 @@ ffclock_change_tc(struct timehands *th)
+@@ -787,60 +755,20 @@ ffclock_change_tc(struct timehands *th)
  
  	/* Do not lock but ignore next update from synchronization daemon. */
  	ffclock_updated--;
@@ -137,7 +137,7 @@ Index: src/sys/kern/kern_tc.c
  	uint8_t gen;
  
  	/*
-@@ -936,98 +864,98 @@ ffclock_read_counter(ffcounter *ffcount)
+@@ -942,98 +870,98 @@ ffclock_read_counter(ffcounter *ffcount)
  		*ffcount = ffth->tick_ffcount;
  	} while (gen == 0 || gen != th->th_generation);
  
@@ -248,7 +248,7 @@ Index: src/sys/kern/kern_tc.c
  tc_init(struct timecounter *tc)
  {
  	u_int u;
-@@ -1255,25 +1183,20 @@ tc_windup(void)
+@@ -1261,25 +1189,20 @@ tc_windup(void)
   	 *
  	 * We happily sacrifice the lowest of the 64 bits of our result
  	 * to the goddess of code clarity.
@@ -274,7 +274,7 @@ Index: src/sys/kern/kern_tc.c
  
  	/* Go live with the new struct timehands. */
  #ifdef FFCLOCK
-@@ -1628,21 +1551,20 @@ inittimecounter(void *dummy)
+@@ -1634,21 +1557,20 @@ inittimecounter(void *dummy)
  	 */
  	if (hz > 1000)
  		tc_tick = (hz + 500) / 1000;

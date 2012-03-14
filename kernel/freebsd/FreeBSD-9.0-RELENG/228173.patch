@@ -21,10 +21,15 @@ introduced when feed-forward clock support is enabled in the kernel:
 Discussed with:	Julien Ridoux (jridoux at unimelb edu au)
 
 ------------------------------------------------------------------------
-Index: sys/kern/kern_ffclock.c
+---
+ sys/kern/kern_ffclock.c |   96 +++++++++++++++++++++++++-----------------------
+ sys/sys/timeffc.h       |    6 +++
+ 2 files changed, 57 insertions(+), 45 deletions(-)
+
+Index: 9.0/sys/kern/kern_ffclock.c
 ===================================================================
---- a/sys/kern/kern_ffclock.c	(revision 228172)
-+++ b/sys/kern/kern_ffclock.c	(revision 228173)
+--- 9.0.orig/sys/kern/kern_ffclock.c	2012-03-15 02:24:02.000000000 +1100
++++ 9.0/sys/kern/kern_ffclock.c	2012-03-15 02:24:03.000000000 +1100
 @@ -141,100 +141,106 @@ ffclock_difftime(ffcounter ffdelta, stru
  			err_rate = ffclock_estimate.errb_rate;
  		} while (update_ffcount != ffclock_estimate.update_ffcount);
@@ -177,10 +182,10 @@ Index: sys/kern/kern_ffclock.c
  
  	ffclock_abstime(NULL, bt, NULL, FFCLOCK_LERP | FFCLOCK_LEAPSEC);
  }
-Index: sys/sys/timeffc.h
+Index: 9.0/sys/sys/timeffc.h
 ===================================================================
---- a/sys/sys/timeffc.h	(revision 228172)
-+++ b/sys/sys/timeffc.h	(revision 228173)
+--- 9.0.orig/sys/sys/timeffc.h	2012-03-15 02:24:02.000000000 +1100
++++ 9.0/sys/sys/timeffc.h	2012-03-15 02:24:03.000000000 +1100
 @@ -48,20 +48,26 @@ struct ffclock_estimate {
  	uint32_t	errb_abs;	/* Bound on absolute clock error [ns]. */
  	uint32_t	errb_rate;	/* Bound on counter rate error [ps/s]. */

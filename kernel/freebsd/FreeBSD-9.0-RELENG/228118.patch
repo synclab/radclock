@@ -18,10 +18,14 @@ Discussed with:	Julien Ridoux (jridoux at unimelb edu au)
 Submitted by:	Julien Ridoux (jridoux at unimelb edu au)
 
 ------------------------------------------------------------------------
-Index: sys/sys/timeffc.h
+---
+ sys/sys/timeffc.h |  126 ++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 126 insertions(+)
+
+Index: 9.0/sys/sys/timeffc.h
 ===================================================================
---- a/sys/sys/timeffc.h	(revision 228117)
-+++ b/sys/sys/timeffc.h	(revision 228118)
+--- 9.0.orig/sys/sys/timeffc.h	2012-03-15 02:24:00.000000000 +1100
++++ 9.0/sys/sys/timeffc.h	2012-03-15 02:24:01.000000000 +1100
 @@ -179,20 +179,146 @@ void fbclock_getnanotime(struct timespec
  void fbclock_getmicrotime(struct timeval *tvp);
  

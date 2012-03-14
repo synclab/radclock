@@ -27,8 +27,8 @@ Submitted by:	Julien Ridoux (jridoux at unimelb edu au)
 
 Index: 9.0/sys/kern/kern_ffclock.c
 ===================================================================
---- 9.0.orig/sys/kern/kern_ffclock.c	2012-02-27 21:33:10.000000000 +1100
-+++ 9.0/sys/kern/kern_ffclock.c	2012-02-27 21:33:28.000000000 +1100
+--- 9.0.orig/sys/kern/kern_ffclock.c	2012-03-15 02:23:52.000000000 +1100
++++ 9.0/sys/kern/kern_ffclock.c	2012-03-15 02:23:53.000000000 +1100
 @@ -24,20 +24,22 @@
   * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
   * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
@@ -277,8 +277,8 @@ Index: 9.0/sys/kern/kern_ffclock.c
 +}
 Index: 9.0/sys/kern/kern_tc.c
 ===================================================================
---- 9.0.orig/sys/kern/kern_tc.c	2012-02-27 21:33:08.000000000 +1100
-+++ 9.0/sys/kern/kern_tc.c	2012-02-27 21:33:28.000000000 +1100
+--- 9.0.orig/sys/kern/kern_tc.c	2012-03-15 02:23:50.000000000 +1100
++++ 9.0/sys/kern/kern_tc.c	2012-03-15 02:23:53.000000000 +1100
 @@ -170,20 +170,158 @@ tc_delta(struct timehands *th)
  	return ((tc->tc_get_timecount(tc) - th->th_offset_count) &
  	    tc->tc_counter_mask);
@@ -752,8 +752,8 @@ Index: 9.0/sys/kern/kern_tc.c
  /* Cpu tick handling -------------------------------------------------*/
 Index: 9.0/sys/sys/timeffc.h
 ===================================================================
---- 9.0.orig/sys/sys/timeffc.h	2012-02-27 21:33:20.000000000 +1100
-+++ 9.0/sys/sys/timeffc.h	2012-02-27 21:33:28.000000000 +1100
+--- 9.0.orig/sys/sys/timeffc.h	2012-03-15 02:23:52.000000000 +1100
++++ 9.0/sys/sys/timeffc.h	2012-03-15 02:23:53.000000000 +1100
 @@ -49,20 +49,27 @@ struct ffclock_estimate {
  	uint32_t	errb_rate;	/* Bound on counter rate error [ps/s]. */
  	uint32_t	status;		/* Clock status. */

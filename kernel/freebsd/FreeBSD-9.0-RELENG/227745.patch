@@ -23,8 +23,8 @@ Submitted by:	Julien Ridoux (jridoux at unimelb edu au)
 
 Index: 9.0/sys/conf/files
 ===================================================================
---- 9.0.orig/sys/conf/files	2012-02-27 15:51:42.000000000 +1100
-+++ 9.0/sys/conf/files	2012-02-27 21:33:10.000000000 +1100
+--- 9.0.orig/sys/conf/files	2012-03-15 02:23:40.000000000 +1100
++++ 9.0/sys/conf/files	2012-03-15 02:23:52.000000000 +1100
 @@ -2303,20 +2303,21 @@ kern/kern_cpu.c			standard
  kern/kern_cpuset.c		standard
  kern/kern_context.c		standard
@@ -50,7 +50,7 @@ Index: 9.0/sys/conf/files
 Index: 9.0/sys/kern/kern_ffclock.c
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ 9.0/sys/kern/kern_ffclock.c	2012-02-27 21:33:10.000000000 +1100
++++ 9.0/sys/kern/kern_ffclock.c	2012-03-15 02:23:52.000000000 +1100
 @@ -0,0 +1,129 @@
 +/*-
 + * Copyright (C) 2011 The University of Melbourne
@@ -183,8 +183,8 @@ Index: 9.0/sys/kern/kern_ffclock.c
 +}
 Index: 9.0/sys/sys/timeffc.h
 ===================================================================
---- 9.0.orig/sys/sys/timeffc.h	2012-02-27 21:33:08.000000000 +1100
-+++ 9.0/sys/sys/timeffc.h	2012-02-27 21:33:10.000000000 +1100
+--- 9.0.orig/sys/sys/timeffc.h	2012-03-15 02:23:50.000000000 +1100
++++ 9.0/sys/sys/timeffc.h	2012-03-15 02:23:52.000000000 +1100
 @@ -98,13 +98,36 @@ void ffclock_read_counter(ffcounter *ffc
  void ffclock_last_tick(ffcounter *ffcount, struct bintime *bt, uint32_t flags);
  

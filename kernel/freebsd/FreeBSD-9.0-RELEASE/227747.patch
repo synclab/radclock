@@ -25,10 +25,10 @@ Submitted by:	Julien Ridoux (jridoux at unimelb edu au)
  sys/sys/timeffc.h       |   36 +++++
  3 files changed, 568 insertions(+), 2 deletions(-)
 
-Index: src/sys/kern/kern_ffclock.c
+Index: 9.0.0/sys/kern/kern_ffclock.c
 ===================================================================
---- src.orig/sys/kern/kern_ffclock.c	2012-02-29 18:07:07.000000000 +1100
-+++ src/sys/kern/kern_ffclock.c	2012-02-29 18:07:07.000000000 +1100
+--- 9.0.0.orig/sys/kern/kern_ffclock.c	2012-03-15 02:47:30.000000000 +1100
++++ 9.0.0/sys/kern/kern_ffclock.c	2012-03-15 02:47:30.000000000 +1100
 @@ -24,20 +24,22 @@
   * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
   * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
@@ -275,11 +275,11 @@ Index: src/sys/kern/kern_ffclock.c
 +	ffclock_difftime(ffdelta, &bt, NULL);
 +	bintime2timeval(&bt, tvp);
 +}
-Index: src/sys/kern/kern_tc.c
+Index: 9.0.0/sys/kern/kern_tc.c
 ===================================================================
---- src.orig/sys/kern/kern_tc.c	2012-02-29 18:07:07.000000000 +1100
-+++ src/sys/kern/kern_tc.c	2012-02-29 18:07:07.000000000 +1100
-@@ -164,20 +164,158 @@ tc_delta(struct timehands *th)
+--- 9.0.0.orig/sys/kern/kern_tc.c	2012-03-15 02:47:29.000000000 +1100
++++ 9.0.0/sys/kern/kern_tc.c	2012-03-15 02:47:30.000000000 +1100
+@@ -170,20 +170,158 @@ tc_delta(struct timehands *th)
  	return ((tc->tc_get_timecount(tc) - th->th_offset_count) &
  	    tc->tc_counter_mask);
  }
@@ -438,7 +438,7 @@ Index: src/sys/kern/kern_tc.c
  		th = timehands;
  		gen = th->th_generation;
  		*bt = th->th_offset;
-@@ -300,36 +438,71 @@ getmicrotime(struct timeval *tvp)
+@@ -306,36 +444,71 @@ getmicrotime(struct timeval *tvp)
  {
  	struct timehands *th;
  	u_int gen;
@@ -510,7 +510,7 @@ Index: src/sys/kern/kern_tc.c
  	struct fftimehands	*next;
  };
  
-@@ -608,20 +781,60 @@ ffclock_change_tc(struct timehands *th)
+@@ -614,20 +787,60 @@ ffclock_change_tc(struct timehands *th)
  
  	/* Do not lock but ignore next update from synchronization daemon. */
  	ffclock_updated--;
@@ -571,7 +571,7 @@ Index: src/sys/kern/kern_tc.c
  	uint8_t gen;
  
  	/*
-@@ -718,20 +931,104 @@ ffclock_read_counter(ffcounter *ffcount)
+@@ -724,20 +937,104 @@ ffclock_read_counter(ffcounter *ffcount)
  	do {
  		th = timehands;
  		gen = th->th_generation;
@@ -676,7 +676,7 @@ Index: src/sys/kern/kern_tc.c
  {
  	u_int u;
  	struct sysctl_oid *tc_root;
-@@ -958,31 +1255,49 @@ tc_windup(void)
+@@ -964,31 +1261,49 @@ tc_windup(void)
   	 *
  	 * We happily sacrifice the lowest of the 64 bits of our result
  	 * to the goddess of code clarity.
@@ -728,7 +728,7 @@ Index: src/sys/kern/kern_tc.c
  	char newname[32];
  	struct timecounter *newtc, *tc;
  	int error;
-@@ -1248,20 +1563,21 @@ inittimecounter(void *dummy)
+@@ -1254,20 +1569,21 @@ inittimecounter(void *dummy)
  	 */
  	if (hz > 1000)
  		tc_tick = (hz + 500) / 1000;
@@ -750,10 +750,10 @@ Index: src/sys/kern/kern_tc.c
  SYSINIT(timecounter, SI_SUB_CLOCKS, SI_ORDER_SECOND, inittimecounter, NULL);
  
  /* Cpu tick handling -------------------------------------------------*/
-Index: src/sys/sys/timeffc.h
+Index: 9.0.0/sys/sys/timeffc.h
 ===================================================================
---- src.orig/sys/sys/timeffc.h	2012-02-29 18:07:07.000000000 +1100
-+++ src/sys/sys/timeffc.h	2012-02-29 18:07:07.000000000 +1100
+--- 9.0.0.orig/sys/sys/timeffc.h	2012-03-15 02:47:30.000000000 +1100
++++ 9.0.0/sys/sys/timeffc.h	2012-03-15 02:47:30.000000000 +1100
 @@ -49,20 +49,27 @@ struct ffclock_estimate {
  	uint32_t	errb_rate;	/* Bound on counter rate error [ps/s]. */
  	uint32_t	status;		/* Clock status. */
