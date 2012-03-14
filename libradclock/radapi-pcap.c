@@ -42,16 +42,16 @@
 
 
 
-int radclock_set_tsmode(struct radclock *handle, pcap_t *p_handle, radclock_tsmode_t mode)
+int
+radclock_set_tsmode(struct radclock *clock, pcap_t *p_handle, radclock_tsmode_t mode)
 {
 	int kmode;
-	if (handle == NULL) {
+	if (clock == NULL) {
 		logger(RADLOG_ERR, "Clock handle is null, can't set mode");
 		return -1;
 	}
 
-	switch (mode)
-	{
+	switch (mode) {
 		case RADCLOCK_TSMODE_SYSCLOCK:
 			kmode = K_RADCLOCK_TSMODE_SYSCLOCK;
 			break;
@@ -62,19 +62,21 @@ int radclock_set_tsmode(struct radclock *handle, pcap_t *p_handle, radclock_tsmo
 			kmode = K_RADCLOCK_TSMODE_FAIRCOMPARE;
 			break;
 		default:
-			return -EINVAL;
+			return (-EINVAL);
 	}
-	if (!pcap_fileno(p_handle))
-	{
-		/* working from non-live capture return silently */
-		return 0;
+
+	/* working from non-live capture return silently */
+	if (!pcap_fileno(p_handle)) {
+		return (0);
 	}
 
 	/* Call to system specific method to set the mode */
-	if (descriptor_set_tsmode(handle, p_handle, kmode) == -1)
-		return -1;
+	if (descriptor_set_tsmode(clock, p_handle, kmode) == -1)
+		return (-1);
 
-	return 0;
+	clock->tsmode = mode;
+
+	return (0);
 }
 
 

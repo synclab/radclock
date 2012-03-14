@@ -261,3 +261,14 @@ raddata_quality(vcounter_t now, vcounter_t last, vcounter_t valid, double phat)
 	return 0;
 }
 
+
+int
+radclock_register_pcap(struct radclock *clock, pcap_t *pcap_handle)
+{
+	if (clock == NULL || pcap_handle == NULL)
+		return (1);
+
+	clock->pcap_handle = pcap_handle;
+	return (0);
+}
+
