@@ -104,6 +104,24 @@ insert_sll_header(radpcap_packet_t *packet)
 	etherlen = 0;
 	
 	switch(packet->type) {
+	
+	/* BSD Loopback interface */
+	// TODO a bit ugly, but good enough for now on
+	case DLT_NULL:
+		switch (*(uint32_t *)packet->payload) { 
+		case AF_INET:
+			ethertype = ETHERTYPE_IP; 
+			break;
+		case AF_INET6:
+			ethertype = ETHERTYPE_IPV6; 
+		default:
+			fprintf(stderr, "Non IP protocol on DLT_NULL\n");
+			return (1);
+		}
+		eh = (struct ether_header *)packet->payload;
+		etherlen = 4;
+		break;
+
 	case DLT_LINUX_SLL:
 		/* Nothing to do here */
 		return (0);
