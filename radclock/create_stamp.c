@@ -287,7 +287,7 @@ get_valid_ntp_payload(radpcap_packet_t *packet, struct ntp_pkt **ntp,
 
 		default:
 			verbose(LOG_ERR, "Unsupported protocol in SLL header %u", proto);
-			break;
+			return(1);
 		}
 		break;
 
@@ -569,6 +569,24 @@ compare_sockaddr_storage(struct sockaddr_storage *first,
 	return (1);
 }
 
+int
+is_loopback_sockaddr_storage(struct sockaddr_storage *ss)
+{
+	struct in_addr *addr;
+	struct in6_addr *addr6;
+
+	if (ss->ss_family == AF_INET) {
+		addr = &((struct sockaddr_in *)ss)->sin_addr;
+		if (addr->s_addr == htonl(INADDR_LOOPBACK))
+			return (1);
+	} else {
+		addr6 = &((struct sockaddr_in6 *)ss)->sin6_addr;
+		if (IN6_IS_ADDR_LOOPBACK(addr6))
+			return (1);
+	}
+
+	return (0);
+}
 
 /*
  * Check the client's request.
@@ -583,9 +601,11 @@ bad_packet_client(struct ntp_pkt *ntp, struct sockaddr_storage *ss_if,
 
 	err = compare_sockaddr_storage(ss_if, ss_dst);
 	if (err == 0) {
-		verbose(LOG_WARNING, "Destination address in client packet. "
-				"Check the capture filter.");
-		return (1);
+		if (!is_loopback_sockaddr_storage(ss_dst)) { 
+			verbose(LOG_WARNING, "Destination address in client packet. "
+					"Check the capture filter.");
+			return (1);
+		}
 	}
 	return (0);
 }
@@ -604,9 +624,11 @@ bad_packet_server(struct ntp_pkt *ntp, struct sockaddr_storage *ss_if,
 
 	err = compare_sockaddr_storage(ss_if, ss_src);
 	if (err == 0) {
-		verbose(LOG_WARNING, "Source address in server packet. "
-				"Check the capture filter.");
-		return (1);
+		if (!is_loopback_sockaddr_storage(ss_src)) { 
+			verbose(LOG_WARNING, "Source address in server packet. "
+					"Check the capture filter.");
+			return (1);
+		}
 	}
 
 	/* If the server is unsynchronised we skip this packet */
