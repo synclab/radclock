@@ -30,21 +30,17 @@
 #define _SYNC_ALGO_H
 
 
-/************************************************************/
-/**************** Reference Timestamp level *****************/ 
-
-/**************** NTP case *****************/ 
 /*   Standard client-server NTP packet exchange.
-                 
-                              Tb     Te            real times:  ta < tb < te < tf
-                              |      |          available TS's: Ta < Tf  [vcount units]
-               Server  ------tb------te--------                 Tb < Te  [sec]
-                            /          \
-                           /            \
-               Client  ---ta-------------tf-----  
-                         |                 |
-                         Ta                Tf
-*/
+ *
+ *                Tb     Te            real times:  ta < tb < te < tf
+ *                 |      |           available TS's: Ta < Tf  [counter units]
+ *  Server  ------tb------te-------                   Tb < Te  [sec]
+ *               /          \
+ *              /            \
+ *  Client  ---ta-------------tf---
+ *             |               |
+ *            Ta               Tf
+ */
 
 
 #include <sys/types.h>
@@ -53,82 +49,76 @@
 #include "sync_history.h"
 
 
-/* 
- * These don't exist in the standard math library 
+/*
+ * These don't exist in the standard math library
  */
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 
 
 #define OUTPUT(clock, x) ((struct bidir_output*)clock->algo_output)->x
-				 
-/* 
+
+/*
  * Internal algo parameters and default values
  */
 
 
-
-/* Machine characteristics (interrupt latency and CPU oscillator stability) */
+/*
+ * Machine characteristics (interrupt latency and CPU oscillator stability)
+ */
 // [sec] natural TSing limitation: `maximum' interrupt latency
-#define TS_LIMIT_EXCEL			0.000015  
-#define TS_LIMIT_GOOD			0.000015  
-#define TS_LIMIT_POOR			0.000015  
+#define TS_LIMIT_EXCEL			0.000015
+#define TS_LIMIT_GOOD			0.000015
+#define TS_LIMIT_POOR			0.000015
 // [sec] maximum timescale of validity of the Simple Skew Model (SKM)
-#define SKM_SCALE_EXCEL			1024.0  
-#define SKM_SCALE_GOOD			1024.0  
-#define SKM_SCALE_POOR			 512.0  
+#define SKM_SCALE_EXCEL			1024.0
+#define SKM_SCALE_GOOD			1024.0
+#define SKM_SCALE_POOR			 512.0
 // bound on rate error regardless of time scale
-#define RATE_ERR_BOUND_EXCEL	0.0000001   
-#define RATE_ERR_BOUND_GOOD		0.0000005   
-#define RATE_ERR_BOUND_POOR		0.000001   
+#define RATE_ERR_BOUND_EXCEL	0.0000001
+#define RATE_ERR_BOUND_GOOD		0.0000005
+#define RATE_ERR_BOUND_POOR		0.000001
 // limit of meaningful accuracy of SKM rate
-#define BEST_SKM_RATE_EXCEL		0.00000005  
-#define BEST_SKM_RATE_GOOD		0.0000002  
-#define BEST_SKM_RATE_POOR		0.000001  
-// Ratio defining offset based on TSLIMIT 
-#define OFFSET_RATIO_EXCEL		6  
+#define BEST_SKM_RATE_EXCEL		0.00000005
+#define BEST_SKM_RATE_GOOD		0.0000002
+#define BEST_SKM_RATE_POOR		0.000001
+// Ratio defining offset based on TSLIMIT
+#define OFFSET_RATIO_EXCEL		6
 #define OFFSET_RATIO_GOOD		6
 #define OFFSET_RATIO_POOR		6
-// plocal quality 
-#define PLOCAL_QUALITY_EXCEL	0.0000008 
-#define PLOCAL_QUALITY_GOOD		0.0000008 
-#define PLOCAL_QUALITY_POOR		0.0000008 
+// plocal quality
+#define PLOCAL_QUALITY_EXCEL	0.0000008
+#define PLOCAL_QUALITY_GOOD		0.0000008
+#define PLOCAL_QUALITY_POOR		0.0000008
 
 
 /*
  * Data structure storing physical parameters
  */
 struct radclock_phyparam {
-		double TSLIMIT;
-		double SKM_SCALE;
-		double RateErrBOUND;
-		double BestSKMrate;
-		int offset_ratio; 
-		double plocal_quality;
+	double TSLIMIT;
+	double SKM_SCALE;
+	double RateErrBOUND;
+	double BestSKMrate;
+	int offset_ratio;
+	double plocal_quality;
 };
 
 
-
-
-
-
-/* 
+/*
  * Dealing with communication between algo and main
  * - plocal
  */
-#define PLOCAL_STOP 		0		// this means stop now, but if already off, 'carry on'
-#define PLOCAL_START 		1		// this means start now, but if on already, 'carry on'
-#define PLOCAL_RESTART 		2		// this means restart Now
-
-
-
+#define PLOCAL_STOP		0	// this means stop now, but if already off, 'carry on'
+#define PLOCAL_START	1	// this means start now, but if on already, 'carry on'
+#define PLOCAL_RESTART	2	// this means restart Now
 
 
 /*
  * Stamps structures, could be uni- or bi- directional. The generic stamp
  * structure also holds side info regarding network or the like.
  */
-typedef enum { 
+typedef enum {
 	STAMP_UNKNOWN,
 	STAMP_SPY,
 	STAMP_NTP,		/* Handed by libpcap */
@@ -143,10 +133,10 @@ struct unidir_stamp {
 
 
 struct bidir_stamp {
-	vcounter_t  Ta;     // vcount timestamp [counter value] of pkt leaving client
-	long double Tb;     // timestamp [sec] of arrival at server
-	long double Te;     // timestamp [sec] of departure from server
-	vcounter_t  Tf;     // vcount timestamp [counter value] of pkt returning to client
+	vcounter_t	Ta;		// vcount timestamp [counter value] of pkt leaving client
+	long double	Tb;		// timestamp [sec] of arrival at server
+	long double	Te;		// timestamp [sec] of departure from server
+	vcounter_t	Tf;		// vcount timestamp [counter value] of pkt returning to client
 };
 
 
@@ -155,7 +145,7 @@ struct stamp_t {
 	stamp_type_t type;
 	int qual_warning;	/* warning: route or server changes, server problem */
 	uint64_t id;
-	char server_ipaddr[16];
+	char server_ipaddr[INET6_ADDRSTRLEN];
 	int ttl;
 	int stratum;
 	int leapsec;
@@ -172,8 +162,7 @@ struct stamp_t {
 #define BST(x) (&((x)->st.bstamp))
 
 
-struct bidir_output 
-{
+struct bidir_output {
 	/* Long term tracking variables */
 	int leapsectotal;
 	long int n_stamps;
@@ -203,8 +192,7 @@ struct bidir_output
 /* TODO this may not be too generic, but need it for cleanliness before
  * reworking the bidir_peer structure
  */
-struct peer_error
-{
+struct peer_error {
 	double Ebound_min_last;
 	long nerror;
 	double cumsum;
@@ -218,8 +206,7 @@ struct peer_error
 // TODO
 // Should have a generic peer structure with data common to all and union for
 // specific params
-struct bidir_peer
-{
+struct bidir_peer {
 	/* Main index
 	 * unique stamp index (C notation [ 0 1 2 ...])
 	 * 136 yrs @ 1 stamp/[sec] if 32bit
@@ -331,9 +318,10 @@ struct bidir_peer
  * Functions declarations
  */
 
-int process_bidir_stamp(struct radclock *clock_handle, struct bidir_peer *peer, struct bidir_stamp *input_stamp, int qual_warning);
+int process_bidir_stamp(struct radclock *clock_handle, struct bidir_peer *peer,
+		struct bidir_stamp *input_stamp, int qual_warning);
 
 void init_peer_stamp_queue(struct bidir_peer *peer);
-
+void destroy_peer_stamp_queue(struct bidir_peer *peer);
 
 #endif

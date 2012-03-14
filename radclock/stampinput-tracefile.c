@@ -19,11 +19,10 @@
  * 02110-1301, USA.
  */
 
+#include <arpa/inet.h>
+#include <sys/socket.h> 
+#include <netinet/in.h> 
 
-/**
- * A stamp source for reading from live input
- * Also has the ability to create output
- */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -46,8 +45,8 @@
 
 struct tracefile_data {
 	pcap_t *trace_input;	/* Input trace */
-	char src_ipaddr[16];	/* Host source address for get_bidir_stamp() */
-	u_int32_t data_link;	/* Link layer type (stored in dump file) */
+	uint32_t data_link;	/* Link layer type (stored in dump file) */
+	struct sockaddr_storage ss_if;
 };
 
 
@@ -75,7 +74,7 @@ get_packet_tracefile(struct radclock *handle, void *userdata,
 	packet->payload = packet->buffer + sizeof(struct pcap_pkthdr);
 	ret = pcap_next_ex(data->trace_input,
 		(struct pcap_pkthdr**) (&(packet->header)),
-		(const u_char*) (&(packet->payload)));
+		(const u_char **) (&(packet->payload)));
 
 	switch (ret) {
 	case -2:
@@ -101,6 +100,9 @@ get_packet_tracefile(struct radclock *handle, void *userdata,
 	packet->size = ((struct pcap_pkthdr*)packet->header)->caplen
 					+ sizeof(struct pcap_pkthdr);
 	packet->type = data->data_link;
+
+	/* Store interface address in packet */
+	packet->ss_if = data->ss_if;
 	
 	*packet_p = packet;
 	return (0);
@@ -110,6 +112,8 @@ get_packet_tracefile(struct radclock *handle, void *userdata,
 static int
 tracefilestamp_init(struct radclock *handle, struct stampsource *source)
 {
+	struct sockaddr_in *sin;
+	struct radclock_config *conf;
 	char errbuf[PCAP_ERRBUF_SIZE];  // size of error message set in pcap.h
 
 	/* Allocate memory for the private data concerning the trace file */
@@ -124,10 +128,16 @@ tracefilestamp_init(struct radclock *handle, struct stampsource *source)
 	 * currently replaying a trace file (from any host) so this address
 	 * should never match, let's give something silly.
 	 */
-	strcpy(TRACEFILE_DATA(source)->src_ipaddr, "255.255.255.255");
+	// TODO this code is not protocol independent
+	// TODO use getaddrinfo instead?
+	TRACEFILE_DATA(source)->ss_if.ss_family = AF_INET;
+	sin = (struct sockaddr_in *)&TRACEFILE_DATA(source)->ss_if;
+	inet_pton(AF_INET, "255.255.255.255", &sin->sin_addr);
 
 	/* Open the trace file with libpcap */
-	TRACEFILE_DATA(source)->trace_input = pcap_open_offline(handle->conf->sync_in_pcap, errbuf);
+	conf = handle->conf;
+	TRACEFILE_DATA(source)->trace_input = pcap_open_offline(conf->sync_in_pcap,
+			errbuf);
 	if (!TRACEFILE_DATA(source)->trace_input) {
 		verbose(LOG_ERR, "Open failed on raw pcap file, pcap says: %s", errbuf);
 		JDEBUG_MEMORY(JDBG_FREE, TRACEFILE_DATA(source));
@@ -148,36 +158,24 @@ tracefilestamp_init(struct radclock *handle, struct stampsource *source)
 		return (-1);
 	}
 
-	return 0;
+	return (0);
 }
 
 
 static int
-tracefilestamp_get_next(struct radclock *handle, struct stampsource *source,
+tracefilestamp_get_next(struct radclock *clock, struct stampsource *source,
 	struct stamp_t *stamp)
 {
 	int err;
 
+	/* Ensure default stamp quality before filling timestamps */
 	stamp->type = STAMP_NTP;
 	stamp->qual_warning = 0;
 
-	// Call for get_bidir_stamp to read through a BPF device
-	err = get_network_stamp(
-			handle,
-			(void *)TRACEFILE_DATA(source),
-			get_packet_tracefile,
-			stamp,
-			&source->ntp_stats,
-			TRACEFILE_DATA(source)->src_ipaddr);
+	err = get_network_stamp(clock, (void *)TRACEFILE_DATA(source),
+			get_packet_tracefile, stamp, &source->ntp_stats);
 	
 	return (err);
-/*
-	if (err < 0) {
-		verbose(LOG_NOTICE, "Got EOF on read of bpf device.");
-		return (-1);
-	}
-	return 0;
-*/
 }
 
 

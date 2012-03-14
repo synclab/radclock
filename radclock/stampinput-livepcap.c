@@ -24,26 +24,29 @@
  * A stamp source for reading from live input
  * Also has the ability to create output
  */
+
+#include <sys/types.h>
+#include <sys/socket.h>
+
+#include <arpa/inet.h>
+#include <net/ethernet.h>
+#include <net/if_arp.h>
+#include <netinet/in.h>
+
+#include <assert.h>
+#include <netdb.h>
+#include <pcap.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <syslog.h>
-#include <assert.h>
 #include <unistd.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <net/ethernet.h>
-#include <net/if_arp.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <netdb.h>
-#include <pcap.h>
 
 #include "../config.h"
 #ifdef HAVE_IFADDRS_H
 # include <ifaddrs.h>
 #else
-# error Need ifaddrs.h or to go back to using the ioctl
+# error Need ifaddrs.h or go back to using the ioctl
 #endif
 
 #include "sync_algo.h"
@@ -71,7 +74,7 @@ struct livepcap_data
 {
 	pcap_t *live_input;
 	pcap_dumper_t *trace_output;
-	char src_ipaddr[16];
+	struct sockaddr_storage ss_if;
 };
 
 #define LIVEPCAP_DATA(x) ((struct livepcap_data *)(x->priv_data))
@@ -253,6 +256,9 @@ get_packet_livepcap(struct radclock *handle, void *userdata,
 	assert(get_vcount(packet, &vcount_debug) == 0);
 	assert(vcount == vcount_debug);
 
+	/* Store interface address in packet */
+	packet->ss_if = data->ss_if;
+
 	/* Write out raw data if -w option active in main program */
 	if (traceoutput) {
 		pcap_dump((u_char *)traceoutput, (struct pcap_pkthdr *)packet->header,
@@ -280,13 +286,16 @@ get_interface(char* if_name, char* ip_addr)
 	struct ifaddrs *devs;
 	struct ifaddrs *dev;
 	struct sockaddr_in *addr;
+	int found;
 
-	int found = 0;
+	JDEBUG
+
+	found = 0;
 	addr = NULL;
 	
 	if (getifaddrs(&devs)) {
 		perror("Failed to get interfaces");
-		return 0;
+		return (0);
 	}
 
 	/* 3 cases here.
@@ -297,7 +306,7 @@ get_interface(char* if_name, char* ip_addr)
 	 */
 	
 	/* An interface was specified */
-	if ( (!found) && (strlen(if_name) > 0) ) {
+	if ((!found) && (strlen(if_name) > 0)) {
 		dev = devs;
 		while(dev) {
 			// Look at internet interfaces only
@@ -305,6 +314,8 @@ get_interface(char* if_name, char* ip_addr)
 				addr = (struct sockaddr_in *)dev->ifa_addr;
 				if (strcmp(dev->ifa_name,if_name) == 0) {
 					found = 1;
+					// TODO this is not protocol independent
+					// TODO use getaddrinfo instead
 					strcpy(ip_addr, inet_ntoa(addr->sin_addr));
 					break;
 				}
@@ -312,13 +323,15 @@ get_interface(char* if_name, char* ip_addr)
 			dev= dev->ifa_next;
 		}
 		if (found)
-			verbose(LOG_NOTICE, "Found IP address %s based on interface %s", ip_addr, if_name);
+			verbose(LOG_NOTICE, "Found IP address %s based on interface %s",
+					ip_addr, if_name);
 		else
-			verbose(LOG_NOTICE, "Did not find any IP address based on interface %s", if_name);
+			verbose(LOG_NOTICE, "Did not find any IP address based on interface %s",
+					if_name);
 	}
 
 	/* An address was found, specified or not, we check it */
-	if ( (!found)  && (strlen(ip_addr) > 0) ) {
+	if ((!found) && (strlen(ip_addr) > 0)) {
 		dev = devs;
 		while(dev) {
 			// Look at internet interfaces only
@@ -334,13 +347,15 @@ get_interface(char* if_name, char* ip_addr)
 			dev= dev->ifa_next;
 		}
 		if (!if_name)
-			verbose(LOG_WARNING, "Found an IP address earlier but no interface matches ... weird");
+			verbose(LOG_WARNING, "Found an IP address earlier but no interface "
+					"matches ... weird");
 		else
-			verbose(LOG_NOTICE, "Matched IP address %s to interface %s", ip_addr, if_name);
+			verbose(LOG_NOTICE, "Matched IP address %s to interface %s",
+					ip_addr, if_name);
 	}
 
 	/* Look for the first configured interface */
-	if ( !found ) {
+	if (!found) {
 		dev = devs;
 		while(dev) {
 			// Look at internet interfaces only
@@ -364,9 +379,9 @@ get_interface(char* if_name, char* ip_addr)
 	freeifaddrs(devs);
 	if (!found) {
 		verbose(LOG_ERR, "Did not find any suitable interface");
-		return 0;
+		return (0);
 	}
-	return 1;
+	return (1);
 }
 
 
@@ -477,79 +492,93 @@ int build_BPFfilter(struct radclock *handle, char *fltstr, int maxsize, char *ho
 
 
 /* Open a live device with a BPF filter */
-static pcap_t* open_live(struct radclock *handle, char *src_ipaddr) 
+static pcap_t *
+open_live(struct radclock *clock, struct livepcap_data *ldata)
 {
 	pcap_t* p_handle = NULL;
-	struct bpf_program filter;       
+	struct bpf_program filter;
 	char fltstr[MAXLINE];               // bpf filter string
 	int strsize = 0;
 	int promiscuous = 0;
 	int bpf_timeout = 5;		// waiting time on BPF before exporting packets (in [ms])
+	struct radclock_config *conf;
 	char errbuf[PCAP_ERRBUF_SIZE];
 	char addr_name[16] = "";
 	char addr_if[16] = "";
 	int err = 0;
 
+	conf = clock->conf;
+
 	/* Retrieve required IP addresses
 	 * - useful to identify right interface to open
 	 * - set a valid BPF filter to get rid of packets we don't want
 	 */
-	err = get_address_by_name(addr_name, handle->conf->hostname);
+	err = get_address_by_name(addr_name, conf->hostname);
 //	if (err)  { return NULL; }
 	
 	/* If we have a host, means we supposely know who we are */
-	if ( strlen(handle->conf->hostname) > 0 )
+	if (strlen(conf->hostname) > 0)
 		strcpy(addr_if, addr_name);
 
 	/* In case we have an interface from the config file */
-	if ( !get_interface(handle->conf->network_device, addr_if) ) {
+	if (!get_interface(conf->network_device, addr_if)) {
 		verbose(LOG_ERR, "Failed to find free device, pcap says: %s",
 				pcap_geterr(p_handle));
 		return NULL;
 	}
 
-	/* Ok, so now we may have two different IP addresses due to the 
-	 * name and interface resolution. We need to match packets on 
-	 * the open interface, so in any cases, favour the address from 
-	 * the interface to build the BPF filter 
-	 */
-	verbose(LOG_NOTICE, "Using host name %s and address %s", handle->conf->hostname, addr_if);
-	verbose(LOG_NOTICE, "Opening device %s", handle->conf->network_device);
+	// TODO this code is not protocol independent
+	// TODO use getaddrinfo instead
+	ldata->ss_if.ss_family = AF_INET;
+	inet_pton(AF_INET, addr_if, &((struct sockaddr_in *)&ldata->ss_if)->sin_addr);
 
+	/*
+	 * Ok, so now we may have two different IP addresses due to the name and
+	 * interface resolution. We need to match packets on the open interface, so
+	 * in any cases, favour the address from the interface to build the BPF
+	 * filter.
+	 */
+	verbose(LOG_NOTICE, "Using host name %s and address %s", conf->hostname,
+			addr_if);
+	verbose(LOG_NOTICE, "Opening device %s", conf->network_device);
 
 	/* Build the BPF filter string
 	 */
 	strcpy(fltstr, "");
-	strsize = build_BPFfilter(handle, fltstr, MAXLINE, addr_if, handle->conf->time_server);  
-	if ( (strsize < 0) || (strsize > MAXLINE-2) ) {     
+	strsize = build_BPFfilter(clock, fltstr, MAXLINE, addr_if,
+			conf->time_server);
+	if ((strsize < 0) || (strsize > MAXLINE-2)) {
 		verbose(LOG_ERR, "BPF filter string error (too long?)");
-		return NULL;
+		return (NULL);
 	}
 	verbose(LOG_NOTICE, "Packet filter: %s", fltstr);
 
-
-	/* We got the parameters, open the live device
-	 * Set the timeout to 2ms before waking up the userland process, no IMMEDIATE mode!
+	/*
+	 * We got the parameters, open the live device Set the timeout to 2ms before
+	 * waking up the userland process, no IMMEDIATE mode!
 	 */
-	if ((p_handle = pcap_open_live(handle->conf->network_device, BPF_PACKET_SIZE, promiscuous, bpf_timeout, errbuf)) == NULL) {
+	if ((p_handle = pcap_open_live(conf->network_device, BPF_PACKET_SIZE,
+			promiscuous, bpf_timeout, errbuf)) == NULL) {
 		verbose(LOG_ERR, "Open failed on live interface, pcap says:  %s",
-					errbuf);
-		return NULL;
-	} 
+				errbuf);
+		return (NULL);
+	}
 	else
 		verbose(LOG_NOTICE, "Reading from live interface %s, linktype: %s",
-				handle->conf->network_device, 
+				conf->network_device,
 				pcap_datalink_val_to_name(pcap_datalink(p_handle)));
 
 
 	// Compile and set up the BPF filter
 	// no need to test broadcast addresses
-	if (pcap_compile(p_handle, &filter, fltstr, 0, 0) == -1) {   
-		verbose(LOG_ERR, "pcap filter compiling failure, pcap says: %s",pcap_geterr(p_handle));
+	if (pcap_compile(p_handle, &filter, fltstr, 0, 0) == -1) {
+		verbose(LOG_ERR, "pcap filter compiling failure, pcap says: %s",
+				pcap_geterr(p_handle));
 		goto pcap_err;
 	}
 	if (pcap_setfilter(p_handle,&filter) == -1 )  {
-		verbose(LOG_ERR, "pcap filter setting failure, pcap says: %s",pcap_geterr(p_handle));
+		verbose(LOG_ERR, "pcap filter setting failure, pcap says: %s",
+				pcap_geterr(p_handle));
 		goto pcap_err;
 	}
 
@@ -562,7 +591,7 @@ pcap_err:
 
 
 static int
-livepcapstamp_init(struct radclock *handle, struct stampsource *source)
+livepcapstamp_init(struct radclock *clock, struct stampsource *source)
 {
 	/* Create the handle to be sure to dump the packet in the right format while
 	 * being able to support any link layer type thanks to the LINUX_SLL
@@ -570,6 +599,9 @@ livepcapstamp_init(struct radclock *handle, struct stampsource *source)
 	 */
 	radclock_tsmode_t capture_mode;
 	pcap_t *p_handle_traceout;
+	struct radclock_config *conf;
+
+	conf = clock->conf;
 
 	/* Open the handle early to assure we have permissions to access it.
 	 * We do not close this, even though for libpcap 1.1.1 it is never used
@@ -582,7 +614,7 @@ livepcapstamp_init(struct radclock *handle, struct stampsource *source)
 		verbose(LOG_ERR, "Error creating pcap handle");
 		JDEBUG_MEMORY(JDBG_FREE, LIVEPCAP_DATA(source));
 		free(LIVEPCAP_DATA(source));
-		return -1;
+		return (-1);
 	}
 
 	source->priv_data = malloc(sizeof(struct livepcap_data));
@@ -590,98 +622,93 @@ livepcapstamp_init(struct radclock *handle, struct stampsource *source)
 	if (!LIVEPCAP_DATA(source)) {
 		verbose(LOG_ERR, "Error allocating memory");
 		pcap_close(p_handle_traceout);
-		return -1;
+		return (-1);
 	}
-	strcpy(LIVEPCAP_DATA(source)->src_ipaddr,"");
 
-	LIVEPCAP_DATA(source)->live_input = 
-				open_live(handle, LIVEPCAP_DATA(source)->src_ipaddr);
+	LIVEPCAP_DATA(source)->live_input = open_live(clock, LIVEPCAP_DATA(source));
+
 	if (!LIVEPCAP_DATA(source)->live_input) {
 		verbose(LOG_ERR, "Error creating pcap handle");
 		JDEBUG_MEMORY(JDBG_FREE, LIVEPCAP_DATA(source));
 		free(LIVEPCAP_DATA(source));
 		pcap_close(p_handle_traceout);
-		return -1;
+		return (-1);
 	}
-	// TODO that could be written in a more simpler way once we clean the sources 
-	handle->pcap_handle = LIVEPCAP_DATA(source)->live_input;
+	// TODO that could be written in a more simpler way once we clean the sources
+	clock->pcap_handle = LIVEPCAP_DATA(source)->live_input;
 
 	/* Set the timestamping mode of the pcap handle for the radclock
 	 * It should be RADCLOCK_TSMODE_SYSCLOCK !
 	 */
-//	if (radclock_set_tsmode(handle, LIVEPCAP_DATA(source)->live_input, RADCLOCK_TSMODE_RADCLOCK)){
-//	if (radclock_set_tsmode(handle, LIVEPCAP_DATA(source)->live_input, RADCLOCK_TSMODE_FAIRCOMPARE)){
 	// TODO move somewhere else or don't use the library
 	// if bsd-kernel version < 2 then SYSCLOCK
 	// else RADCLOCK
-	//if (radclock_set_tsmode(handle, LIVEPCAP_DATA(source)->live_input, RADCLOCK_TSMODE_SYSCLOCK)){
-	if (radclock_set_tsmode(handle, LIVEPCAP_DATA(source)->live_input, RADCLOCK_TSMODE_RADCLOCK)){
+	if (radclock_set_tsmode(clock, LIVEPCAP_DATA(source)->live_input,
+			RADCLOCK_TSMODE_RADCLOCK)) {
 		verbose(LOG_WARNING, "Could not set RADclock timestamping mode");
 		return (-1);
 	}
 
 	/* Let's check we did things right */
-	radclock_get_tsmode(handle, LIVEPCAP_DATA(source)->live_input, &capture_mode);
+	radclock_get_tsmode(clock, LIVEPCAP_DATA(source)->live_input, &capture_mode);
 	switch(capture_mode) {
-		case RADCLOCK_TSMODE_SYSCLOCK:
-			verbose(LOG_NOTICE, "Capture mode is SYSCLOCK");
-			break;
-		case RADCLOCK_TSMODE_RADCLOCK:
-			verbose(LOG_NOTICE, "Capture mode is RADCLOCK");
-			break;
-		case RADCLOCK_TSMODE_FAIRCOMPARE:
-			verbose(LOG_NOTICE, "Capture mode is FAIRCOMPARE");
-			break;
-		default:
-			verbose(LOG_ERR, "Capture mode UNKNOWN");
-			break;
+	case RADCLOCK_TSMODE_SYSCLOCK:
+		verbose(LOG_NOTICE, "Capture mode is SYSCLOCK");
+		break;
+	case RADCLOCK_TSMODE_RADCLOCK:
+		verbose(LOG_NOTICE, "Capture mode is RADCLOCK");
+		break;
+	case RADCLOCK_TSMODE_FAIRCOMPARE:
+		verbose(LOG_NOTICE, "Capture mode is FAIRCOMPARE");
+		break;
+	default:
+		verbose(LOG_ERR, "Capture mode UNKNOWN");
+		break;
 	}
 
 	/* Test if previous file exists. Rename it if so */
-	if (strlen(handle->conf->sync_out_pcap) > 0) 
-	{
+	if (strlen(conf->sync_out_pcap) > 0) {
 		FILE* out_fd = NULL;
-		if ((out_fd = fopen(handle->conf->sync_out_pcap, "r"))) {
+		if ((out_fd = fopen(conf->sync_out_pcap, "r"))) {
 			fclose(out_fd);
-			char* backup = (char*) malloc(strlen(handle->conf->sync_out_pcap)+5);
+			char * backup = (char *) malloc(strlen(conf->sync_out_pcap) + 5);
 			JDEBUG_MEMORY(JDBG_MALLOC, backup);
-			sprintf(backup, "%s.old", handle->conf->sync_out_pcap);
-			if (rename(handle->conf->sync_out_pcap, backup) < 0) {
-				verbose(LOG_ERR, "Cannot rename existing output file: %s", handle->conf->sync_out_pcap);
+			sprintf(backup, "%s.old", conf->sync_out_pcap);
+			if (rename(conf->sync_out_pcap, backup) < 0) {
+				verbose(LOG_ERR, "Cannot rename existing output file: %s",
+						conf->sync_out_pcap);
 				JDEBUG_MEMORY(JDBG_FREE, backup);
 				free(backup);
 				exit(EXIT_FAILURE);
 			}
-			verbose(LOG_NOTICE, "Backed up existing output file: %s", handle->conf->sync_out_pcap);
+			verbose(LOG_NOTICE, "Backed up existing output file: %s",
+					conf->sync_out_pcap);
 			JDEBUG_MEMORY(JDBG_FREE, backup);
 			free(backup);
 			out_fd = NULL;
 		}
 
 		/* pcap_dump_open stores the link layer type in the dump file header */
-		LIVEPCAP_DATA(source)->trace_output = pcap_dump_open(p_handle_traceout, 
-															handle->conf->sync_out_pcap);
-		if (!LIVEPCAP_DATA(source)->trace_output)
-		{
+		LIVEPCAP_DATA(source)->trace_output = pcap_dump_open(p_handle_traceout,
+				conf->sync_out_pcap);
+		if (!LIVEPCAP_DATA(source)->trace_output) {
 			verbose(LOG_ERR, "Error opening raw output: %s",
-				   pcap_geterr(p_handle_traceout));
+					pcap_geterr(p_handle_traceout));
 			JDEBUG_MEMORY(JDBG_FREE, LIVEPCAP_DATA(source));
 			free(LIVEPCAP_DATA(source));
-			return -1;
+			return (-1);
 		}
-	}
-	else
-	{
+	} else {
 		LIVEPCAP_DATA(source)->trace_output = NULL;
 		pcap_close(p_handle_traceout);
 	}
 
-	return 0;
+	return (0);
 }
 
 
 static int
-livepcapstamp_get_next(struct radclock *handle, struct stampsource *source,
+livepcapstamp_get_next(struct radclock *clock, struct stampsource *source,
 	struct stamp_t *stamp)
 {
 	int err;
@@ -689,24 +716,13 @@ livepcapstamp_get_next(struct radclock *handle, struct stampsource *source,
 	JDEBUG
 
 	/* Ensure default stamp quality before filling timestamps */
-	stamp->qual_warning = 0;
 	stamp->type = STAMP_NTP;
+	stamp->qual_warning = 0;
 
-	/* Call for get_bidir_stamp to read through a BPF device */
-	err = get_network_stamp(
-			handle,
-			(void *)LIVEPCAP_DATA(source),
-			get_packet_livepcap,
-			stamp,
-			&source->ntp_stats,
-			LIVEPCAP_DATA(source)->src_ipaddr);
+	err = get_network_stamp(clock, (void *)LIVEPCAP_DATA(source),
+			get_packet_livepcap, stamp, &source->ntp_stats);
 
 	return (err);
-	/* Used to be EOF or capture break, but now only signals empty buffer */
-//	if (err < 0) {
-//		return err;
-//	}
-//	return 0;
 }
 
 

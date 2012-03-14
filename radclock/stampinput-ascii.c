@@ -19,10 +19,7 @@
  * 02110-1301, USA.
  */
 
-
-/**
- * A stamp source that reads from An ASCII file
- */
+#include <arpa/inet.h>
 
 #include <stdio.h>
 #include <stdlib.h>
