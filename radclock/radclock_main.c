@@ -146,7 +146,6 @@ rehash_daemon(struct radclock *clock_handle, uint32_t param_mask)
 	 * UPDMASK_DELTA_HOST 
 	 * UPDMASK_DELTA_NET 
 	 * UPDMASK_POLLPERIOD 
-	 * UPDMASK_PLOCAL 
 	 * UPDMASK_TEMPQUALITY 
 	 * UPDMASK_VERBOSE
 	 * UPDMASK_ADJUST_SYSCLOCK
@@ -704,7 +703,7 @@ int main(int argc, char *argv[])
 	param_mask = UPDMASK_NOUPD;
 
 	/* Reading the command line arguments */
-	while ((ch = getopt(argc, argv, "dxvhLc:i:l:n:t:r:w:s:a:o:p:P:U:D:V")) != -1)
+	while ((ch = getopt(argc, argv, "dxvhc:i:l:n:t:r:w:s:a:o:p:P:U:D:V")) != -1)
 		switch (ch) {
 		case 'x':
 			SET_UPDATE(param_mask, UPDMASK_SERVER_IPC);
@@ -718,10 +717,6 @@ int main(int argc, char *argv[])
 			break;
 		case 'l':
 			strcpy(clock_handle->conf->logfile, optarg);
-			break;
-		case 'L':
-			SET_UPDATE(param_mask, UPDMASK_PLOCAL);
-			clock_handle->conf->start_plocal = 0;
 			break;
 		case 'n':
 			if (strlen(optarg) > MAXLINE) {

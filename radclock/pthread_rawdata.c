@@ -668,13 +668,6 @@ process_rawdata(struct radclock *clock, struct bidir_peer *peer)
 				error_bound * 1000, error_bound_avg * 1000, error_bound_std * 1000);
 	}
 
-	/* Plocal 
-	 * We don't want to reinit plocal each time we receive a packet, but only 
-	 * on reload of the configuration file. So this does the trick.
-	 */
-	if (clock->conf->start_plocal == PLOCAL_RESTART)
-			clock->conf->start_plocal = PLOCAL_START;
-
 	/* Set initial state of 'signals' - important !! 
 	 * Has to be placed here, after the algo handled the possible new
 	 * parameters, with the next packets coming.

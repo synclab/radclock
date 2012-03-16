@@ -75,7 +75,6 @@
 #define DEFAULT_SERVER_NTP			BOOL_ON			// Default we start a NTP server 
 #define DEFAULT_ADJUST_SYSCLOCK		BOOL_ON			// Default we adjust the system clock 
 #define DEFAULT_NTP_POLL_PERIOD 	16				// 16 NTP pkts every [sec]
-#define DEFAULT_START_PLOCAL		BOOL_ON			// 1 Using plocal algo
 #define DEFAULT_PHAT_INIT			1.e-9
 #define DEFAULT_ASYM_HOST			0.0				// 0 micro-sconds
 #define DEFAULT_ASYM_NET			0.0				// 0 micro-seconds 
@@ -105,7 +104,7 @@
 #define CONFIG_ADJUST_SYSCLOCK	15
 /* Clock parameters */
 #define CONFIG_POLLPERIOD		20
-#define CONFIG_PLOCAL			21
+//#define CONFIG_				21
 #define CONFIG_PHAT_INIT		22
 #define CONFIG_ASYM_HOST		23
 #define CONFIG_ASYM_NET			24
@@ -148,7 +147,7 @@
  */
 #define UPDMASK_NOUPD			0x000000
 #define UPDMASK_POLLPERIOD		0x000001
-#define UPDMASK_PLOCAL			0x000002
+//#define UPDMASK_				0x000002
 #define UPDMASK_TEMPQUALITY		0x000004
 #define UPDMASK_ASYM_HOST		0x000008
 #define UPDMASK_ASYM_NET		0x000010
@@ -190,7 +189,6 @@ struct radclock_config {
 	int 	verbose_level; 				/* debug output level */
 	int 	poll_period; 				/* period of NTP pkt sending [sec] */
 	struct 	radclock_phyparam phyparam; /* Physical and temperature characteristics */ 
-	int 	start_plocal; 				/* logical: 1 = use local rate refinement */
 	int 	synchro_type; 				/* multi-choice depending on client-side protocol */
 	int 	server_ipc; 				/* Boolean */
 	int 	server_ntp;					/* Boolean */

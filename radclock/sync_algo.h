@@ -288,8 +288,7 @@ struct bidir_peer {
 	double plocal;					// local period estimate
 	double plocalerr;				// estimate of total error of plocal [unitless]
 	int plocal_sanity_count;		// plocal sanity count
-	int using_plocal;				// state variable for plocal refinement of algo:  1 = ON, 0 = OFF
-	int plocal_restartscheduled; 	// if plocal reinit required
+	int plocal_problem;				// something wrong with plocal windows
 
 	/* Offset estimation */
 	long double C;		// Uncorrected clock origin alignement constant
