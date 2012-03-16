@@ -787,18 +787,18 @@ void print_stats_peer(struct bidir_peer *peer)
 }
 
 
+
 /* =============================================================================
  * RTT
  * =============================================================================
  */
 
-
-void process_RTT_warmup (struct bidir_peer *peer, vcounter_t RTT)
+void
+process_RTT_warmup(struct bidir_peer *peer, vcounter_t RTT)
 {
 	/* Record the minimum of RTT
 	 * Record corresponding index for full phat processing */
-	if ( RTT < peer->RTThat )
-	{
+	if (RTT < peer->RTThat) {
 		peer->RTThat = RTT;
 		peer->pstamp_i = peer->stamp_i;
 	}
@@ -1093,7 +1093,7 @@ int process_phat_full (struct bidir_peer* peer, struct radclock* clock_handle,
 	DelTb = stamp->Tb - peer->pstamp.Tb;
 	perr_ij = fabs(perr_i) + fabs(peer->pstamp_perr);
 	// TODO: check values, but long and double casts seem unnecessary
-	baseerr = peer->phat * (double)labs((long)(peer->RTThat-peer->pstamp_RTThat));
+	baseerr = peer->phat * (double)labs((long)(peer->RTThat - peer->pstamp_RTThat));
 	perr_ij = (perr_ij + baseerr) / DelTb;
 
 	if ( (perr_ij >= peer->perr) && (perr_ij >= peer->Ep_qual) ) 
