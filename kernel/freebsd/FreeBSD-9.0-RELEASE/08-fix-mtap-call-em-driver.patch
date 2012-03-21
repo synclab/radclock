@@ -1,0 +1,191 @@
+Counter latency.
+
+Research only patch.
+Useful to measure the in-kernel latency of a given counter. Very dirty.
+
+
+---
+ sys/dev/e1000/if_em.c |   36 +++++++++++++++++++++++++++++-------
+ 1 file changed, 29 insertions(+), 7 deletions(-)
+
+Index: head/sys/dev/e1000/if_em.c
+===================================================================
+--- head.orig/sys/dev/e1000/if_em.c	2011-09-22 11:46:35.000000000 +1000
++++ head/sys/dev/e1000/if_em.c	2011-09-22 12:36:11.000000000 +1000
+@@ -244,21 +244,24 @@ static void	em_transmit_checksum_setup(s
+ static void	em_tso_setup(struct tx_ring *, struct mbuf *, int, struct ip *,
+ 		    struct tcphdr *, u32 *, u32 *);
+ static void	em_set_promisc(struct adapter *);
+ static void	em_disable_promisc(struct adapter *);
+ static void	em_set_multi(struct adapter *);
+ static void	em_update_link_status(struct adapter *);
+ static void	em_refresh_mbufs(struct rx_ring *, int);
+ static void	em_register_vlan(void *, struct ifnet *, u16);
+ static void	em_unregister_vlan(void *, struct ifnet *, u16);
+ static void	em_setup_vlan_hw_support(struct adapter *);
+-static int	em_xmit(struct tx_ring *, struct mbuf **);
++
++// jrid
++//static int	em_xmit(struct tx_ring *, struct mbuf **);
++static int	em_xmit(struct tx_ring *, struct mbuf **, struct ifnet *);
+ static int	em_dma_malloc(struct adapter *, bus_size_t,
+ 		    struct em_dma_alloc *, int);
+ static void	em_dma_free(struct adapter *, struct em_dma_alloc *);
+ static int	em_sysctl_nvm_info(SYSCTL_HANDLER_ARGS);
+ static void	em_print_nvm_info(struct adapter *);
+ static int	em_sysctl_debug_info(SYSCTL_HANDLER_ARGS);
+ static void	em_print_debug_info(struct adapter *);
+ static int 	em_is_valid_ether_addr(u8 *);
+ static int	em_sysctl_int_delay(SYSCTL_HANDLER_ARGS);
+ static void	em_add_int_delay_sysctl(struct adapter *, const char *,
+@@ -879,28 +882,31 @@ em_mq_start_locked(struct ifnet *ifp, st
+ 		next = drbr_dequeue(ifp, txr->br);
+ 	} else if (drbr_needs_enqueue(ifp, txr->br)) {
+ 		if ((err = drbr_enqueue(ifp, txr->br, m)) != 0)
+ 			return (err);
+ 		next = drbr_dequeue(ifp, txr->br);
+ 	} else
+ 		next = m;
+ 
+ 	/* Process the queue */
+ 	while (next != NULL) {
+-		if ((err = em_xmit(txr, &next)) != 0) {
++// jrid
++//		if ((err = em_xmit(txr, &next)) != 0) {
++		if ((err = em_xmit(txr, &next, ifp)) != 0) {
+                         if (next != NULL)
+                                 err = drbr_enqueue(ifp, txr->br, next);
+                         break;
+ 		}
+ 		enq++;
+ 		drbr_stats_update(ifp, next->m_pkthdr.len, next->m_flags);
+-		ETHER_BPF_MTAP(ifp, next);
++// jrid
++//		ETHER_BPF_MTAP(ifp, next);
+ 		if ((ifp->if_drv_flags & IFF_DRV_RUNNING) == 0)
+                         break;
+ 		if (txr->tx_avail < EM_MAX_SCATTER) {
+ 			ifp->if_drv_flags |= IFF_DRV_OACTIVE;
+ 			break;
+ 		}
+ 		next = drbr_dequeue(ifp, txr->br);
+ 	}
+ 
+ 	if (enq > 0) {
+@@ -974,30 +980,37 @@ em_start_locked(struct ifnet *ifp, struc
+ 			ifp->if_drv_flags |= IFF_DRV_OACTIVE;
+ 			break;
+ 		}
+                 IFQ_DRV_DEQUEUE(&ifp->if_snd, m_head);
+ 		if (m_head == NULL)
+ 			break;
+ 		/*
+ 		 *  Encapsulation can modify our pointer, and or make it
+ 		 *  NULL on failure.  In that event, we can't requeue.
+ 		 */
+-		if (em_xmit(txr, &m_head)) {
++// jrid
++// To be able to call BPF_MTAP from em_xmit
++//		if (em_xmit(txr, &m_head)) {
++		if (em_xmit(txr, &m_head, ifp)) {
+ 			if (m_head == NULL)
+ 				break;
+ 			ifp->if_drv_flags |= IFF_DRV_OACTIVE;
+ 			IFQ_DRV_PREPEND(&ifp->if_snd, m_head);
+ 			break;
+ 		}
+ 
+ 		/* Send a copy of the frame to the BPF listener */
+-		ETHER_BPF_MTAP(ifp, m_head);
++// jrid
++// This call after em_xmit() does not preserve causality
++// If called before em_xmit() (which can fail) takes the risk to send 2 copies of the
++// same packet. Need to move it into em_xmit()
++//		ETHER_BPF_MTAP(ifp, m_head);
+ 
+ 		/* Set timeout in case hardware has problems transmitting. */
+ 		txr->watchdog_time = ticks;
+                 txr->queue_status = EM_QUEUE_WORKING;
+ 	}
+ 
+ 	return;
+ }
+ 
+ static void
+@@ -1768,22 +1781,25 @@ em_media_change(struct ifnet *ifp)
+ 	return (0);
+ }
+ 
+ /*********************************************************************
+  *
+  *  This routine maps the mbufs to tx descriptors.
+  *
+  *  return 0 on success, positive on failure
+  **********************************************************************/
+ 
++// jrid
++//static int
++//em_xmit(struct tx_ring *txr, struct mbuf **m_headp)
+ static int
+-em_xmit(struct tx_ring *txr, struct mbuf **m_headp)
++em_xmit(struct tx_ring *txr, struct mbuf **m_headp, struct ifnet *ifp)
+ {
+ 	struct adapter		*adapter = txr->adapter;
+ 	bus_dma_segment_t	segs[EM_MAX_SCATTER];
+ 	bus_dmamap_t		map;
+ 	struct em_buffer	*tx_buffer, *tx_buffer_mapped;
+ 	struct e1000_tx_desc	*ctxd = NULL;
+ 	struct mbuf		*m_head;
+ 	struct ether_header	*eh;
+ 	struct ip		*ip = NULL;
+ 	struct tcphdr		*tp = NULL;
+@@ -2063,20 +2079,23 @@ retry:
+ 	    htole32(E1000_TXD_CMD_EOP | E1000_TXD_CMD_RS);
+ 	/*
+ 	 * Keep track in the first buffer which
+ 	 * descriptor will be written back
+ 	 */
+ 	tx_buffer = &txr->tx_buffers[first];
+ 	tx_buffer->next_eop = last;
+ 	/* Update the watchdog time early and often */
+ 	txr->watchdog_time = ticks;
+ 
++// jrid
++// This cannot fail
++		ETHER_BPF_MTAP(ifp, m_head);
+ 	/*
+ 	 * Advance the Transmit Descriptor Tail (TDT), this tells the E1000
+ 	 * that this frame is available to transmit.
+ 	 */
+ 	bus_dmamap_sync(txr->txdma.dma_tag, txr->txdma.dma_map,
+ 	    BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
+ 	E1000_WRITE_REG(&adapter->hw, E1000_TDT(txr->me), i);
+ 
+ 	return (0);
+ }
+@@ -4123,21 +4142,24 @@ em_initialize_receive_unit(struct adapte
+ 	 */
+ 	rctl = E1000_READ_REG(hw, E1000_RCTL);
+ 	E1000_WRITE_REG(hw, E1000_RCTL, rctl & ~E1000_RCTL_EN);
+ 
+ 	E1000_WRITE_REG(&adapter->hw, E1000_RADV,
+ 	    adapter->rx_abs_int_delay.value);
+ 	/*
+ 	 * Set the interrupt throttling rate. Value is calculated
+ 	 * as DEFAULT_ITR = 1/(MAX_INTS_PER_SEC * 256ns)
+ 	 */
+-	E1000_WRITE_REG(hw, E1000_ITR, DEFAULT_ITR);
++// jrid
++// Disable any type of interrupt throttling
++//	E1000_WRITE_REG(hw, E1000_ITR, DEFAULT_ITR);
++	E1000_WRITE_REG(hw, E1000_ITR, 0);
+ 
+ 	/*
+ 	** When using MSIX interrupts we need to throttle
+ 	** using the EITR register (82574 only)
+ 	*/
+ 	if (hw->mac.type == e1000_82574)
+ 		for (int i = 0; i < 4; i++)
+ 			E1000_WRITE_REG(hw, E1000_EITR_82574(i),
+ 			    DEFAULT_ITR);
+ 
