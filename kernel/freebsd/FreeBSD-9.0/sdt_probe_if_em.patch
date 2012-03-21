@@ -1,0 +1,107 @@
+---
+ sys/dev/e1000/if_em.c |   15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
+
+Index: src/sys/dev/e1000/if_em.c
+===================================================================
+--- src.orig/sys/dev/e1000/if_em.c	2012-03-21 11:52:21.000000000 +1100
++++ src/sys/dev/e1000/if_em.c	2012-03-21 10:47:11.000000000 +1100
+@@ -74,20 +74,24 @@
+ #include <netinet/ip.h>
+ #include <netinet/ip6.h>
+ #include <netinet/tcp.h>
+ #include <netinet/udp.h>
+ 
+ #include <machine/in_cksum.h>
+ #include <dev/led/led.h>
+ #include <dev/pci/pcivar.h>
+ #include <dev/pci/pcireg.h>
+ 
++#include "opt_kdtrace.h"
++#include <sys/kernel.h>
++#include <sys/sdt.h>
++
+ #include "e1000_api.h"
+ #include "e1000_82571.h"
+ #include "if_em.h"
+ 
+ /*********************************************************************
+  *  Set this to one to display debug statistics
+  *********************************************************************/
+ int	em_display_debug_stats = 0;
+ 
+ /*********************************************************************
+@@ -98,20 +102,29 @@ char em_driver_version[] = "7.2.3";
+ /*********************************************************************
+  *  PCI Device ID Table
+  *
+  *  Used by probe to select devices to load on
+  *  Last field stores an index into e1000_strings
+  *  Last entry must be all 0s
+  *
+  *  { Vendor ID, Device ID, SubVendor ID, SubDevice ID, String Index }
+  *********************************************************************/
+ 
++SDT_PROVIDER_DEFINE(timestamp);
++
++SDT_PROBE_DEFINE(timestamp, if_em, em_rxeof, stamp, stamp);
++SDT_PROBE_ARGTYPE(timestamp, if_em, em_rxeof, stamp, 0, "const char *");
++
++
++SDT_PROBE_DEFINE(timestamp, if_em, em_xmit, stamp, stamp);
++SDT_PROBE_ARGTYPE(timestamp, if_em, em_xmit, stamp, 0, "const char *");
++
+ static em_vendor_info_t em_vendor_info_array[] =
+ {
+ 	/* Intel(R) PRO/1000 Network Connection */
+ 	{ 0x8086, E1000_DEV_ID_82571EB_COPPER,	PCI_ANY_ID, PCI_ANY_ID, 0},
+ 	{ 0x8086, E1000_DEV_ID_82571EB_FIBER,	PCI_ANY_ID, PCI_ANY_ID, 0},
+ 	{ 0x8086, E1000_DEV_ID_82571EB_SERDES,	PCI_ANY_ID, PCI_ANY_ID, 0},
+ 	{ 0x8086, E1000_DEV_ID_82571EB_SERDES_DUAL,
+ 						PCI_ANY_ID, PCI_ANY_ID, 0},
+ 	{ 0x8086, E1000_DEV_ID_82571EB_SERDES_QUAD,
+ 						PCI_ANY_ID, PCI_ANY_ID, 0},
+@@ -2086,20 +2099,21 @@ retry:
+ 
+ // jrid
+ // This cannot fail
+ 		ETHER_BPF_MTAP(ifp, m_head);
+ 	/*
+ 	 * Advance the Transmit Descriptor Tail (TDT), this tells the E1000
+ 	 * that this frame is available to transmit.
+ 	 */
+ 	bus_dmamap_sync(txr->txdma.dma_tag, txr->txdma.dma_map,
+ 	    BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
++	SDT_PROBE(timestamp, if_em, em_xmit, stamp, m_head, 0, 0, 0, 0);
+ 	E1000_WRITE_REG(&adapter->hw, E1000_TDT(txr->me), i);
+ 
+ 	return (0);
+ }
+ 
+ static void
+ em_set_promisc(struct adapter *adapter)
+ {
+ 	struct ifnet	*ifp = adapter->ifp;
+ 	u32		reg_rctl;
+@@ -4348,20 +4362,21 @@ next_desc:
+ 		cur->status = 0;
+ 		++rxdone;	/* cumulative for POLL */
+ 		++processed;
+ 
+ 		/* Advance our pointers to the next descriptor. */
+ 		if (++i == adapter->num_rx_desc)
+ 			i = 0;
+ 
+ 		/* Send to the stack */
+ 		if (sendmp != NULL) {
++			SDT_PROBE(timestamp, if_em, em_rxeof, stamp, sendmp, 0, 0, 0, 0);
+ 			rxr->next_to_check = i;
+ 			EM_RX_UNLOCK(rxr);
+ 			(*ifp->if_input)(ifp, sendmp);
+ 			EM_RX_LOCK(rxr);
+ 			i = rxr->next_to_check;
+ 		}
+ 
+ 		/* Only refresh mbufs every 8 descriptors */
+ 		if (processed == 8) {
+ 			em_refresh_mbufs(rxr, i);
