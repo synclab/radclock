@@ -14,10 +14,14 @@ For more information, see http://www.synclab.org/radclock/
 Submitted by:	Julien Ridoux (jridoux at unimelb edu au)
 
 ------------------------------------------------------------------------
-Index: sys/kern/kern_tc.c
+---
+ sys/kern/kern_tc.c |   10 +++++-----
+ 1 file changed, 5 insertions(+), 5 deletions(-)
+
+Index: 9.0/sys/kern/kern_tc.c
 ===================================================================
---- a/sys/kern/kern_tc.c	(revision 228114)
-+++ b/sys/kern/kern_tc.c	(revision 228115)
+--- 9.0.orig/sys/kern/kern_tc.c	2012-03-15 02:23:57.000000000 +1100
++++ 9.0/sys/kern/kern_tc.c	2012-03-15 02:23:59.000000000 +1100
 @@ -190,56 +190,56 @@ fbclock_binuptime(struct bintime *bt)
  		*bt = th->th_offset;
  		bintime_addx(bt, th->th_scale * tc_delta(th));

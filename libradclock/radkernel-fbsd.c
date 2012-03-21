@@ -678,6 +678,7 @@ extract_vcount_stamp_v2(pcap_t *p_handle, const struct pcap_pkthdr *header,
 }
 
 
+// TODO could use system include from bpf.h
 struct bpf_hdr_hack_v3 {
 	struct timeval bh_tstamp;	/* time stamp */
 	vcounter_t vcount;			/* raw vcount value for this packet */
@@ -687,35 +688,53 @@ struct bpf_hdr_hack_v3 {
 };
 
 
+//#define DLT_NULL    0   /* BSD loopback encapsulation */
+//#define DLT_EN10MB  1   /* Ethernet (10Mb) */
+
+static int dlt_header_size[] = {
+	[DLT_NULL] = 4,
+	[DLT_EN10MB] = ETHER_HDR_LEN
+};
+
 #define SIZEOF_BPF_HDR_v3(type)	\
 	(offsetof(type, bh_hdrlen) + sizeof(((type *)0)->bh_hdrlen))
 
-#define BPF_HDR_LEN_v3		\
-	(BPF_WORDALIGN(SIZEOF_BPF_HDR_v3(struct bpf_hdr_hack_v3) + ETHER_HDR_LEN) - ETHER_HDR_LEN)
+#define BPF_HDR_LEN_v3(length)		\
+	(BPF_WORDALIGN(SIZEOF_BPF_HDR_v3(struct bpf_hdr_hack_v3) + length) - length)
 
-
+/*
+ * Libpcap not (yet) aware of the changed BPF header. So back to basics, with a
+ * bit of hacking, taking advantage of the fact the BPF header and the packet
+ * captured are in contiguous memory chunks.
+ * Tried to be a bit more generic than before and handle multiple header length
+ * based on their DLT type.
+ */
+// FIXME: this is becoming heavier ... can fasten this up?
 static inline int
 extract_vcount_stamp_v3(pcap_t *p_handle, const struct pcap_pkthdr *header,
 		const unsigned char *packet, vcounter_t *vcount)
 {
 	struct bpf_hdr_hack_v3 *hack;
+	int hlen;
+
+	hlen = dlt_header_size[pcap_datalink(p_handle)];
 
 	/*
 	 * Find the beginning of the hacked header starting from the MAC header.
 	 * Useful for checking we are doing the right thing.
 	 */
-	hack = (struct bpf_hdr_hack_v3 *) (packet - BPF_HDR_LEN_v3);
+	hack = (struct bpf_hdr_hack_v3 *) (packet - BPF_HDR_LEN_v3(hlen));
 
-	/* 
+	/*
 	 * Check we did the right thing by comparing hack and pcap header pointer
 	 * Compare to previous hacks, the pcap packet header and the kernel BPF
 	 * header do not match anymore (actually even the idea of a memcmp of the
 	 * pointers was quite dodgy, since pcap access the members of the structure
 	 * by name.
 	 * */
-	if (hack->bh_hdrlen != BPF_HDR_LEN_v3) {
+	if (hack->bh_hdrlen != BPF_HDR_LEN_v3(hlen)) {
 		logger(RADLOG_ERR, "Feed-forward kernel v3 error: BPF header length mismatch %d vs %d", 
-				hack->bh_hdrlen, BPF_HDR_LEN_v3);
+				hack->bh_hdrlen, BPF_HDR_LEN_v3(hlen));
 		return (-1);
 	}
 	if (memcmp(&hack->bh_tstamp, &header->ts, sizeof(struct timeval)) != 0) {
@@ -747,10 +766,23 @@ extract_vcount_stamp(struct radclock *clock, pcap_t *p_handle,
 		err = extract_vcount_stamp_v1(clock->pcap_handle, header, packet, vcount);
 		break;
 	case 2:
-		err = extract_vcount_stamp_v2(clock->pcap_handle, header, packet, vcount);
+		/* This version supports a single timestamp at a time */
+		if (clock->tsmode == RADCLOCK_TSMODE_RADCLOCK)
+			err = extract_vcount_stamp_v2(clock->pcap_handle, header, packet, vcount);
+		else {
+			*vcount = 0;
+			err = -2;
+		}
 		break;
 	case 3:
-		err = extract_vcount_stamp_v3(clock->pcap_handle, header, packet, vcount);
+		/*
+		 * If we are in radclock mode, take a safe path and cast pcap header
+		 * timestamp. Otherwise, go dirty.
+		 */
+		if (clock->tsmode == RADCLOCK_TSMODE_RADCLOCK)
+			err = extract_vcount_stamp_v2(clock->pcap_handle, header, packet, vcount);
+		else
+			err = extract_vcount_stamp_v3(clock->pcap_handle, header, packet, vcount);
 		break;
 	default:
 		err = -1;
@@ -760,6 +792,8 @@ extract_vcount_stamp(struct radclock *clock, pcap_t *p_handle,
 	if (err < 0) {
 		logger(RADLOG_ERR, "Cannot extract vcounter from packet timestamped: %ld.%ld",
 			header->ts.tv_sec, header->ts.tv_usec);
+		if (err == -2)
+			logger(RADLOG_ERR, "Timestamping mode should be RADCLOCK");
 		return (-1);
 	}
 

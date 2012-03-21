@@ -424,6 +424,12 @@ typedef enum radclock_tsmode radclock_tsmode_t ;
 
 
 /**
+ * Register pcap handle into radclock structure
+ */
+int radclock_register_pcap(struct radclock *clock, pcap_t *pcap_handle);
+
+
+/**
  * Set the mode of timestamping on the pcap handle
  * This will only work on a live socket.
  * @return 0 on success, non-zero on failure

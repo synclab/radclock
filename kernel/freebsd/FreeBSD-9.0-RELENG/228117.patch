@@ -15,10 +15,15 @@ Discussed with:	Julien Ridoux (jridoux at unimelb edu au)
 Submitted by:	Julien Ridoux (jridoux at unimelb edu au)
 
 ------------------------------------------------------------------------
-Index: sys/kern/kern_tc.c
+---
+ sys/kern/kern_tc.c |   24 ++++++++++++------------
+ sys/sys/timeffc.h  |   22 ++++++++++++++++++++++
+ 2 files changed, 34 insertions(+), 12 deletions(-)
+
+Index: 9.0/sys/kern/kern_tc.c
 ===================================================================
---- a/sys/kern/kern_tc.c	(revision 228116)
-+++ b/sys/kern/kern_tc.c	(revision 228117)
+--- 9.0.orig/sys/kern/kern_tc.c	2012-03-15 02:23:59.000000000 +1100
++++ 9.0/sys/kern/kern_tc.c	2012-03-15 02:24:00.000000000 +1100
 @@ -171,145 +171,145 @@ tc_delta(struct timehands *th)
  	    tc->tc_counter_mask);
  }
@@ -177,10 +182,10 @@ Index: sys/kern/kern_tc.c
  		gen = th->th_generation;
  		*tvp = th->th_microtime;
  	} while (gen == 0 || gen != th->th_generation);
-Index: sys/sys/timeffc.h
+Index: 9.0/sys/sys/timeffc.h
 ===================================================================
---- a/sys/sys/timeffc.h	(revision 228116)
-+++ b/sys/sys/timeffc.h	(revision 228117)
+--- 9.0.orig/sys/sys/timeffc.h	2012-03-15 02:23:54.000000000 +1100
++++ 9.0/sys/sys/timeffc.h	2012-03-15 02:24:00.000000000 +1100
 @@ -157,20 +157,42 @@ void ffclock_getnanouptime(struct timesp
  void ffclock_getmicrouptime(struct timeval *tvp);
  

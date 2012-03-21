@@ -15,10 +15,14 @@ Discussed with:	Julien Ridoux (jridoux at unimelb edu au)
 Submitted by:	Julien Ridoux (jridoux at unimelb edu au)
 
 ------------------------------------------------------------------------
-Index: sys/kern/kern_tc.c
+---
+ sys/kern/kern_tc.c |  102 ++++++-----------------------------------------------
+ 1 file changed, 12 insertions(+), 90 deletions(-)
+
+Index: 9.0/sys/kern/kern_tc.c
 ===================================================================
---- a/sys/kern/kern_tc.c	(revision 228122)
-+++ b/sys/kern/kern_tc.c	(revision 228123)
+--- 9.0.orig/sys/kern/kern_tc.c	2012-03-15 02:24:00.000000000 +1100
++++ 9.0/sys/kern/kern_tc.c	2012-03-15 02:24:02.000000000 +1100
 @@ -463,52 +463,20 @@ getmicrotime(struct timeval *tvp)
  
  int sysclock_active = SYSCLOCK_FBCK;

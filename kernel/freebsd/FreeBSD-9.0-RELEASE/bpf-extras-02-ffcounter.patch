@@ -5,10 +5,10 @@ Add a new ffcounter timestamp member to the BPF header.
  sys/net/bpf.h           |    4 ++++
  3 files changed, 36 insertions(+), 1 deletion(-)
 
-Index: src/sys/kern/kern_ffclock.c
+Index: 9.0.0/sys/kern/kern_ffclock.c
 ===================================================================
---- src.orig/sys/kern/kern_ffclock.c	2012-02-29 18:10:11.000000000 +1100
-+++ src/sys/kern/kern_ffclock.c	2012-02-29 18:13:33.000000000 +1100
+--- 9.0.0.orig/sys/kern/kern_ffclock.c	2012-03-15 02:47:37.000000000 +1100
++++ 9.0.0/sys/kern/kern_ffclock.c	2012-03-15 02:47:41.000000000 +1100
 @@ -155,21 +155,21 @@ ffclock_difftime(ffcounter ffdelta, stru
  
  SYSCTL_NODE(_kern, OID_AUTO, sysclock, CTLFLAG_RW, 0,
@@ -32,10 +32,10 @@ Index: src/sys/kern/kern_ffclock.c
  	struct sbuf *s;
  	int clk, error;
  
-Index: src/sys/net/bpf.c
+Index: 9.0.0/sys/net/bpf.c
 ===================================================================
---- src.orig/sys/net/bpf.c	2012-02-29 18:13:21.000000000 +1100
-+++ src/sys/net/bpf.c	2012-02-29 18:13:33.000000000 +1100
+--- 9.0.0.orig/sys/net/bpf.c	2012-03-15 02:47:40.000000000 +1100
++++ 9.0.0/sys/net/bpf.c	2012-03-15 02:47:41.000000000 +1100
 @@ -107,20 +107,21 @@ MALLOC_DEFINE(M_BPF, "BPF", "BPF data");
  #define BPF_WORDALIGN32(x) (((x)+(BPF_ALIGNMENT32-1))&~(BPF_ALIGNMENT32-1))
  
@@ -252,10 +252,10 @@ Index: src/sys/net/bpf.c
  	hdr.bh_hdrlen = hdrlen;
  	hdr.bh_caplen = caplen;
  	bpf_append_bytes(d, d->bd_sbuf, curlen, &hdr, sizeof(hdr));
-Index: src/sys/net/bpf.h
+Index: 9.0.0/sys/net/bpf.h
 ===================================================================
---- src.orig/sys/net/bpf.h	2012-02-29 18:12:13.000000000 +1100
-+++ src/sys/net/bpf.h	2012-02-29 18:14:04.000000000 +1100
+--- 9.0.0.orig/sys/net/bpf.h	2012-03-15 02:47:40.000000000 +1100
++++ 9.0.0/sys/net/bpf.h	2012-03-15 02:47:41.000000000 +1100
 @@ -38,20 +38,22 @@
   *
   *      @(#)bpf.h	8.1 (Berkeley) 6/10/93

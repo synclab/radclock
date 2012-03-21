@@ -19,6 +19,7 @@
  * 02110-1301, USA.
  */
 
+#include <arpa/inet.h>
 
 #include <unistd.h>
 #include <stdlib.h>

@@ -27,10 +27,10 @@ In collaboration with:	Julien Ridoux (jridoux at unimelb edu au)
  sys/sys/timeffc.h       |   82 +++++++++++++++++++++++----
  3 files changed, 211 insertions(+), 19 deletions(-)
 
-Index: src/sys/kern/kern_ntptime.c
+Index: 9.0.0/sys/kern/kern_ntptime.c
 ===================================================================
---- src.orig/sys/kern/kern_ntptime.c	2012-01-03 14:26:22.000000000 +1100
-+++ src/sys/kern/kern_ntptime.c	2012-02-29 18:10:13.000000000 +1100
+--- 9.0.0.orig/sys/kern/kern_ntptime.c	2012-03-15 02:47:24.000000000 +1100
++++ 9.0.0/sys/kern/kern_ntptime.c	2012-03-15 02:47:38.000000000 +1100
 @@ -141,27 +141,27 @@ typedef int64_t l_fp;
   * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
   */
@@ -61,11 +61,11 @@ Index: src/sys/kern/kern_ntptime.c
  #ifdef PPS_SYNC
  /*
   * The following variables are used when a pulse-per-second (PPS) signal
-Index: src/sys/kern/kern_tc.c
+Index: 9.0.0/sys/kern/kern_tc.c
 ===================================================================
---- src.orig/sys/kern/kern_tc.c	2012-02-29 18:10:07.000000000 +1100
-+++ src/sys/kern/kern_tc.c	2012-02-29 18:10:13.000000000 +1100
-@@ -15,23 +15,21 @@ __FBSDID("$FreeBSD: release/9.0.0/sys/ke
+--- 9.0.0.orig/sys/kern/kern_tc.c	2012-03-15 02:47:36.000000000 +1100
++++ 9.0.0/sys/kern/kern_tc.c	2012-03-15 02:47:38.000000000 +1100
+@@ -21,23 +21,21 @@ __FBSDID("$FreeBSD: release/9.0.0/sys/ke
  
  #include <sys/param.h>
  #include <sys/kernel.h>
@@ -89,7 +89,7 @@ Index: src/sys/kern/kern_tc.c
   * in the typical 'missed a couple of seconds' case, but doesn't loop
   * forever when the time step is large.
   */
-@@ -448,22 +446,20 @@ getmicrotime(struct timeval *tvp)
+@@ -454,22 +452,20 @@ getmicrotime(struct timeval *tvp)
  #endif /* FFCLOCK */
  
  #ifdef FFCLOCK
@@ -112,7 +112,7 @@ Index: src/sys/kern/kern_tc.c
  struct fftimehands {
  	struct ffclock_estimate	cest;
  	struct bintime		tick_time;
-@@ -943,23 +939,163 @@ getnanotime(struct timespec *tsp)
+@@ -949,23 +945,163 @@ getnanotime(struct timespec *tsp)
  
  	getnanotime_fromclock(tsp, sysclock_active);
  }
@@ -276,10 +276,10 @@ Index: src/sys/kern/kern_tc.c
  
  	u = tc->tc_frequency / tc->tc_counter_mask;
  	/* XXX: We need some margin here, 10% is a guess */
-Index: src/sys/sys/timeffc.h
+Index: 9.0.0/sys/sys/timeffc.h
 ===================================================================
---- src.orig/sys/sys/timeffc.h	2012-02-29 18:10:11.000000000 +1100
-+++ src/sys/sys/timeffc.h	2012-02-29 18:10:13.000000000 +1100
+--- 9.0.0.orig/sys/sys/timeffc.h	2012-03-15 02:47:37.000000000 +1100
++++ 9.0.0/sys/sys/timeffc.h	2012-03-15 02:47:38.000000000 +1100
 @@ -74,33 +74,89 @@ extern int sysclock_active;
   */
  #define	FFCLOCK_SKM_SCALE	1024

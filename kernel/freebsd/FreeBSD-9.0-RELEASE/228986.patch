@@ -45,10 +45,10 @@ In collaboration with:	Julien Ridoux (jridoux at unimelb edu au)
  sys/net/bpf.h        |   21 ++--
  3 files changed, 258 insertions(+), 118 deletions(-)
 
-Index: src/share/man/man4/bpf.4
+Index: 9.0.0/share/man/man4/bpf.4
 ===================================================================
---- src.orig/share/man/man4/bpf.4	2012-01-03 14:25:44.000000000 +1100
-+++ src/share/man/man4/bpf.4	2012-02-29 18:12:01.000000000 +1100
+--- 9.0.0.orig/share/man/man4/bpf.4	2012-03-15 02:47:24.000000000 +1100
++++ 9.0.0/share/man/man4/bpf.4	2012-03-15 02:47:39.000000000 +1100
 @@ -42,21 +42,21 @@
  .\" written permission.
  .\" THIS SOFTWARE IS PROVIDED ``AS IS'' AND WITHOUT ANY EXPRESS OR IMPLIED
@@ -262,10 +262,10 @@ Index: src/share/man/man4/bpf.4
  It accepts only Reverse ARP requests.
  .Bd -literal
  struct bpf_insn insns[] = {
-Index: src/sys/net/bpf.c
+Index: 9.0.0/sys/net/bpf.c
 ===================================================================
---- src.orig/sys/net/bpf.c	2012-01-03 14:26:56.000000000 +1100
-+++ src/sys/net/bpf.c	2012-02-29 18:10:21.000000000 +1100
+--- 9.0.0.orig/sys/net/bpf.c	2012-03-15 02:47:24.000000000 +1100
++++ 9.0.0/sys/net/bpf.c	2012-03-15 02:47:39.000000000 +1100
 @@ -1,19 +1,24 @@
  /*-
   * Copyright (C) 1990, 1991, 1993
@@ -882,10 +882,10 @@ Index: src/sys/net/bpf.c
  static int
  bpf_getdltlist(struct bpf_d *d, struct bpf_dltlist *bfl)
  {
-Index: src/sys/net/bpf.h
+Index: 9.0.0/sys/net/bpf.h
 ===================================================================
---- src.orig/sys/net/bpf.h	2012-01-03 14:26:56.000000000 +1100
-+++ src/sys/net/bpf.h	2012-02-29 18:10:21.000000000 +1100
+--- 9.0.0.orig/sys/net/bpf.h	2012-03-15 02:47:24.000000000 +1100
++++ 9.0.0/sys/net/bpf.h	2012-03-15 02:47:39.000000000 +1100
 @@ -1,19 +1,24 @@
  /*-
   * Copyright (C) 1990, 1991, 1993

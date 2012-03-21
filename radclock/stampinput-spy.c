@@ -19,11 +19,8 @@
  * 02110-1301, USA.
  */
 
+#include <arpa/inet.h>
 
-/**
- * A stamp source for reading from live input, but spying on the system clock.
- * Also has the ability to create output
- */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -40,11 +37,8 @@
 #include "jdebug.h"
 
 
-
-
-
-
-static int spystamp_init(struct radclock *handle, struct stampsource *source)
+static int
+spystamp_init(struct radclock *clock, struct stampsource *source)
 {
 	verbose(LOG_NOTICE, "Reading live from spy source");
 	source->priv_data = NULL; 
@@ -54,14 +48,14 @@ static int spystamp_init(struct radclock *handle, struct stampsource *source)
 
 
 static int
-spystamp_get_next(struct radclock *handle, struct stampsource *source,
+spystamp_get_next(struct radclock *clock, struct stampsource *source,
 	struct stamp_t *stamp)
 {
 	int err;
 
 	JDEBUG
 
-	err = deliver_rawdata_spy(handle, stamp);
+	err = deliver_rawdata_spy(clock, stamp);
 	if (err < 0) {
 		/* Signals empty buffer */
 		return err;
@@ -75,7 +69,8 @@ spystamp_get_next(struct radclock *handle, struct stampsource *source,
 
 
 
-static void spystamp_breakloop(struct radclock *handle, struct stampsource *source)
+static void
+spystamp_breakloop(struct radclock *clock, struct stampsource *source)
 {
 	/*  
 	 * Used to exit the capture loop if a signal has been caught. 
@@ -84,26 +79,27 @@ static void spystamp_breakloop(struct radclock *handle, struct stampsource *sour
 }
 
 
-static void spystamp_finish(struct radclock *handle, struct stampsource *source)
+static void
+spystamp_finish(struct radclock *clock, struct stampsource *source)
 {
 	/* Nothing to close */
 }
 
 
-static int spystamp_update_filter(struct radclock *handle, struct stampsource *source)
+static int
+spystamp_update_filter(struct radclock *clock, struct stampsource *source)
 {
 	/* So far nothing to do */
-	return 0;
+	return (0);
 }
 
 
-static int spystamp_update_dumpout(struct radclock *handle, struct stampsource *source)
+static int
+spystamp_update_dumpout(struct radclock *clock, struct stampsource *source)
 {
 	/* So far nothing to do */
-	return 0;
+	return (0);
 }
-
-
 
 
 struct stampsource_def spy_source =

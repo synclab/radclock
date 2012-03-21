@@ -19,6 +19,7 @@
  * 02110-1301, USA.
  */
 
+#include <arpa/inet.h>
 
 #include <string.h>
 #include <math.h>
@@ -666,13 +667,6 @@ process_rawdata(struct radclock *clock, struct bidir_peer *peer)
 				((struct bidir_output*)clock->algo_output)->n_stamps - 1,
 				error_bound * 1000, error_bound_avg * 1000, error_bound_std * 1000);
 	}
-
-	/* Plocal 
-	 * We don't want to reinit plocal each time we receive a packet, but only 
-	 * on reload of the configuration file. So this does the trick.
-	 */
-	if (clock->conf->start_plocal == PLOCAL_RESTART)
-			clock->conf->start_plocal = PLOCAL_START;
 
 	/* Set initial state of 'signals' - important !! 
 	 * Has to be placed here, after the algo handled the possible new

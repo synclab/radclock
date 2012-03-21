@@ -182,6 +182,7 @@ struct radclock
 
 	/* Pcap handler for the RADclock only */
 	pcap_t *pcap_handle;
+	int tsmode;
 
 	/* Syscalls */
 	int syscall_set_ffclock;	/* FreeBSD specific, so far */

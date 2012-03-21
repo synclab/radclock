@@ -20,9 +20,6 @@
  */
 
 
-
-
-
 /*
  * Network level functions called by main to get packet data
  * 
@@ -95,19 +92,16 @@ typedef struct radpcap_packet_t {
 	void *buffer;	
 	size_t size;	/* Captured size */
 	u_int32_t type;	/* rt protocol type */
+	struct sockaddr_storage ss_if;	/* Capture interface IP address */
 } radpcap_packet_t;
 
 
 /*
  * So far still pcap based
  */
-int get_network_stamp(struct radclock *handle,
-		void * userdata,
+int get_network_stamp(struct radclock *handle, void * userdata,
 		int (*get_packet)(struct radclock *, void *, radpcap_packet_t **),
-		struct stamp_t *stamp,
-		struct timeref_stats *stats,
-		char *src_ipaddr
-);
+		struct stamp_t *stamp, struct timeref_stats *stats);
 
 int get_vcount(radpcap_packet_t *packet, vcounter_t *vcount);
 

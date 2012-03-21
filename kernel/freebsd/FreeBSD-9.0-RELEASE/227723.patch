@@ -21,16 +21,16 @@ Submitted by:	Julien Ridoux (jridoux at unimelb edu au)
 ---
  sys/conf/NOTES       |    8 
  sys/conf/options     |    1 
- sys/kern/kern_tc.c   |  436 +++++++++++++++++++++++++++++++++++++++++++++++++++
- sys/kern/subr_rtc.c  |   10 +
+ sys/kern/kern_tc.c   |  442 +++++++++++++++++++++++++++++++++++++++++++++++++++
+ sys/kern/subr_rtc.c  |   15 +
  sys/sys/_ffcounter.h |   42 ++++
  sys/sys/timeffc.h    |  110 ++++++++++++
- 6 files changed, 606 insertions(+), 1 deletion(-)
+ 6 files changed, 617 insertions(+), 1 deletion(-)
 
-Index: src/sys/conf/NOTES
+Index: 9.0.0/sys/conf/NOTES
 ===================================================================
---- src.orig/sys/conf/NOTES	2012-01-03 14:26:21.000000000 +1100
-+++ src/sys/conf/NOTES	2012-02-29 18:04:40.000000000 +1100
+--- 9.0.0.orig/sys/conf/NOTES	2012-03-15 02:47:25.000000000 +1100
++++ 9.0.0/sys/conf/NOTES	2012-03-15 02:47:29.000000000 +1100
 @@ -1176,20 +1176,28 @@ options		PROCDESC
  # actually reducing the accuracy of operation.
  
@@ -60,10 +60,10 @@ Index: src/sys/conf/NOTES
  # high-level SCSI device `type' drivers, and the low-level host-adapter
  # device drivers.  The host adapters are listed in the ISA and PCI
  # device configuration sections below.
-Index: src/sys/conf/options
+Index: 9.0.0/sys/conf/options
 ===================================================================
---- src.orig/sys/conf/options	2012-01-03 14:26:21.000000000 +1100
-+++ src/sys/conf/options	2012-02-29 18:04:40.000000000 +1100
+--- 9.0.0.orig/sys/conf/options	2012-03-15 02:47:25.000000000 +1100
++++ 9.0.0/sys/conf/options	2012-03-15 02:47:29.000000000 +1100
 @@ -72,20 +72,21 @@ COMPAT_43	opt_compat.h
  COMPAT_43TTY	opt_compat.h
  COMPAT_FREEBSD4	opt_compat.h
@@ -86,15 +86,24 @@ Index: src/sys/conf/options
  GEOM_ELI	opt_geom.h
  GEOM_FOX	opt_geom.h
  GEOM_GATE	opt_geom.h
-Index: src/sys/kern/kern_tc.c
+Index: 9.0.0/sys/kern/kern_tc.c
 ===================================================================
---- src.orig/sys/kern/kern_tc.c	2012-01-03 14:26:22.000000000 +1100
-+++ src/sys/kern/kern_tc.c	2012-02-29 18:06:05.000000000 +1100
-@@ -4,26 +4,34 @@
+--- 9.0.0.orig/sys/kern/kern_tc.c	2012-03-15 02:47:25.000000000 +1100
++++ 9.0.0/sys/kern/kern_tc.c	2012-03-15 02:47:29.000000000 +1100
+@@ -1,29 +1,43 @@
+ /*-
+  * ----------------------------------------------------------------------------
+  * "THE BEER-WARE LICENSE" (Revision 42):
   * <phk@FreeBSD.ORG> wrote this file.  As long as you retain this notice you
   * can do whatever you want with this stuff. If we meet some day, and you think
   * this stuff is worth it, you can buy me a beer in return.   Poul-Henning Kamp
   * ----------------------------------------------------------------------------
++ *
++ * Copyright (C) 2011 The FreeBSD Foundation
++ * All rights reserved.
++ *
++ * Portions of this software were developed by Julien Ridoux at the University
++ * of Melbourne under sponsorship from the FreeBSD Foundation.
   */
  
  #include <sys/cdefs.h>
@@ -125,7 +134,7 @@ Index: src/sys/kern/kern_tc.c
   * in the typical 'missed a couple of seconds' case, but doesn't loop
   * forever when the time step is large.
   */
-@@ -293,20 +301,439 @@ getmicrotime(struct timeval *tvp)
+@@ -293,20 +307,439 @@ getmicrotime(struct timeval *tvp)
  	struct timehands *th;
  	u_int gen;
  
@@ -565,7 +574,7 @@ Index: src/sys/kern/kern_tc.c
  	struct sysctl_oid *tc_root;
  
  	u = tc->tc_frequency / tc->tc_counter_mask;
-@@ -433,20 +860,23 @@ tc_windup(void)
+@@ -433,20 +866,23 @@ tc_windup(void)
  	/*
  	 * Capture a timecounter delta on the current timecounter and if
  	 * changing timecounters, a counter value from the new timecounter.
@@ -589,7 +598,7 @@ Index: src/sys/kern/kern_tc.c
  	if ((delta > th->th_counter->tc_frequency / 2) &&
  	    (th->th_scale * delta < ((uint64_t)1 << 63))) {
  		/* The product th_scale * delta just barely overflows. */
-@@ -495,20 +925,23 @@ tc_windup(void)
+@@ -495,20 +931,23 @@ tc_windup(void)
  #ifndef __arm__
  		if ((timecounter->tc_flags & TC_FLAGS_C3STOP) != 0)
  			cpu_disable_deep_sleep++;
@@ -613,7 +622,7 @@ Index: src/sys/kern/kern_tc.c
  	 *
  	 * The th_adjustment is nanoseconds per second with 32 bit binary
  	 * fraction and we want 64 bit binary fraction of second:
-@@ -813,20 +1246,23 @@ inittimecounter(void *dummy)
+@@ -813,20 +1252,23 @@ inittimecounter(void *dummy)
  	 * smallest reasonable one.  If they want better timestamps they
  	 * should use the non-"get"* functions.
  	 */
@@ -637,10 +646,10 @@ Index: src/sys/kern/kern_tc.c
  
  /* Cpu tick handling -------------------------------------------------*/
  
-Index: src/sys/kern/subr_rtc.c
+Index: 9.0.0/sys/kern/subr_rtc.c
 ===================================================================
---- src.orig/sys/kern/subr_rtc.c	2012-01-03 14:26:22.000000000 +1100
-+++ src/sys/kern/subr_rtc.c	2012-02-29 18:04:40.000000000 +1100
+--- 9.0.0.orig/sys/kern/subr_rtc.c	2012-03-15 02:47:25.000000000 +1100
++++ 9.0.0/sys/kern/subr_rtc.c	2012-03-15 02:47:29.000000000 +1100
 @@ -1,19 +1,24 @@
  /*-
   * Copyright (C) 1988 University of Utah.
@@ -667,7 +676,39 @@ Index: src/sys/kern/subr_rtc.c
   *    documentation and/or other materials provided with the distribution.
   * 4. Neither the name of the University nor the names of its contributors
   *    may be used to endorse or promote products derived from this software
-@@ -126,20 +131,23 @@ inittodr(time_t base)
+@@ -43,26 +48,31 @@
+  * support multiple models of such clocks, and generally serves to make the
+  * code more machine-independent.
+  * If the clock in question can also be used as a time counter, the driver
+  * needs to initiate this.
+  * This code is not yet used by all architectures.
+  */
+ 
+ #include <sys/cdefs.h>
+ __FBSDID("$FreeBSD: release/9.0.0/sys/kern/subr_rtc.c 211230 2010-08-12 17:17:05Z jkim $");
+ 
++#include "opt_ffclock.h"
++
+ #include <sys/param.h>
+ #include <sys/systm.h>
+ #include <sys/kernel.h>
+ #include <sys/bus.h>
+ #include <sys/clock.h>
+ #include <sys/sysctl.h>
++#ifdef FFCLOCK
++#include <sys/timeffc.h>
++#endif
+ #include <sys/timetc.h>
+ 
+ #include "clock_if.h"
+ 
+ static device_t clock_dev = NULL;
+ static long clock_res;
+ static struct timespec clock_adj;
+ 
+ /* XXX: should be kern. now, it's no longer machdep.  */
+ static int disable_rtc_set;
+@@ -126,20 +136,23 @@ inittodr(time_t base)
  	}
  	if (error == EINVAL || ts.tv_sec < 0) {
  		printf("Invalid time in real time clock.\n"
@@ -691,10 +732,10 @@ Index: src/sys/kern/subr_rtc.c
  	}
  }
  
-Index: src/sys/sys/_ffcounter.h
+Index: 9.0.0/sys/sys/_ffcounter.h
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ src/sys/sys/_ffcounter.h	2012-02-29 18:04:40.000000000 +1100
++++ 9.0.0/sys/sys/_ffcounter.h	2012-03-15 02:47:29.000000000 +1100
 @@ -0,0 +1,42 @@
 +/*-
 + * Copyright (C) 2011 The University of Melbourne
@@ -738,10 +779,10 @@ Index: src/sys/sys/_ffcounter.h
 +typedef uint64_t ffcounter;
 +
 +#endif /* _SYS__FFCOUNTER_H_ */
-Index: src/sys/sys/timeffc.h
+Index: 9.0.0/sys/sys/timeffc.h
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ src/sys/sys/timeffc.h	2012-02-29 18:04:40.000000000 +1100
++++ 9.0.0/sys/sys/timeffc.h	2012-03-15 02:47:29.000000000 +1100
 @@ -0,0 +1,110 @@
 +/*-
 + * Copyright (C) 2011 The University of Melbourne

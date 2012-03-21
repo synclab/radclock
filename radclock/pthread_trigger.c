@@ -342,11 +342,14 @@ ntp_client(struct radclock * clock)
 	 * Update socket timeout to adjust to server conditions. Athough the delay
 	 * may be large, the jitter is usually fairly low (< 1ms). Give an extra 5ms
 	 * to cover ugly cases. Make sure we never go below the minimum socket
-	 * timeout value.
+	 * timeout value, and bound upper values.
 	 */
-	timeout = peer->RTThat * RAD_DATA(clock)->phat_local + 2e-3;
+	timeout = peer->RTThat * RAD_DATA(clock)->phat + 5e-3;
 	if (timeout * 1e6 < MIN_SO_TIMEOUT)
 		timeout = MIN_SO_TIMEOUT * 1e-6;
+	if (timeout > adjusted_period / 3)
+		timeout = adjusted_period / 3;
+
 	tv.tv_sec = (time_t)timeout;
 	tv.tv_usec = (useconds_t)(1e6 * timeout - (time_t)timeout);
 	setsockopt(CLIENT_DATA(clock)->socket, SOL_SOCKET, SO_RCVTIMEO,

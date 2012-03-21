@@ -184,14 +184,15 @@ check_ipv6(struct ip6_hdr *ip6h, int remaining)
 // TODO and for non NTP packets? (ie 1588)
 // FIXME: the ip pointer is dirty and will break with IPv6 packets
 int
-get_valid_ntp_payload(radpcap_packet_t *packet, struct ntp_pkt **ntp, void **ip,
-		int *ipversion)
+get_valid_ntp_payload(radpcap_packet_t *packet, struct ntp_pkt **ntp,
+		struct sockaddr_storage *ss_src, struct sockaddr_storage *ss_dst,
+		int *ttl)
 {
-
+	struct sockaddr_in *sin;
+	struct sockaddr_in6 *sin6;
 	struct ip *iph;
 	struct ip6_hdr *ip6h;
 	struct udphdr *udph;
-
 	linux_sll_header_t *sllh;
 	uint16_t proto;
 	int remaining;
@@ -210,7 +211,6 @@ get_valid_ntp_payload(radpcap_packet_t *packet, struct ntp_pkt **ntp, void **ip,
 	case DLT_EN10MB:
 		iph = (struct ip *)(packet->payload + sizeof(struct ether_header));
 		remaining -= sizeof(struct ether_header);
-		*ipversion = 4;
 		ip6h = NULL;
 		break;
 
@@ -228,7 +228,6 @@ get_valid_ntp_payload(radpcap_packet_t *packet, struct ntp_pkt **ntp, void **ip,
 			iph = (struct ip *)(packet->payload + sizeof(struct ether_header) +
 					sizeof(linux_sll_header_t));
 			remaining -= sizeof(struct ether_header);
-			*ipversion = 4;
 			ip6h = NULL;
 			break;
 		}
@@ -242,11 +241,18 @@ get_valid_ntp_payload(radpcap_packet_t *packet, struct ntp_pkt **ntp, void **ip,
 			ip6h = NULL;
 			iph = (struct ip *)(packet->payload + sizeof(linux_sll_header_t));
 			remaining -= sizeof(linux_sll_header_t);
-			*ipversion = 4;
 
 			err = check_ipv4(iph, remaining);
 			if (err)
 				return (1);
+
+			ss_src->ss_family = AF_INET;
+			ss_dst->ss_family = AF_INET;
+			sin = (struct sockaddr_in *)ss_src;
+			sin->sin_addr = iph->ip_src;
+			sin = (struct sockaddr_in *)ss_dst;
+			sin->sin_addr = iph->ip_dst;
+			*ttl = iph->ip_ttl;
 
 			udph = (struct udphdr *)((char *)iph + (iph->ip_hl * 4));
 			remaining -= sizeof(struct ip);
@@ -257,11 +263,18 @@ get_valid_ntp_payload(radpcap_packet_t *packet, struct ntp_pkt **ntp, void **ip,
 			iph = NULL;
 			ip6h = (struct ip6_hdr *)(packet->payload + sizeof(linux_sll_header_t));
 			remaining -= sizeof(linux_sll_header_t);
-			*ipversion = 6;
 
 			err = check_ipv6(ip6h, remaining);
 			if (err)
 				return (1);
+
+			ss_src->ss_family = AF_INET6;
+			ss_dst->ss_family = AF_INET6;
+			sin6 = (struct sockaddr_in6 *)ss_src;
+			sin6->sin6_addr = ip6h->ip6_src;
+			sin6 = (struct sockaddr_in6 *)ss_dst;
+			sin6->sin6_addr = ip6h->ip6_dst;
+			*ttl = ip6h->ip6_hops;
 
 			udph = (struct udphdr *)((char *)ip6h + sizeof(struct ip6_hdr));
 			remaining -= sizeof(struct ip6_hdr);
@@ -274,18 +287,15 @@ get_valid_ntp_payload(radpcap_packet_t *packet, struct ntp_pkt **ntp, void **ip,
 
 		default:
 			verbose(LOG_ERR, "Unsupported protocol in SLL header %u", proto);
-			break;
+			return(1);
 		}
-
 		break;
+
 	default:
 		verbose(LOG_ERR, "MAC layer type not supported yet.");
 		return (1);
 		break;
 	}
-
-	// TODO: gross ...
-	*ip = (void *)iph;
 
 	if (remaining < sizeof(struct udphdr)) {
 		verbose(LOG_WARNING, "Broken UDP datagram");
@@ -419,7 +429,7 @@ destroy_peer_stamp_queue(struct bidir_peer *peer)
 	free(peer->q);
 	peer->q = NULL;
 }
-	
+
 
 /*
  * Insert a client or server NTP packet into the stamp queue. This routine
@@ -535,19 +545,67 @@ insert_stamp_queue(struct stamp_queue *q, struct stamp_t *new, int mode)
 }
 
 
+int
+compare_sockaddr_storage(struct sockaddr_storage *first,
+		struct sockaddr_storage *second)
+{
+	if (first->ss_family != second->ss_family)
+		return (1);
+
+	if (first->ss_family == AF_INET) {
+		if (memcmp(&(((struct sockaddr_in *) first)->sin_addr),
+				&(((struct sockaddr_in *) second)->sin_addr),
+				sizeof(struct in_addr)) == 0)
+			return (0);
+	}
+	// address family is AF_INET6
+	else {
+		if (memcmp(&(((struct sockaddr_in6 *) first)->sin6_addr),
+				&(((struct sockaddr_in6 *) second)->sin6_addr),
+				sizeof(struct in6_addr)) == 0)
+			return (0);
+	}
+
+	return (1);
+}
+
+int
+is_loopback_sockaddr_storage(struct sockaddr_storage *ss)
+{
+	struct in_addr *addr;
+	struct in6_addr *addr6;
+
+	if (ss->ss_family == AF_INET) {
+		addr = &((struct sockaddr_in *)ss)->sin_addr;
+		if (addr->s_addr == htonl(INADDR_LOOPBACK))
+			return (1);
+	} else {
+		addr6 = &((struct sockaddr_in6 *)ss)->sin6_addr;
+		if (IN6_IS_ADDR_LOOPBACK(addr6))
+			return (1);
+	}
+
+	return (0);
+}
+
 /*
  * Check the client's request.
  * The radclock may serve NTP clients over the network. The BPF filter may not
  * be tight enough either. Make sure that requests from clients are discarded.
  */
 int
-bad_packet_client(struct ip *ip, struct ntp_pkt *ntp, char *src_ipaddr,
-		struct timeref_stats *stats)
+bad_packet_client(struct ntp_pkt *ntp, struct sockaddr_storage *ss_if,
+		struct sockaddr_storage *ss_dst, struct timeref_stats *stats)
 {
-	if (strcmp(inet_ntoa(ip->ip_dst), src_ipaddr) == 0) {
-		verbose(LOG_WARNING, "Destination address in client packet. "
-				"Check the capture filter.");
-		return (1);
+	int err;
+
+	err = compare_sockaddr_storage(ss_if, ss_dst);
+	if (err == 0) {
+		if (!is_loopback_sockaddr_storage(ss_dst)) { 
+			verbose(LOG_WARNING, "Destination address in client packet. "
+					"Check the capture filter.");
+			return (1);
+		}
 	}
 	return (0);
 }
@@ -559,14 +617,18 @@ bad_packet_client(struct ip *ip, struct ntp_pkt *ntp, char *src_ipaddr,
  * Make sure the server's stratum is not insane.
  */
 int
-bad_packet_server(struct ip *ip, struct ntp_pkt *ntp, char *src_ipaddr,
-		struct timeref_stats *stats)
+bad_packet_server(struct ntp_pkt *ntp, struct sockaddr_storage *ss_if,
+		struct sockaddr_storage *ss_src, struct timeref_stats *stats)
 {
-	/* Make sure to discard replies to our own NTP clients */
-	if (strcmp(inet_ntoa(ip->ip_src), src_ipaddr) == 0) {
-		verbose(LOG_WARNING, "Source address in server packet. "
-				"Check the capture filter.");
-		return (1);
+	int err;
+
+	err = compare_sockaddr_storage(ss_if, ss_src);
+	if (err == 0) {
+		if (!is_loopback_sockaddr_storage(ss_src)) { 
+			verbose(LOG_WARNING, "Source address in server packet. "
+					"Check the capture filter.");
+			return (1);
+		}
 	}
 
 	/* If the server is unsynchronised we skip this packet */
@@ -613,8 +675,8 @@ push_stamp_client(struct stamp_queue *q, struct ntp_pkt *ntp, vcounter_t *vcount
  * for insertion in the peer's stamp queue.
  */
 int
-push_stamp_server(struct stamp_queue *q, struct ip *ip, struct ntp_pkt *ntp,
-	vcounter_t *vcount)
+push_stamp_server(struct stamp_queue *q, struct ntp_pkt *ntp,
+		vcounter_t *vcount, struct sockaddr_storage *ss_src, int *ttl)
 {
 	struct stamp_t stamp;
 
@@ -623,8 +685,18 @@ push_stamp_server(struct stamp_queue *q, struct ip *ip, struct ntp_pkt *ntp,
 	stamp.type = STAMP_NTP;
 	stamp.id = ((uint64_t) ntohl(ntp->org.l_int)) << 32;
 	stamp.id |= (uint64_t) ntohl(ntp->org.l_fra);
-	strncpy(stamp.server_ipaddr, inet_ntoa(ip->ip_src), 16);
-	stamp.ttl = ip->ip_ttl;
+
+	// TODO not protocol independent. Getaddrinfo instead?
+	if (ss_src->ss_family == AF_INET)
+		inet_ntop(ss_src->ss_family,
+			&((struct sockaddr_in *)ss_src)->sin_addr, stamp.server_ipaddr,
+			INET6_ADDRSTRLEN);
+	else
+		inet_ntop(ss_src->ss_family,
+			&((struct sockaddr_in6 *)ss_src)->sin6_addr, stamp.server_ipaddr,
+			INET6_ADDRSTRLEN);
+
+	stamp.ttl = *ttl;
 	stamp.refid = ntohl(ntp->refid);
 	stamp.stratum = ntp->stratum;
 	stamp.leapsec = PKT_LEAP(ntp->li_vn_mode);
@@ -648,13 +720,14 @@ push_stamp_server(struct stamp_queue *q, struct ip *ip, struct ntp_pkt *ntp,
  */
 int
 update_stamp_queue(struct stamp_queue *q, radpcap_packet_t *packet,
-		struct timeref_stats *stats, char *src_ipaddr)
+		struct timeref_stats *stats)
 {
-	struct ip *ip;
 	struct ntp_pkt *ntp;
+	struct sockaddr_storage ss_src, ss_dst, *ss;
 	vcounter_t vcount;
+	int ttl;
 	int err;
-	int ipversion;
+	char ipaddr[INET6_ADDRSTRLEN];
 
 	JDEBUG
 
@@ -664,31 +737,39 @@ update_stamp_queue(struct stamp_queue *q, radpcap_packet_t *packet,
 		return (-1);
 	}
 
-	err = get_valid_ntp_payload(packet, &ntp, (void **)&ip, &ipversion);
+	err = get_valid_ntp_payload(packet, &ntp, &ss_src, &ss_dst, &ttl);
 	if (err) {
 		verbose(LOG_WARNING, "Not an NTP packet.");
 		return (1);
 	}
 
+	ss = &packet->ss_if;
 	err = 0;
 	switch (PKT_MODE(ntp->li_vn_mode)) {
 	case MODE_BROADCAST:
+		ss = &ss_src;
+		if (ss->ss_family == AF_INET)
+			inet_ntop(ss->ss_family,
+				&((struct sockaddr_in *)&ss)->sin_addr, ipaddr, INET6_ADDRSTRLEN);
+		else
+			inet_ntop(ss->ss_family,
+				&((struct sockaddr_in6 *)ss)->sin6_addr, ipaddr, INET6_ADDRSTRLEN);
 		verbose(VERB_DEBUG,"Received NTP broadcast packet from %s (Silent discard)",
-			inet_ntoa(ip->ip_src));
+				ipaddr);
 		break;
 
 	case MODE_CLIENT:
-		err = bad_packet_client(ip, ntp, src_ipaddr, stats);
+		err = bad_packet_client(ntp, ss, &ss_dst, stats);
 		if (err)
 			break;
 		err = push_stamp_client(q, ntp, &vcount);
 		break;
 
 	case MODE_SERVER:
-		err = bad_packet_server(ip, ntp,src_ipaddr, stats);
+		err = bad_packet_server(ntp, ss, &ss_src, stats);
 		if (err)
 			break;
-		err = push_stamp_server(q, ip, ntp, &vcount);
+		err = push_stamp_server(q, ntp, &vcount, &ss_src, &ttl);
 		break;
 
 	default:
@@ -779,7 +860,7 @@ get_stamp_from_queue(struct stamp_queue *q, struct stamp_t *stamp)
 int
 get_network_stamp(struct radclock *clock, void *userdata,
 	int (*get_packet)(struct radclock *, void *, radpcap_packet_t **),
-	struct stamp_t *stamp, struct timeref_stats *stats, char *src_ipaddr)
+	struct stamp_t *stamp, struct timeref_stats *stats)
 {
 	struct bidir_peer *peer;
 	radpcap_packet_t *packet;
@@ -827,7 +908,7 @@ get_network_stamp(struct radclock *clock, void *userdata,
 		stats->ref_count++;
 
 		/* Convert packet to stamp and push it to the stamp queue */
-		err = update_stamp_queue(peer->q, packet, stats, src_ipaddr);
+		err = update_stamp_queue(peer->q, packet, stats);
 
 		/* Low level / input problem worth stopping */
 		if (err == -1)

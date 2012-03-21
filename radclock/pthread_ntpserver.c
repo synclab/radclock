@@ -88,7 +88,7 @@ void* thread_ntp_server(void *c_handle)
 	int err;
 
 	/* UNIX Socket structures */
-	unsigned int s_server; 
+	int s_server; 
     struct sockaddr_in sin_server, sin_client;
     socklen_t len;
 

@@ -48,8 +48,8 @@ Submitted by:	Julien Ridoux (jridoux at unimelb edu au)
 
 Index: 9.0/lib/libc/sys/Makefile.inc
 ===================================================================
---- 9.0.orig/lib/libc/sys/Makefile.inc	2012-02-27 15:51:33.000000000 +1100
-+++ 9.0/lib/libc/sys/Makefile.inc	2012-02-27 21:33:58.000000000 +1100
+--- 9.0.orig/lib/libc/sys/Makefile.inc	2012-03-15 02:23:40.000000000 +1100
++++ 9.0/lib/libc/sys/Makefile.inc	2012-03-15 02:23:54.000000000 +1100
 @@ -73,21 +73,21 @@ ${SPSEUDO}:
  	printf '#include "SYS.h"\nPSEUDO(${.PREFIX:S/_//})\n' \
  	    >> ${.TARGET}
@@ -98,8 +98,8 @@ Index: 9.0/lib/libc/sys/Makefile.inc
  MLINKS+=getpid.2 getppid.2
 Index: 9.0/lib/libc/sys/Symbol.map
 ===================================================================
---- 9.0.orig/lib/libc/sys/Symbol.map	2012-02-27 15:51:33.000000000 +1100
-+++ 9.0/lib/libc/sys/Symbol.map	2012-02-27 21:33:58.000000000 +1100
+--- 9.0.orig/lib/libc/sys/Symbol.map	2012-03-15 02:23:40.000000000 +1100
++++ 9.0/lib/libc/sys/Symbol.map	2012-03-15 02:23:54.000000000 +1100
 @@ -358,20 +358,23 @@ FBSD_1.1 {
  	shmctl;
  	symlinkat;
@@ -127,7 +127,7 @@ Index: 9.0/lib/libc/sys/Symbol.map
 Index: 9.0/lib/libc/sys/ffclock.2
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ 9.0/lib/libc/sys/ffclock.2	2012-02-27 21:33:58.000000000 +1100
++++ 9.0/lib/libc/sys/ffclock.2	2012-03-15 02:23:54.000000000 +1100
 @@ -0,0 +1,177 @@
 +.\" Copyright (C) 2011 The University of Melbourne
 +.\" All rights reserved.
@@ -308,8 +308,8 @@ Index: 9.0/lib/libc/sys/ffclock.2
 +at the University of Melbourne under sponsorship from the FreeBSD Foundation.
 Index: 9.0/sys/amd64/linux32/linux32_proto.h
 ===================================================================
---- 9.0.orig/sys/amd64/linux32/linux32_proto.h	2012-02-27 15:52:27.000000000 +1100
-+++ 9.0/sys/amd64/linux32/linux32_proto.h	2012-02-27 21:33:59.000000000 +1100
+--- 9.0.orig/sys/amd64/linux32/linux32_proto.h	2012-03-15 02:23:40.000000000 +1100
++++ 9.0/sys/amd64/linux32/linux32_proto.h	2012-03-15 02:23:54.000000000 +1100
 @@ -5,20 +5,21 @@
   * $FreeBSD: releng/9.0/sys/amd64/linux32/linux32_proto.h 220030 2011-03-26 10:59:24Z avg $
   * created from FreeBSD: head/sys/amd64/linux32/syscalls.master 220028 2011-03-26 10:51:56Z avg 
@@ -334,8 +334,8 @@ Index: 9.0/sys/amd64/linux32/linux32_proto.h
  #define	PAD_(t)	(sizeof(register_t) <= sizeof(t) ? \
 Index: 9.0/sys/compat/freebsd32/freebsd32_proto.h
 ===================================================================
---- 9.0.orig/sys/compat/freebsd32/freebsd32_proto.h	2012-02-27 15:52:13.000000000 +1100
-+++ 9.0/sys/compat/freebsd32/freebsd32_proto.h	2012-02-27 21:33:59.000000000 +1100
+--- 9.0.orig/sys/compat/freebsd32/freebsd32_proto.h	2012-03-15 02:23:40.000000000 +1100
++++ 9.0/sys/compat/freebsd32/freebsd32_proto.h	2012-03-15 02:23:54.000000000 +1100
 @@ -5,20 +5,21 @@
   * $FreeBSD: releng/9.0/sys/compat/freebsd32/freebsd32_proto.h 225618 2011-09-16 14:04:14Z kmacy $
   * created from FreeBSD: head/sys/compat/freebsd32/syscalls.master 224066 2011-07-15 18:26:19Z jonathan 
@@ -360,8 +360,8 @@ Index: 9.0/sys/compat/freebsd32/freebsd32_proto.h
  #define	PAD_(t)	(sizeof(register_t) <= sizeof(t) ? \
 Index: 9.0/sys/compat/freebsd32/freebsd32_syscall.h
 ===================================================================
---- 9.0.orig/sys/compat/freebsd32/freebsd32_syscall.h	2012-02-27 15:52:13.000000000 +1100
-+++ 9.0/sys/compat/freebsd32/freebsd32_syscall.h	2012-02-27 21:33:58.000000000 +1100
+--- 9.0.orig/sys/compat/freebsd32/freebsd32_syscall.h	2012-03-15 02:23:40.000000000 +1100
++++ 9.0/sys/compat/freebsd32/freebsd32_syscall.h	2012-03-15 02:23:54.000000000 +1100
 @@ -200,20 +200,23 @@
  #define	FREEBSD32_SYS_freebsd32_msgsnd	226
  #define	FREEBSD32_SYS_freebsd32_msgrcv	227
@@ -388,8 +388,8 @@ Index: 9.0/sys/compat/freebsd32/freebsd32_syscall.h
  #define	FREEBSD32_SYS_lchmod	274
 Index: 9.0/sys/compat/freebsd32/freebsd32_syscalls.c
 ===================================================================
---- 9.0.orig/sys/compat/freebsd32/freebsd32_syscalls.c	2012-02-27 15:52:13.000000000 +1100
-+++ 9.0/sys/compat/freebsd32/freebsd32_syscalls.c	2012-02-27 21:33:59.000000000 +1100
+--- 9.0.orig/sys/compat/freebsd32/freebsd32_syscalls.c	2012-03-15 02:23:40.000000000 +1100
++++ 9.0/sys/compat/freebsd32/freebsd32_syscalls.c	2012-03-15 02:23:54.000000000 +1100
 @@ -244,23 +244,23 @@ const char *freebsd32_syscallnames[] = {
  	"shmget",			/* 231 = shmget */
  	"freebsd32_clock_gettime",			/* 232 = freebsd32_clock_gettime */
@@ -419,8 +419,8 @@ Index: 9.0/sys/compat/freebsd32/freebsd32_syscalls.c
  	"issetugid",			/* 253 = issetugid */
 Index: 9.0/sys/compat/freebsd32/freebsd32_sysent.c
 ===================================================================
---- 9.0.orig/sys/compat/freebsd32/freebsd32_sysent.c	2012-02-27 15:52:13.000000000 +1100
-+++ 9.0/sys/compat/freebsd32/freebsd32_sysent.c	2012-02-27 21:33:58.000000000 +1100
+--- 9.0.orig/sys/compat/freebsd32/freebsd32_sysent.c	2012-03-15 02:23:40.000000000 +1100
++++ 9.0/sys/compat/freebsd32/freebsd32_sysent.c	2012-03-15 02:23:54.000000000 +1100
 @@ -281,23 +281,23 @@ struct sysent freebsd32_sysent[] = {
  	{ AS(shmget_args), (sy_call_t *)lkmressys, AUE_NULL, NULL, 0, 0, 0, SY_THR_ABSENT },	/* 231 = shmget */
  	{ AS(freebsd32_clock_gettime_args), (sy_call_t *)freebsd32_clock_gettime, AUE_NULL, NULL, 0, 0, 0, SY_THR_STATIC },	/* 232 = freebsd32_clock_gettime */
@@ -450,8 +450,8 @@ Index: 9.0/sys/compat/freebsd32/freebsd32_sysent.c
  	{ 0, (sy_call_t *)sys_issetugid, AUE_ISSETUGID, NULL, 0, 0, 0, SY_THR_STATIC },	/* 253 = issetugid */
 Index: 9.0/sys/compat/freebsd32/freebsd32_systrace_args.c
 ===================================================================
---- 9.0.orig/sys/compat/freebsd32/freebsd32_systrace_args.c	2012-02-27 15:52:13.000000000 +1100
-+++ 9.0/sys/compat/freebsd32/freebsd32_systrace_args.c	2012-02-27 21:33:59.000000000 +1100
+--- 9.0.orig/sys/compat/freebsd32/freebsd32_systrace_args.c	2012-03-15 02:23:40.000000000 +1100
++++ 9.0/sys/compat/freebsd32/freebsd32_systrace_args.c	2012-03-15 02:23:54.000000000 +1100
 @@ -1196,20 +1196,41 @@ systrace_args(int sysnum, void *params, 
  		break;
  	}
@@ -547,8 +547,8 @@ Index: 9.0/sys/compat/freebsd32/freebsd32_systrace_args.c
  		case 2:
 Index: 9.0/sys/compat/freebsd32/syscalls.master
 ===================================================================
---- 9.0.orig/sys/compat/freebsd32/syscalls.master	2012-02-27 15:52:13.000000000 +1100
-+++ 9.0/sys/compat/freebsd32/syscalls.master	2012-02-27 21:33:59.000000000 +1100
+--- 9.0.orig/sys/compat/freebsd32/syscalls.master	2012-03-15 02:23:40.000000000 +1100
++++ 9.0/sys/compat/freebsd32/syscalls.master	2012-03-15 02:23:54.000000000 +1100
 @@ -440,23 +440,25 @@
  234	AUE_NULL	STD	{ int freebsd32_clock_getres(clockid_t clock_id, \
  				    struct timespec32 *tp); }
@@ -580,8 +580,8 @@ Index: 9.0/sys/compat/freebsd32/syscalls.master
  251	AUE_RFORK	NOPROTO	{ int rfork(int flags); }
 Index: 9.0/sys/conf/files
 ===================================================================
---- 9.0.orig/sys/conf/files	2012-02-27 21:33:10.000000000 +1100
-+++ 9.0/sys/conf/files	2012-02-27 21:33:58.000000000 +1100
+--- 9.0.orig/sys/conf/files	2012-03-15 02:23:52.000000000 +1100
++++ 9.0/sys/conf/files	2012-03-15 02:23:54.000000000 +1100
 @@ -2303,21 +2303,21 @@ kern/kern_cpu.c			standard
  kern/kern_cpuset.c		standard
  kern/kern_context.c		standard
@@ -607,8 +607,8 @@ Index: 9.0/sys/conf/files
  kern/kern_ktrace.c		standard
 Index: 9.0/sys/i386/linux/linux_proto.h
 ===================================================================
---- 9.0.orig/sys/i386/linux/linux_proto.h	2012-02-27 15:52:17.000000000 +1100
-+++ 9.0/sys/i386/linux/linux_proto.h	2012-02-27 21:33:59.000000000 +1100
+--- 9.0.orig/sys/i386/linux/linux_proto.h	2012-03-15 02:23:40.000000000 +1100
++++ 9.0/sys/i386/linux/linux_proto.h	2012-03-15 02:23:54.000000000 +1100
 @@ -5,20 +5,21 @@
   * $FreeBSD: releng/9.0/sys/i386/linux/linux_proto.h 220030 2011-03-26 10:59:24Z avg $
   * created from FreeBSD: head/sys/i386/linux/syscalls.master 220028 2011-03-26 10:51:56Z avg 
@@ -633,8 +633,8 @@ Index: 9.0/sys/i386/linux/linux_proto.h
  #define	PAD_(t)	(sizeof(register_t) <= sizeof(t) ? \
 Index: 9.0/sys/kern/init_sysent.c
 ===================================================================
---- 9.0.orig/sys/kern/init_sysent.c	2012-02-27 15:51:45.000000000 +1100
-+++ 9.0/sys/kern/init_sysent.c	2012-02-27 21:33:58.000000000 +1100
+--- 9.0.orig/sys/kern/init_sysent.c	2012-03-15 02:23:40.000000000 +1100
++++ 9.0/sys/kern/init_sysent.c	2012-03-15 02:23:54.000000000 +1100
 @@ -268,23 +268,23 @@ struct sysent sysent[] = {
  	{ AS(shmget_args), (sy_call_t *)lkmressys, AUE_NULL, NULL, 0, 0, 0, SY_THR_ABSENT },	/* 231 = shmget */
  	{ AS(clock_gettime_args), (sy_call_t *)sys_clock_gettime, AUE_NULL, NULL, 0, 0, SYF_CAPENABLED, SY_THR_STATIC },	/* 232 = clock_gettime */
@@ -664,8 +664,8 @@ Index: 9.0/sys/kern/init_sysent.c
  	{ 0, (sy_call_t *)sys_issetugid, AUE_ISSETUGID, NULL, 0, 0, SYF_CAPENABLED, SY_THR_STATIC },	/* 253 = issetugid */
 Index: 9.0/sys/kern/kern_ffclock.c
 ===================================================================
---- 9.0.orig/sys/kern/kern_ffclock.c	2012-02-27 21:33:28.000000000 +1100
-+++ 9.0/sys/kern/kern_ffclock.c	2012-02-27 21:33:58.000000000 +1100
+--- 9.0.orig/sys/kern/kern_ffclock.c	2012-03-15 02:23:53.000000000 +1100
++++ 9.0/sys/kern/kern_ffclock.c	2012-03-15 02:23:54.000000000 +1100
 @@ -23,28 +23,43 @@
   * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
   * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
@@ -859,8 +859,8 @@ Index: 9.0/sys/kern/kern_ffclock.c
 +#endif /* FFCLOCK */
 Index: 9.0/sys/kern/makesyscalls.sh
 ===================================================================
---- 9.0.orig/sys/kern/makesyscalls.sh	2012-02-27 15:51:45.000000000 +1100
-+++ 9.0/sys/kern/makesyscalls.sh	2012-02-27 21:33:58.000000000 +1100
+--- 9.0.orig/sys/kern/makesyscalls.sh	2012-03-15 02:23:40.000000000 +1100
++++ 9.0/sys/kern/makesyscalls.sh	2012-03-15 02:23:54.000000000 +1100
 @@ -145,20 +145,21 @@ s/\$//g
  
  		printf "\n/* The casts are bogus but will do for now. */\n" > sysent
@@ -885,8 +885,8 @@ Index: 9.0/sys/kern/makesyscalls.sh
  		printf "#define\tPADR_(t)\tPAD_(t)\n" > sysarg
 Index: 9.0/sys/kern/syscalls.c
 ===================================================================
---- 9.0.orig/sys/kern/syscalls.c	2012-02-27 15:51:45.000000000 +1100
-+++ 9.0/sys/kern/syscalls.c	2012-02-27 21:33:58.000000000 +1100
+--- 9.0.orig/sys/kern/syscalls.c	2012-03-15 02:23:40.000000000 +1100
++++ 9.0/sys/kern/syscalls.c	2012-03-15 02:23:54.000000000 +1100
 @@ -241,23 +241,23 @@ const char *syscallnames[] = {
  	"shmget",			/* 231 = shmget */
  	"clock_gettime",			/* 232 = clock_gettime */
@@ -916,8 +916,8 @@ Index: 9.0/sys/kern/syscalls.c
  	"issetugid",			/* 253 = issetugid */
 Index: 9.0/sys/kern/syscalls.master
 ===================================================================
---- 9.0.orig/sys/kern/syscalls.master	2012-02-27 15:51:45.000000000 +1100
-+++ 9.0/sys/kern/syscalls.master	2012-02-27 21:33:58.000000000 +1100
+--- 9.0.orig/sys/kern/syscalls.master	2012-03-15 02:23:40.000000000 +1100
++++ 9.0/sys/kern/syscalls.master	2012-03-15 02:23:54.000000000 +1100
 @@ -449,23 +449,25 @@
  				    struct sigevent *evp, int *timerid); }
  236	AUE_NULL	STD	{ int ktimer_delete(int timerid); }
@@ -949,8 +949,8 @@ Index: 9.0/sys/kern/syscalls.master
  251	AUE_RFORK	STD	{ int rfork(int flags); }
 Index: 9.0/sys/kern/systrace_args.c
 ===================================================================
---- 9.0.orig/sys/kern/systrace_args.c	2012-02-27 15:51:45.000000000 +1100
-+++ 9.0/sys/kern/systrace_args.c	2012-02-27 21:33:58.000000000 +1100
+--- 9.0.orig/sys/kern/systrace_args.c	2012-03-15 02:23:40.000000000 +1100
++++ 9.0/sys/kern/systrace_args.c	2012-03-15 02:23:54.000000000 +1100
 @@ -1330,20 +1330,41 @@ systrace_args(int sysnum, void *params, 
  		break;
  	}
@@ -1046,8 +1046,8 @@ Index: 9.0/sys/kern/systrace_args.c
  		break;
 Index: 9.0/sys/sys/syscall.h
 ===================================================================
---- 9.0.orig/sys/sys/syscall.h	2012-02-27 15:52:29.000000000 +1100
-+++ 9.0/sys/sys/syscall.h	2012-02-27 21:33:59.000000000 +1100
+--- 9.0.orig/sys/sys/syscall.h	2012-03-15 02:23:40.000000000 +1100
++++ 9.0/sys/sys/syscall.h	2012-03-15 02:23:54.000000000 +1100
 @@ -209,20 +209,23 @@
  #define	SYS_shmget	231
  #define	SYS_clock_gettime	232
@@ -1074,8 +1074,8 @@ Index: 9.0/sys/sys/syscall.h
  #define	SYS_getdents	272
 Index: 9.0/sys/sys/syscall.mk
 ===================================================================
---- 9.0.orig/sys/sys/syscall.mk	2012-02-27 15:52:29.000000000 +1100
-+++ 9.0/sys/sys/syscall.mk	2012-02-27 21:33:59.000000000 +1100
+--- 9.0.orig/sys/sys/syscall.mk	2012-03-15 02:23:40.000000000 +1100
++++ 9.0/sys/sys/syscall.mk	2012-03-15 02:23:54.000000000 +1100
 @@ -161,20 +161,23 @@ MIASM =  \
  	shmget.o \
  	clock_gettime.o \
@@ -1102,8 +1102,8 @@ Index: 9.0/sys/sys/syscall.mk
  	getdents.o \
 Index: 9.0/sys/sys/sysproto.h
 ===================================================================
---- 9.0.orig/sys/sys/sysproto.h	2012-02-27 15:52:29.000000000 +1100
-+++ 9.0/sys/sys/sysproto.h	2012-02-27 21:33:59.000000000 +1100
+--- 9.0.orig/sys/sys/sysproto.h	2012-03-15 02:23:40.000000000 +1100
++++ 9.0/sys/sys/sysproto.h	2012-03-15 02:23:54.000000000 +1100
 @@ -5,20 +5,21 @@
   * $FreeBSD: releng/9.0/sys/sys/sysproto.h 225618 2011-09-16 14:04:14Z kmacy $
   * created from FreeBSD: head/sys/kern/syscalls.master 224987 2011-08-18 22:51:30Z jonathan 
@@ -1206,8 +1206,8 @@ Index: 9.0/sys/sys/sysproto.h
  #define	SYS_AUE_getdents	AUE_O_GETDENTS
 Index: 9.0/sys/sys/timeffc.h
 ===================================================================
---- 9.0.orig/sys/sys/timeffc.h	2012-02-27 21:33:28.000000000 +1100
-+++ 9.0/sys/sys/timeffc.h	2012-02-27 21:33:59.000000000 +1100
+--- 9.0.orig/sys/sys/timeffc.h	2012-03-15 02:23:53.000000000 +1100
++++ 9.0/sys/sys/timeffc.h	2012-03-15 02:23:54.000000000 +1100
 @@ -157,13 +157,22 @@ void ffclock_getnanouptime(struct timesp
  void ffclock_getmicrouptime(struct timeval *tvp);
  

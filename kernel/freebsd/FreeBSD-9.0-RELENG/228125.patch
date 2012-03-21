@@ -13,10 +13,15 @@ Discussed with:	Julien Ridoux (jridoux at unimelb edu au)
 Submitted by:	Julien Ridoux (jridoux at unimelb edu au)
 
 ------------------------------------------------------------------------
-Index: sys/kern/kern_ffclock.c
+---
+ sys/kern/kern_ffclock.c |    2 --
+ sys/sys/timeffc.h       |    1 +
+ 2 files changed, 1 insertion(+), 2 deletions(-)
+
+Index: 9.0/sys/kern/kern_ffclock.c
 ===================================================================
---- a/sys/kern/kern_ffclock.c	(revision 228124)
-+++ b/sys/kern/kern_ffclock.c	(revision 228125)
+--- 9.0.orig/sys/kern/kern_ffclock.c	2012-03-15 02:23:58.000000000 +1100
++++ 9.0/sys/kern/kern_ffclock.c	2012-03-15 02:24:02.000000000 +1100
 @@ -183,22 +183,20 @@ sysctl_kern_ffclock_choice(SYSCTL_HANDLE
  	}
  	error = sbuf_finish(s);
@@ -40,10 +45,10 @@ Index: sys/kern/kern_ffclock.c
  	case SYSCLOCK_FBCK:
  		strlcpy(newclock, sysclocks[SYSCLOCK_FBCK], sizeof(newclock));
  		break;
-Index: sys/sys/timeffc.h
+Index: 9.0/sys/sys/timeffc.h
 ===================================================================
---- a/sys/sys/timeffc.h	(revision 228124)
-+++ b/sys/sys/timeffc.h	(revision 228125)
+--- 9.0.orig/sys/sys/timeffc.h	2012-03-15 02:24:01.000000000 +1100
++++ 9.0/sys/sys/timeffc.h	2012-03-15 02:24:02.000000000 +1100
 @@ -54,20 +54,21 @@ struct ffclock_estimate {
  
  #if __BSD_VISIBLE

@@ -20,6 +20,7 @@
  */
 
 
+#include <arpa/inet.h>
 
 #include <stdio.h> 
 #include <stdlib.h> 
@@ -66,7 +67,6 @@ static struct _key keys[] = {
 	{ "best_skm_rate",			CONFIG_BEST_SKM_RATE},
 	{ "offset_ratio",			CONFIG_OFFSET_RATIO},
 	{ "plocal_quality",			CONFIG_PLOCAL_QUALITY},
-	{ "start_local_phat",		CONFIG_PLOCAL},
 	{ "init_period_estimate",	CONFIG_PHAT_INIT},
 	{ "host_asymmetry",			CONFIG_ASYM_HOST},
 	{ "network_asymmetry",		CONFIG_ASYM_NET},
@@ -87,7 +87,6 @@ static struct _key keys[] = {
  */
 static char* labels_bool[] 		= { "off", "on" };
 static char* labels_verb[] 		= { "quiet", "normal", "high" };
-static char* labels_plocal[] 	= { "off", "on", "restart" };
 static char* labels_sync[] 		= { "spy", "piggy", "ntp", "ieee1588", "pps" };
 static char* labels_vm[] 		= { "none", "xen-slave", "xen-master", "vbox-slave", "vbox-master","multicast-slave","multicast-master" };
 
@@ -106,15 +105,16 @@ static struct _key temp_quality[] = {
 
 
 
-/** Initialise the structure of global data to default values.
- *  Avoid weird configuration and a basis to generate a conf file
- *   if it does not exist 
+/*
+ * Initialise the structure of global data to default values.  Avoid weird
+ * configuration and a basis to generate a conf file if it does not exist.
  */
-void config_init(struct radclock_config *conf) 
+void
+config_init(struct radclock_config *conf)
 {
 	JDEBUG
 
-	/* Init the mask for parameters */ 
+	/* Init the mask for parameters */
 	conf->mask = UPDMASK_NOUPD;
 
 	/* Runnning defaults */
@@ -122,35 +122,36 @@ void config_init(struct radclock_config *conf)
 	strcpy(conf->logfile, "");
 	strcpy(conf->radclock_version, PACKAGE_VERSION);
 	conf->server_ipc			= DEFAULT_SERVER_IPC;
-	conf->synchro_type 			= DEFAULT_SYNCHRO_TYPE;
-	conf->server_ntp 			= DEFAULT_SERVER_NTP;
-	conf->adjust_sysclock 		= DEFAULT_ADJUST_SYSCLOCK;
+	conf->synchro_type			= DEFAULT_SYNCHRO_TYPE;
+	conf->server_ntp			= DEFAULT_SERVER_NTP;
+	conf->adjust_sysclock		= DEFAULT_ADJUST_SYSCLOCK;
 	
 	/* Virtual Machine */
 	conf->virtual_machine		= DEFAULT_VIRTUAL_MACHINE;
 
-	/* Clock parameters */ 
+	/* Clock parameters */
 	conf->poll_period			= DEFAULT_NTP_POLL_PERIOD;
-	conf->start_plocal			= DEFAULT_START_PLOCAL;
-	conf->phyparam.TSLIMIT 		= TS_LIMIT_GOOD;
-	conf->phyparam.SKM_SCALE		= SKM_SCALE_GOOD;
-	conf->phyparam.RateErrBOUND 	= RATE_ERR_BOUND_GOOD;
-	conf->phyparam.BestSKMrate 	= BEST_SKM_RATE_GOOD;
-	conf->phyparam.offset_ratio 	= OFFSET_RATIO_GOOD;
+	conf->phyparam.TSLIMIT		= TS_LIMIT_GOOD;
+	conf->phyparam.SKM_SCALE	= SKM_SCALE_GOOD;
+	conf->phyparam.RateErrBOUND	= RATE_ERR_BOUND_GOOD;
+	conf->phyparam.BestSKMrate	= BEST_SKM_RATE_GOOD;
+	conf->phyparam.offset_ratio	= OFFSET_RATIO_GOOD;
 	conf->phyparam.plocal_quality	= PLOCAL_QUALITY_GOOD;
-	conf->phat_init 			= DEFAULT_PHAT_INIT;
-	conf->asym_host 			= DEFAULT_ASYM_HOST;
+	conf->phat_init				= DEFAULT_PHAT_INIT;
+	conf->asym_host				= DEFAULT_ASYM_HOST;
 	conf->asym_net				= DEFAULT_ASYM_NET;
 
-	/* Network level  */
+	/* Network level */
 	strcpy(conf->hostname, "");
 	strcpy(conf->time_server, "");
         conf->ntp_upstream_port = DEFAULT_NTP_PORT;
         conf->ntp_downstream_port = DEFAULT_NTP_PORT;
-	
-	/* Input/Output files and devices */ 
-	// Must be put to empty string not to confuse anything. Only one input must
-	// be specified at a time (either from the conf file or the command line
+
+	/*
+	 * Input/Output files and devices. Must set to empty string to not confuse
+	 * anything. Only one option can be specified at a time (either from the
+	 * conf file or the command line.
+	 */
 	strcpy(conf->network_device, "");
 	strcpy(conf->sync_in_pcap, "");
 	strcpy(conf->sync_in_ascii, "");
@@ -364,7 +365,7 @@ void write_config_file(FILE *fd, struct _key *keys, struct radclock_config *conf
 	fprintf(fd, "\n");
 	
 
-	/* Temperature */	
+	/* Temperature */
 	fprintf(fd, "# Temperature environment and hardware quality.\n");
 	fprintf(fd, "# Keywods accepted are: poor, good, excellent.\n"	);
 	fprintf(fd, "# This setting overrides temperature and hardware expert mode (default behavior). \n"	);
@@ -393,7 +394,7 @@ void write_config_file(FILE *fd, struct _key *keys, struct radclock_config *conf
 		}
 	}
 
-	/* Temperature expert mode */	
+	/* Temperature expert mode */
 	fprintf(fd, "# EXPERIMENTAL.\n");
 	fprintf(fd, "# Temperature environment and hardware quality - EXPERT.\n");
 	fprintf(fd, "# This settings are over-written by the %s keyword.\n", find_key_label(keys,CONFIG_TEMPQUALITY));
@@ -432,19 +433,6 @@ void write_config_file(FILE *fd, struct _key *keys, struct radclock_config *conf
 	}
 
 
-	
-	/* P Local */
-	fprintf(fd, "# Specify if p_local should be started.\n");
-	fprintf(fd, "# Possible values are:\n");
-	fprintf(fd, "#\ton\n");
-	fprintf(fd, "#\toff\n");
-	fprintf(fd, "#\trestart\n");
-	if (conf == NULL)
-		fprintf(fd, "%s = %s\n\n", find_key_label(keys, CONFIG_PLOCAL), labels_plocal[DEFAULT_START_PLOCAL]);
-	else
-		fprintf(fd, "%s = %s\n\n", find_key_label(keys, CONFIG_PLOCAL), labels_plocal[conf->start_plocal]);
-
-
 	/* Phat init */
 	fprintf(fd, "# For a quick start, the initial value of the period of the counter (in seconds). \n");
 	if (conf == NULL)
@@ -467,8 +455,8 @@ void write_config_file(FILE *fd, struct _key *keys, struct radclock_config *conf
 	else
 		fprintf(fd, "%s = %lf\n\n", find_key_label(keys, CONFIG_ASYM_NET), conf->asym_net);
 
-	
-		
+
+
 	fprintf(fd, "\n\n\n");
 	fprintf(fd, "#----------------------------------------------------------------------------#\n");
 	fprintf(fd, "# Input / Output parameters\n");
@@ -594,7 +582,7 @@ int check_valid_option(char* value, char* labels[], int label_sz)
 	return -1;
 }
 
-	
+
 
 
 
@@ -865,7 +853,7 @@ switch (codekey) {
 		for (;;) {
 			if (quality->keytype == CONFIG_QUALITY_UNKWN) {
 				verbose(LOG_ERR, "The quality parameter given is unknown");
-				return 0;	
+				return 0;
 			}
 			if (strcmp(quality->label, value) == 0) {
 				iqual = quality->keytype;
@@ -911,24 +899,6 @@ switch (codekey) {
 				verbose(LOG_ERR, "Quality parameter given is unknown");
 				break;
 		}	
-		break;
-	
-
-	case CONFIG_PLOCAL:
-		// If value specified on the command line
-		if ( HAS_UPDATE(*mask, UPDMASK_PLOCAL) ) 
-			break;
-		ival = check_valid_option(value, labels_plocal, 3);
-		// Indicate changed value
-		if ( conf->start_plocal != ival )
-			SET_UPDATE(*mask, UPDMASK_PLOCAL);
-		if ( (ival<0) || (ival>2)) {
-			verbose(LOG_WARNING, "start_local_phat parameter incorrect. Fall back to default.");
-			conf->start_plocal = DEFAULT_START_PLOCAL;
-		}
-		else {
-			conf->start_plocal = ival;
-		}
 		break;
 
 
@@ -1217,7 +1187,6 @@ void config_print(int level, struct radclock_config *conf)
 	verbose(level, "BestSKMrate          : %.9lf", conf->phyparam.BestSKMrate);
 	verbose(level, "offset_ratio         : %d", conf->phyparam.offset_ratio);
 	verbose(level, "plocal_quality       : %.9lf", conf->phyparam.plocal_quality);
-	verbose(level, "Using plocal         : %s", labels_plocal[conf->start_plocal]);
 	verbose(level, "Initial phat         : %lg", conf->phat_init);
 	verbose(level, "Host asymmetry       : %lf", conf->asym_host);
 	verbose(level, "Network asymmetry    : %lf", conf->asym_net);
