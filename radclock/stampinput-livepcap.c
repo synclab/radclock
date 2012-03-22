@@ -241,14 +241,16 @@ set_vcount_in_sll(radpcap_packet_t *packet, vcounter_t vcount)
  * replaced by a Linux SLL header and the vcount is stored in its address field.
  */
 static int
-get_packet_livepcap(struct radclock *handle, void *userdata,
+get_packet_livepcap(struct radclock *clock, void *userdata,
 		radpcap_packet_t **packet_p)
 {
 	struct livepcap_data *data;
 	pcap_dumper_t *traceoutput;
 	radpcap_packet_t *packet;
+	struct pcap_pkthdr *pcap_hdr;
 	vcounter_t vcount;
 	vcounter_t vcount_debug;
+	long double time;
 	int ret;
 
 	JDEBUG
@@ -260,7 +262,7 @@ get_packet_livepcap(struct radclock *handle, void *userdata,
 	packet = *packet_p;
 
 	/* Retrieve the next packet from the raw data buffer */
-	ret = deliver_rawdata_ntp(handle, packet, &vcount);
+	ret = deliver_rawdata_ntp(clock, packet, &vcount);
 	if (ret < 0) {
 		/* Raw data buffer is empty */
 		return (ret);
@@ -277,8 +279,17 @@ get_packet_livepcap(struct radclock *handle, void *userdata,
 	assert(get_vcount(packet, &vcount_debug) == 0);
 	assert(vcount == vcount_debug);
 
-	/* Store interface address in packet */
-	packet->ss_if = data->ss_if;
+#ifdef WITH_RADKERNEL_FBSD
+	// TODO: messy stuff again, should actually test if the timestamp format is
+	// RAW_COUNTER, that would clean things up pretty well
+	if (clock->kernel_version == 2) {
+		verbose(LOG_ERR, "Create pcap timestamp from RADclock !! CHECK ME");
+		counter_to_time(clock, &vcount, &time);
+		pcap_hdr = (struct pcap_pkthdr *)packet->header;
+		pcap_hdr->ts.tv_sec = (time_t) time;
+		pcap_hdr->ts.tv_usec = (suseconds_t)(1e6 * (time - (time_t)time));
+	}	
+#endif
 
 	/* Write out raw data if -w option active in main program */
 	if (traceoutput) {
@@ -288,6 +299,10 @@ get_packet_livepcap(struct radclock *handle, void *userdata,
 		if (pcap_dump_flush(traceoutput) < 0)
 			verbose(LOG_ERR, "Error dumping packet");
 	}
+
+	/* Store interface address in packet */
+	packet->ss_if = data->ss_if;
+
 	*packet_p = packet;
 
 	/* Return packet quality */
@@ -621,6 +636,7 @@ livepcapstamp_init(struct radclock *clock, struct stampsource *source)
 	radclock_tsmode_t capture_mode;
 	pcap_t *p_handle_traceout;
 	struct radclock_config *conf;
+	int err;
 
 	conf = clock->conf;
 
@@ -664,8 +680,21 @@ livepcapstamp_init(struct radclock *clock, struct stampsource *source)
 	// TODO move somewhere else or don't use the library
 	// if bsd-kernel version < 2 then SYSCLOCK
 	// else RADCLOCK
-	if (radclock_set_tsmode(clock, LIVEPCAP_DATA(source)->live_input,
-			RADCLOCK_TSMODE_RADCLOCK)) {
+	// Distinguish between clock and format, v2 in BSD makes timestamps be a
+	// mess 
+	// TODO this is messy
+#ifdef WITH_RADKERNEL_FBSD
+	if (clock->kernel_version == 2)
+		err = radclock_set_tsmode(clock, LIVEPCAP_DATA(source)->live_input,
+			RADCLOCK_TSMODE_RADCLOCK);
+	else
+		err = radclock_set_tsmode(clock, LIVEPCAP_DATA(source)->live_input,
+			RADCLOCK_TSMODE_SYSCLOCK);
+#else
+		err = radclock_set_tsmode(clock, LIVEPCAP_DATA(source)->live_input,
+			RADCLOCK_TSMODE_SYSCLOCK);
+#endif
+	if (err) {
 		verbose(LOG_WARNING, "Could not set RADclock timestamping mode");
 		return (-1);
 	}
