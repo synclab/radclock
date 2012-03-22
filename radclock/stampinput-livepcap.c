@@ -2,27 +2,21 @@
  * Copyright (C) 2006-2011 Julien Ridoux <julien@synclab.org>
  *
  * This file is part of the radclock program.
- * 
+ *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
  * 02110-1301, USA.
- */
-
-
-/**
- * A stamp source for reading from live input
- * Also has the ability to create output
  */
 
 #include <sys/types.h>
@@ -80,7 +74,6 @@ struct livepcap_data
 #define LIVEPCAP_DATA(x) ((struct livepcap_data *)(x->priv_data))
 
 
-
 /*
  * Present a somewhat mac layer independent view of packets to higher layers.
  * This serves several purposes:
@@ -108,12 +101,12 @@ insert_sll_header(radpcap_packet_t *packet)
 	/* BSD Loopback interface */
 	// TODO a bit ugly, but good enough for now on
 	case DLT_NULL:
-		switch (*(uint32_t *)packet->payload) { 
+		switch (*(uint32_t *)packet->payload) {
 		case AF_INET:
-			ethertype = ETHERTYPE_IP; 
+			ethertype = ETHERTYPE_IP;
 			break;
 		case AF_INET6:
-			ethertype = ETHERTYPE_IPV6; 
+			ethertype = ETHERTYPE_IPV6;
 			break;
 		default:
 			fprintf(stderr, "Non IP protocol on DLT_NULL\n");
@@ -170,7 +163,7 @@ insert_sll_header(radpcap_packet_t *packet)
 	 * Create the new frame using the SLL header. It would have been more
 	 * efficient to avoid copying data, but ethernet header smaller than SLL
 	 * header. Simpler to maintain continuous memory block with same assumptions
-	 * as what has been received from libpcap. 
+	 * as what has been received from libpcap.
 	 */
 	tmpbuffer = (char *) malloc(RADPCAP_PACKET_BUFSIZE);
 	JDEBUG_MEMORY(JDBG_MALLOC, tmpbuffer);
@@ -209,8 +202,8 @@ insert_sll_header(radpcap_packet_t *packet)
 }
 
 
-/* 
- * Store the vcount value in place of the MAC adresses in the Linux SLL header 
+/*
+ * Store the vcount value in place of the MAC adresses in the Linux SLL header
  */
 void
 set_vcount_in_sll(radpcap_packet_t *packet, vcounter_t vcount)
@@ -223,19 +216,19 @@ set_vcount_in_sll(radpcap_packet_t *packet, vcounter_t vcount)
 	network_vcount = htonll(vcount);
 	assert(sizeof(vcounter_t) == sizeof(char)*8);
 
-	/* Hijack the address field to store the vcount */ 
+	/* Hijack the address field to store the vcount */
 	linux_sll_header_t *hdr = (linux_sll_header_t*) packet->payload;
 	memcpy(hdr->addr, &network_vcount, sizeof(network_vcount));
 	hdr->halen = htons(8);
 }
 
 
-/* 
+/*
  * This is the callback passed to get_bidir_stamp().
  * It takes a radpcap_packet_t and fills this structure with the actual packet
  * read from the live interface.
- * The first trick here is to use radpcap_get_packet() that actually retrieves 
- * the BPF header, the packet captured and the vcount value padded in between. 
+ * The first trick here is to use radpcap_get_packet() that actually retrieves
+ * the BPF header, the packet captured and the vcount value padded in between.
  * The second trick, is to write all data retrieved to the output raw file (if
  * any) before passing the data to the sync algo. The link layer header is
  * replaced by a Linux SLL header and the vcount is stored in its address field.
@@ -398,9 +391,9 @@ get_interface(char* if_name, char* ip_addr)
 			if (dev->ifa_addr->sa_family == AF_INET) {
 				addr = (struct sockaddr_in *)dev->ifa_addr;
 				if ( (addr->sin_addr.s_addr != (in_addr_t) 0x00000000) /* 0.0.0.0 */
-				  && (addr->sin_addr.s_addr != (in_addr_t) 0x0100007f) /* 127.0.0.1 */ 
-				  && (addr->sin_addr.s_addr != (in_addr_t) 0x0101007f) /* 127.0.1.1 */ 
-				  && (addr->sin_addr.s_addr != (in_addr_t) 0xffffffff) /* 255.255.255.255 */ 
+				  && (addr->sin_addr.s_addr != (in_addr_t) 0x0100007f) /* 127.0.0.1 */
+				  && (addr->sin_addr.s_addr != (in_addr_t) 0x0101007f) /* 127.0.1.1 */
+				  && (addr->sin_addr.s_addr != (in_addr_t) 0xffffffff) /* 255.255.255.255 */
 				  ) {
 					strcpy(ip_addr, inet_ntoa(addr->sin_addr));
 					strcpy(if_name, dev->ifa_name);
@@ -425,7 +418,7 @@ get_interface(char* if_name, char* ip_addr)
 
 
 /** Get the IP address of the localhost */
-int get_address_by_name(char* addr, char* hostname) 
+int get_address_by_name(char* addr, char* hostname)
 {
 	struct hostent *he;
 	int lhost = 150;
@@ -462,8 +455,8 @@ int get_address_by_name(char* addr, char* hostname)
 	while(p_addr[i] != NULL) {
 		memcpy(&(s->sin_addr.s_addr), p_addr[i], he->h_length);
 		if ( (strcmp(inet_ntoa(s->sin_addr), "127.0.0.1") != 0)
-		  && (strcmp(inet_ntoa(s->sin_addr), "127.0.1.1") != 0) 
-		  && (strcmp(inet_ntoa(s->sin_addr), "0.0.0.0") != 0)) 
+		  && (strcmp(inet_ntoa(s->sin_addr), "127.0.1.1") != 0)
+		  && (strcmp(inet_ntoa(s->sin_addr), "0.0.0.0") != 0))
 		{
 			verbose(LOG_NOTICE, "Found address %s", inet_ntoa(s->sin_addr));
 			found = 1;
@@ -492,9 +485,9 @@ int get_address_by_name(char* addr, char* hostname)
 
 
 
-/** Create a BPF filter expression 
- * Filter appends additional rules passed in pattern qualifier 
- * (port number, remote host name, etc) 
+/** Create a BPF filter expression
+ * Filter appends additional rules passed in pattern qualifier
+ * (port number, remote host name, etc)
  */
 // XXX TODO: should accept IP addresses only, and make it IPv6 friendly
 int build_BPFfilter(struct radclock *handle, char *fltstr, int maxsize, char *hostname, char *ntp_host)
@@ -513,7 +506,7 @@ int build_BPFfilter(struct radclock *handle, char *fltstr, int maxsize, char *ho
 	else
 		sprintf(ntp_filter, "and dst host %s) or (src host %s and", ntp_host, ntp_host);
 	
-	strsize = snprintf(fltstr, maxsize, 
+	strsize = snprintf(fltstr, maxsize,
 			"(src host %s and dst port %d %s dst host %s and src port %d)",
 			hostname,
                         handle->conf->ntp_upstream_port,
@@ -626,6 +619,7 @@ pcap_err:
 
 
 
+
 static int
 livepcapstamp_init(struct radclock *clock, struct stampsource *source)
 {
@@ -681,7 +675,7 @@ livepcapstamp_init(struct radclock *clock, struct stampsource *source)
 	// if bsd-kernel version < 2 then SYSCLOCK
 	// else RADCLOCK
 	// Distinguish between clock and format, v2 in BSD makes timestamps be a
-	// mess 
+	// mess
 	// TODO this is messy
 #ifdef WITH_RADKERNEL_FBSD
 	if (clock->kernel_version == 2)
