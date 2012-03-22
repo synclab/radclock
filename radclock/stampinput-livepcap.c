@@ -114,6 +114,7 @@ insert_sll_header(radpcap_packet_t *packet)
 			break;
 		case AF_INET6:
 			ethertype = ETHERTYPE_IPV6; 
+			break;
 		default:
 			fprintf(stderr, "Non IP protocol on DLT_NULL\n");
 			return (1);
@@ -181,10 +182,10 @@ insert_sll_header(radpcap_packet_t *packet)
 	sllh = (linux_sll_header_t *) (tmpbuffer + sizeof(struct pcap_pkthdr));
 	sllh->pkttype = htons(LINUX_SLL_OTHERHOST);
 	sllh->hatype = htons(ARPHRD_ETHER);
-	sllh->protocol = htons(ethertype); 
+	sllh->protocol = htons(ethertype);
 
-	/* Copy what is encapsulated in ethernet */ 
-	pcaph = (struct pcap_pkthdr *)packet->header; 
+	/* Copy what is encapsulated in ethernet */
+	pcaph = (struct pcap_pkthdr *)packet->header;
 	memcpy((char *)sllh + sizeof(linux_sll_header_t), (char *)eh + etherlen,
 			pcaph->caplen - etherlen);
 	
@@ -200,8 +201,10 @@ insert_sll_header(radpcap_packet_t *packet)
 	packet->size	= packet->size + sizeof(linux_sll_header_t) - etherlen;
 	
 	/* Update pcap header */
+	pcaph = (struct pcap_pkthdr *)packet->header;
 	pcaph->caplen = pcaph->caplen + sizeof(linux_sll_header_t) - etherlen;
 	pcaph->len = pcaph->len + sizeof(linux_sll_header_t) - etherlen;
+
 	return (0);
 }
 
