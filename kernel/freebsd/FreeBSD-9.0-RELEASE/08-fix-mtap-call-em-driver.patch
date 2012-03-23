@@ -5,14 +5,14 @@ Useful to measure the in-kernel latency of a given counter. Very dirty.
 
 
 ---
- sys/dev/e1000/if_em.c |   36 +++++++++++++++++++++++++++++-------
- 1 file changed, 29 insertions(+), 7 deletions(-)
+ sys/dev/e1000/if_em.c |   35 ++++++++++++++++++++++++++++-------
+ 1 file changed, 28 insertions(+), 7 deletions(-)
 
-Index: head/sys/dev/e1000/if_em.c
+Index: src/sys/dev/e1000/if_em.c
 ===================================================================
---- head.orig/sys/dev/e1000/if_em.c	2011-09-22 11:46:35.000000000 +1000
-+++ head/sys/dev/e1000/if_em.c	2011-09-22 12:36:11.000000000 +1000
-@@ -244,21 +244,24 @@ static void	em_transmit_checksum_setup(s
+--- src.orig/sys/dev/e1000/if_em.c	2012-03-23 14:51:52.000000000 +1100
++++ src/sys/dev/e1000/if_em.c	2012-03-23 14:51:54.506054328 +1100
+@@ -244,21 +244,23 @@ static void	em_transmit_checksum_setup(s
  static void	em_tso_setup(struct tx_ring *, struct mbuf *, int, struct ip *,
  		    struct tcphdr *, u32 *, u32 *);
  static void	em_set_promisc(struct adapter *);
@@ -24,8 +24,7 @@ Index: head/sys/dev/e1000/if_em.c
  static void	em_unregister_vlan(void *, struct ifnet *, u16);
  static void	em_setup_vlan_hw_support(struct adapter *);
 -static int	em_xmit(struct tx_ring *, struct mbuf **);
-+
-+// jrid
++// FFCLOCK
 +//static int	em_xmit(struct tx_ring *, struct mbuf **);
 +static int	em_xmit(struct tx_ring *, struct mbuf **, struct ifnet *);
  static int	em_dma_malloc(struct adapter *, bus_size_t,
@@ -38,7 +37,7 @@ Index: head/sys/dev/e1000/if_em.c
  static int 	em_is_valid_ether_addr(u8 *);
  static int	em_sysctl_int_delay(SYSCTL_HANDLER_ARGS);
  static void	em_add_int_delay_sysctl(struct adapter *, const char *,
-@@ -879,28 +882,31 @@ em_mq_start_locked(struct ifnet *ifp, st
+@@ -879,28 +881,31 @@ em_mq_start_locked(struct ifnet *ifp, st
  		next = drbr_dequeue(ifp, txr->br);
  	} else if (drbr_needs_enqueue(ifp, txr->br)) {
  		if ((err = drbr_enqueue(ifp, txr->br, m)) != 0)
@@ -50,7 +49,7 @@ Index: head/sys/dev/e1000/if_em.c
  	/* Process the queue */
  	while (next != NULL) {
 -		if ((err = em_xmit(txr, &next)) != 0) {
-+// jrid
++// FFCLOCK
 +//		if ((err = em_xmit(txr, &next)) != 0) {
 +		if ((err = em_xmit(txr, &next, ifp)) != 0) {
                          if (next != NULL)
@@ -60,7 +59,7 @@ Index: head/sys/dev/e1000/if_em.c
  		enq++;
  		drbr_stats_update(ifp, next->m_pkthdr.len, next->m_flags);
 -		ETHER_BPF_MTAP(ifp, next);
-+// jrid
++// FFCLOCK
 +//		ETHER_BPF_MTAP(ifp, next);
  		if ((ifp->if_drv_flags & IFF_DRV_RUNNING) == 0)
                          break;
@@ -72,7 +71,7 @@ Index: head/sys/dev/e1000/if_em.c
  	}
  
  	if (enq > 0) {
-@@ -974,30 +980,37 @@ em_start_locked(struct ifnet *ifp, struc
+@@ -974,30 +979,37 @@ em_start_locked(struct ifnet *ifp, struc
  			ifp->if_drv_flags |= IFF_DRV_OACTIVE;
  			break;
  		}
@@ -84,7 +83,7 @@ Index: head/sys/dev/e1000/if_em.c
  		 *  NULL on failure.  In that event, we can't requeue.
  		 */
 -		if (em_xmit(txr, &m_head)) {
-+// jrid
++// FFCLOCK
 +// To be able to call BPF_MTAP from em_xmit
 +//		if (em_xmit(txr, &m_head)) {
 +		if (em_xmit(txr, &m_head, ifp)) {
@@ -97,7 +96,7 @@ Index: head/sys/dev/e1000/if_em.c
  
  		/* Send a copy of the frame to the BPF listener */
 -		ETHER_BPF_MTAP(ifp, m_head);
-+// jrid
++// FFCLOCK
 +// This call after em_xmit() does not preserve causality
 +// If called before em_xmit() (which can fail) takes the risk to send 2 copies of the
 +// same packet. Need to move it into em_xmit()
@@ -112,7 +111,7 @@ Index: head/sys/dev/e1000/if_em.c
  }
  
  static void
-@@ -1768,22 +1781,25 @@ em_media_change(struct ifnet *ifp)
+@@ -1768,22 +1780,25 @@ em_media_change(struct ifnet *ifp)
  	return (0);
  }
  
@@ -123,7 +122,7 @@ Index: head/sys/dev/e1000/if_em.c
   *  return 0 on success, positive on failure
   **********************************************************************/
  
-+// jrid
++// FFCLOCK
 +//static int
 +//em_xmit(struct tx_ring *txr, struct mbuf **m_headp)
  static int
@@ -139,7 +138,7 @@ Index: head/sys/dev/e1000/if_em.c
  	struct ether_header	*eh;
  	struct ip		*ip = NULL;
  	struct tcphdr		*tp = NULL;
-@@ -2063,20 +2079,23 @@ retry:
+@@ -2063,20 +2078,23 @@ retry:
  	    htole32(E1000_TXD_CMD_EOP | E1000_TXD_CMD_RS);
  	/*
  	 * Keep track in the first buffer which
@@ -150,7 +149,7 @@ Index: head/sys/dev/e1000/if_em.c
  	/* Update the watchdog time early and often */
  	txr->watchdog_time = ticks;
  
-+// jrid
++// FFCLOCK
 +// This cannot fail
 +		ETHER_BPF_MTAP(ifp, m_head);
  	/*
@@ -163,7 +162,7 @@ Index: head/sys/dev/e1000/if_em.c
  
  	return (0);
  }
-@@ -4123,21 +4142,24 @@ em_initialize_receive_unit(struct adapte
+@@ -4123,21 +4141,24 @@ em_initialize_receive_unit(struct adapte
  	 */
  	rctl = E1000_READ_REG(hw, E1000_RCTL);
  	E1000_WRITE_REG(hw, E1000_RCTL, rctl & ~E1000_RCTL_EN);
@@ -175,7 +174,7 @@ Index: head/sys/dev/e1000/if_em.c
  	 * as DEFAULT_ITR = 1/(MAX_INTS_PER_SEC * 256ns)
  	 */
 -	E1000_WRITE_REG(hw, E1000_ITR, DEFAULT_ITR);
-+// jrid
++// FFCLOCK
 +// Disable any type of interrupt throttling
 +//	E1000_WRITE_REG(hw, E1000_ITR, DEFAULT_ITR);
 +	E1000_WRITE_REG(hw, E1000_ITR, 0);

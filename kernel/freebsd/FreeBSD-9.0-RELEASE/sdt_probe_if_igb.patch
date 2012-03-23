@@ -1,0 +1,182 @@
+---
+ sys/dev/e1000/if_em.c  |   21 ++++++++++++---------
+ sys/dev/e1000/if_igb.c |   19 +++++++++++++++++++
+ 2 files changed, 31 insertions(+), 9 deletions(-)
+
+Index: src/sys/dev/e1000/if_em.c
+===================================================================
+--- src.orig/sys/dev/e1000/if_em.c	2012-03-22 10:45:08.000000000 +1100
++++ src/sys/dev/e1000/if_em.c	2012-03-22 11:15:20.000000000 +1100
+@@ -92,39 +92,41 @@
+ /*********************************************************************
+  *  Set this to one to display debug statistics
+  *********************************************************************/
+ int	em_display_debug_stats = 0;
+ 
+ /*********************************************************************
+  *  Driver version:
+  *********************************************************************/
+ char em_driver_version[] = "7.2.3";
+ 
++//ben
++//DTrace probes define
++SDT_PROVIDER_DEFINE(timestamp);
++SDT_PROBE_DEFINE(timestamp, if_em, em_rxeof, stamp, stamp);
++SDT_PROBE_ARGTYPE(timestamp, if_em, em_rxeof, stamp, 0, "const char *");
++
++
++SDT_PROBE_DEFINE(timestamp, if_em, em_xmit, stamp, stamp);
++SDT_PROBE_ARGTYPE(timestamp, if_em, em_xmit, stamp, 0, "const char *");
++
++
+ /*********************************************************************
+  *  PCI Device ID Table
+  *
+  *  Used by probe to select devices to load on
+  *  Last field stores an index into e1000_strings
+  *  Last entry must be all 0s
+  *
+  *  { Vendor ID, Device ID, SubVendor ID, SubDevice ID, String Index }
+  *********************************************************************/
+ 
+-SDT_PROVIDER_DEFINE(timestamp);
+-
+-SDT_PROBE_DEFINE(timestamp, if_em, em_rxeof, stamp, stamp);
+-SDT_PROBE_ARGTYPE(timestamp, if_em, em_rxeof, stamp, 0, "const char *");
+-
+-
+-SDT_PROBE_DEFINE(timestamp, if_em, em_xmit, stamp, stamp);
+-SDT_PROBE_ARGTYPE(timestamp, if_em, em_xmit, stamp, 0, "const char *");
+-
+ static em_vendor_info_t em_vendor_info_array[] =
+ {
+ 	/* Intel(R) PRO/1000 Network Connection */
+ 	{ 0x8086, E1000_DEV_ID_82571EB_COPPER,	PCI_ANY_ID, PCI_ANY_ID, 0},
+ 	{ 0x8086, E1000_DEV_ID_82571EB_FIBER,	PCI_ANY_ID, PCI_ANY_ID, 0},
+ 	{ 0x8086, E1000_DEV_ID_82571EB_SERDES,	PCI_ANY_ID, PCI_ANY_ID, 0},
+ 	{ 0x8086, E1000_DEV_ID_82571EB_SERDES_DUAL,
+ 						PCI_ANY_ID, PCI_ANY_ID, 0},
+ 	{ 0x8086, E1000_DEV_ID_82571EB_SERDES_QUAD,
+ 						PCI_ANY_ID, PCI_ANY_ID, 0},
+@@ -4363,20 +4365,21 @@ next_desc:
+ 		cur->status = 0;
+ 		++rxdone;	/* cumulative for POLL */
+ 		++processed;
+ 
+ 		/* Advance our pointers to the next descriptor. */
+ 		if (++i == adapter->num_rx_desc)
+ 			i = 0;
+ 
+ 		/* Send to the stack */
+ 		if (sendmp != NULL) {
++//ben
+ 			SDT_PROBE(timestamp, if_em, em_rxeof, stamp, sendmp, 0, 0, 0, 0);
+ 			rxr->next_to_check = i;
+ 			EM_RX_UNLOCK(rxr);
+ 			(*ifp->if_input)(ifp, sendmp);
+ 			EM_RX_LOCK(rxr);
+ 			i = rxr->next_to_check;
+ 		}
+ 
+ 		/* Only refresh mbufs every 8 descriptors */
+ 		if (processed == 8) {
+Index: src/sys/dev/e1000/if_igb.c
+===================================================================
+--- src.orig/sys/dev/e1000/if_igb.c	2012-03-22 10:45:12.000000000 +1100
++++ src/sys/dev/e1000/if_igb.c	2012-03-22 11:15:01.000000000 +1100
+@@ -81,34 +81,50 @@
+ #include <netinet/ip6.h>
+ #include <netinet/tcp.h>
+ #include <netinet/tcp_lro.h>
+ #include <netinet/udp.h>
+ 
+ #include <machine/in_cksum.h>
+ #include <dev/led/led.h>
+ #include <dev/pci/pcivar.h>
+ #include <dev/pci/pcireg.h>
+ 
++#include "opt_kdtrace.h"
++#include <sys/kernel.h>
++#include <sys/sdt.h>
++
+ #include "e1000_api.h"
+ #include "e1000_82575.h"
+ #include "if_igb.h"
+ 
+ /*********************************************************************
+  *  Set this to one to display debug statistics
+  *********************************************************************/
+ int	igb_display_debug_stats = 0;
+ 
+ /*********************************************************************
+  *  Driver version:
+  *********************************************************************/
+ char igb_driver_version[] = "version - 2.2.5";
+ 
++//ben
++//DTrace probes define
++SDT_PROVIDER_DECLARE(timestamp);
++
++SDT_PROBE_DEFINE(timestamp, if_igb, igb_rxeof, stamp, stamp);
++SDT_PROBE_ARGTYPE(timestamp, if_igb, igb_rxeof, stamp, 0, "const char *");
++
++
++SDT_PROBE_DEFINE(timestamp, if_igb, igb_xmit, stamp, stamp);
++SDT_PROBE_ARGTYPE(timestamp, if_igb, igb_xmit, stamp, 0, "const char *");
++
++
+ 
+ /*********************************************************************
+  *  PCI Device ID Table
+  *
+  *  Used by probe to select devices to load on
+  *  Last field stores an index into e1000_strings
+  *  Last entry must be all 0s
+  *
+  *  { Vendor ID, Device ID, SubVendor ID, SubDevice ID, String Index }
+  *********************************************************************/
+@@ -1883,20 +1899,21 @@ igb_xmit(struct tx_ring *txr, struct mbu
+ 
+ //ben
+ 	ETHER_BPF_MTAP(ifp, m_head);
+ 
+ 	/*
+ 	 * Advance the Transmit Descriptor Tail (TDT), this tells the E1000
+ 	 * that this frame is available to transmit.
+ 	 */
+ 	bus_dmamap_sync(txr->txdma.dma_tag, txr->txdma.dma_map,
+ 	    BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
++	SDT_PROBE(timestamp, if_igb, igb_xmit, stamp, m_head, 0, 0, 0, 0);
+ 	E1000_WRITE_REG(&adapter->hw, E1000_TDT(txr->me), i);
+ 	++txr->tx_packets;
+ 
+ 	return (0);
+ 
+ }
+ 
+ static void
+ igb_set_promisc(struct adapter *adapter)
+ {
+@@ -4586,20 +4603,22 @@ next_desc:
+ 		bus_dmamap_sync(rxr->rxdma.dma_tag, rxr->rxdma.dma_map,
+ 		    BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
+ 
+ 		/* Advance our pointers to the next descriptor. */
+ 		if (++i == adapter->num_rx_desc)
+ 			i = 0;
+ 		/*
+ 		** Send to the stack or LRO
+ 		*/
+ 		if (sendmp != NULL) {
++//ben
++			SDT_PROBE(timestamp, if_igb, igb_rxeof, stamp, sendmp, 0, 0, 0, 0);
+ 			rxr->next_to_check = i;
+ 			igb_rx_input(rxr, ifp, sendmp, ptype);
+ 			i = rxr->next_to_check;
+ 			rxdone++;
+ 		}
+ 
+ 		/* Every 8 descriptors we go to refresh mbufs */
+ 		if (processed == 8) {
+                         igb_refresh_mbufs(rxr, i);
+                         processed = 0;

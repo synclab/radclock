@@ -1,0 +1,153 @@
+---
+ sys/dev/e1000/if_igb.c |   25 +++++++++++++++++++------
+ 1 file changed, 19 insertions(+), 6 deletions(-)
+
+Index: src/sys/dev/e1000/if_igb.c
+===================================================================
+--- src.orig/sys/dev/e1000/if_igb.c	2012-03-23 14:51:51.000000000 +1100
++++ src/sys/dev/e1000/if_igb.c	2012-03-23 14:52:01.188057188 +1100
+@@ -230,21 +230,23 @@ static bool	igb_tso_setup(struct tx_ring
+ static void	igb_set_promisc(struct adapter *);
+ static void	igb_disable_promisc(struct adapter *);
+ static void	igb_set_multi(struct adapter *);
+ static void	igb_update_link_status(struct adapter *);
+ static void	igb_refresh_mbufs(struct rx_ring *, int);
+ 
+ static void	igb_register_vlan(void *, struct ifnet *, u16);
+ static void	igb_unregister_vlan(void *, struct ifnet *, u16);
+ static void	igb_setup_vlan_hw_support(struct adapter *);
+ 
+-static int	igb_xmit(struct tx_ring *, struct mbuf **);
++//ben
++//static int	igb_xmit(struct tx_ring *, struct mbuf **);
++static int	igb_xmit(struct tx_ring *, struct mbuf **, struct ifnet *);
+ static int	igb_dma_malloc(struct adapter *, bus_size_t,
+ 		    struct igb_dma_alloc *, int);
+ static void	igb_dma_free(struct adapter *, struct igb_dma_alloc *);
+ static int	igb_sysctl_nvm_info(SYSCTL_HANDLER_ARGS);
+ static void	igb_print_nvm_info(struct adapter *);
+ static int 	igb_is_valid_ether_addr(u8 *);
+ static void     igb_add_hw_stats(struct adapter *);
+ 
+ static void	igb_vf_init_stats(struct adapter *);
+ static void	igb_update_vf_stats_counters(struct adapter *);
+@@ -861,30 +863,33 @@ igb_start_locked(struct tx_ring *txr, st
+ 			ifp->if_drv_flags |= IFF_DRV_OACTIVE;
+ 			break;
+ 		}
+ 		IFQ_DRV_DEQUEUE(&ifp->if_snd, m_head);
+ 		if (m_head == NULL)
+ 			break;
+ 		/*
+ 		 *  Encapsulation can modify our pointer, and or make it
+ 		 *  NULL on failure.  In that event, we can't requeue.
+ 		 */
+-		if (igb_xmit(txr, &m_head)) {
++//ben
++//		if (igb_xmit(txr, &m_head)) {
++		if (igb_xmit(txr, &m_head, ifp)) {
+ 			if (m_head == NULL)
+ 				break;
+ 			ifp->if_drv_flags |= IFF_DRV_OACTIVE;
+ 			IFQ_DRV_PREPEND(&ifp->if_snd, m_head);
+ 			break;
+ 		}
+ 
+ 		/* Send a copy of the frame to the BPF listener */
+-		ETHER_BPF_MTAP(ifp, m_head);
++//ben
++//		ETHER_BPF_MTAP(ifp, m_head);
+ 
+ 		/* Set watchdog on */
+ 		txr->watchdog_time = ticks;
+ 		txr->queue_status = IGB_QUEUE_WORKING;
+ 	}
+ }
+  
+ /*
+  * Legacy TX driver routine, called from the
+  * stack, always uses tx[0], and spins for it.
+@@ -956,28 +961,31 @@ igb_mq_start_locked(struct ifnet *ifp, s
+ 		next = drbr_dequeue(ifp, txr->br);
+ 	} else if (drbr_needs_enqueue(ifp, txr->br)) {
+ 		if ((err = drbr_enqueue(ifp, txr->br, m)) != 0)
+ 			return (err);
+ 		next = drbr_dequeue(ifp, txr->br);
+ 	} else
+ 		next = m;
+ 
+ 	/* Process the queue */
+ 	while (next != NULL) {
+-		if ((err = igb_xmit(txr, &next)) != 0) {
++//ben
++//		if ((err = igb_xmit(txr, &next)) != 0) {
++		if ((err = igb_xmit(txr, &next, ifp)) != 0) {
+ 			if (next != NULL)
+ 				err = drbr_enqueue(ifp, txr->br, next);
+ 			break;
+ 		}
+ 		enq++;
+ 		drbr_stats_update(ifp, next->m_pkthdr.len, next->m_flags);
+-		ETHER_BPF_MTAP(ifp, next);
++//ben
++//		ETHER_BPF_MTAP(ifp, next);
+ 		if ((ifp->if_drv_flags & IFF_DRV_RUNNING) == 0)
+ 			break;
+ 		if (txr->tx_avail <= IGB_TX_CLEANUP_THRESHOLD)
+ 			igb_txeof(txr);
+ 		if (txr->tx_avail <= IGB_MAX_SCATTER) {
+ 			ifp->if_drv_flags |= IFF_DRV_OACTIVE;
+ 			break;
+ 		}
+ 		next = drbr_dequeue(ifp, txr->br);
+ 	}
+@@ -1715,22 +1723,24 @@ igb_media_change(struct ifnet *ifp)
+ }
+ 
+ 
+ /*********************************************************************
+  *
+  *  This routine maps the mbufs to Advanced TX descriptors.
+  *  used by the 82575 adapter.
+  *  
+  **********************************************************************/
+ 
++//ben
+ static int
+-igb_xmit(struct tx_ring *txr, struct mbuf **m_headp)
++//igb_xmit(struct tx_ring *txr, struct mbuf **m_headp)
++igb_xmit(struct tx_ring *txr, struct mbuf **m_headp, struct ifnet *ifp)
+ {
+ 	struct adapter		*adapter = txr->adapter;
+ 	bus_dma_segment_t	segs[IGB_MAX_SCATTER];
+ 	bus_dmamap_t		map;
+ 	struct igb_tx_buffer	*tx_buffer, *tx_buffer_mapped;
+ 	union e1000_adv_tx_desc	*txd = NULL;
+ 	struct mbuf		*m_head;
+ 	u32			olinfo_status = 0, cmd_type_len = 0;
+ 	int			nsegs, i, j, error, first, last = 0;
+ 	u32			hdrlen = 0;
+@@ -1864,20 +1874,23 @@ igb_xmit(struct tx_ring *txr, struct mbu
+         txd->read.cmd_type_len |=
+ 	    htole32(E1000_ADVTXD_DCMD_EOP | E1000_ADVTXD_DCMD_RS);
+ 	/*
+ 	 * Keep track in the first buffer which
+ 	 * descriptor will be written back
+ 	 */
+ 	tx_buffer = &txr->tx_buffers[first];
+ 	tx_buffer->next_eop = last;
+ 	txr->watchdog_time = ticks;
+ 
++//ben
++	ETHER_BPF_MTAP(ifp, m_head);
++
+ 	/*
+ 	 * Advance the Transmit Descriptor Tail (TDT), this tells the E1000
+ 	 * that this frame is available to transmit.
+ 	 */
+ 	bus_dmamap_sync(txr->txdma.dma_tag, txr->txdma.dma_map,
+ 	    BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
+ 	E1000_WRITE_REG(&adapter->hw, E1000_TDT(txr->me), i);
+ 	++txr->tx_packets;
+ 
+ 	return (0);

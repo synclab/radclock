@@ -16,3 +16,6 @@
 bpf-extras-01.patch
 bpf-extras-02-ffcounter.patch
 08-fix-mtap-call-em-driver.patch
+08-fix-mtap-call-igb-driver.patch
+sdt_probe_if_em.patch
+sdt_probe_if_igb.patch
