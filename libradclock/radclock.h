@@ -137,23 +137,7 @@ int radclock_get_local_period_mode(struct radclock *handle, radclock_local_perio
  * @return 3 on very poor quality timestamp (clock could not be reached, and
  * last dat is really old)
  */
-int radclock_gettimeofday(struct radclock *handle, struct timeval *abstime_tv);
-
-
-/**
- * Get the time from the radclock in a floating point format.
- * The exact resolution obtained depends on the system architecture and the CPU 
- * oscillator frequency.
- * @param  handle The private handle for accessing global data
- * @param  abstime_fp A reference to the long double time value to be filled 
- * @return 0 on success
- * @return 1 on error
- * @return 2 on possibly poor quality timestamp (clock could not be reached, but
- * last data is recent)
- * @return 3 on very poor quality timestamp (clock could not be reached, and
- * last dat is really old)
- */
-int radclock_gettimeofday_fp(struct radclock *handle, long double *abstime_fp);
+int radclock_gettime(struct radclock *handle, long double *abstime);
 
 
 /**
@@ -170,25 +154,8 @@ int radclock_gettimeofday_fp(struct radclock *handle, long double *abstime_fp);
  * @return 3 on very poor quality timestamp (clock could not be reached, and
  * last dat is really old)
  */
-int radclock_vcount_to_abstime(struct radclock *handle, const vcounter_t *vcount, struct timeval *abstime_tv);
-
-
-/** 
- * Convert a vcount value to a long double representation of absolute time, 
- * based on the current radclock parameters.
- * The exact resolution obtained depends on the system architecture and the CPU 
- * oscillator frequency.
- * @param  handle The private handle for accessing global data 
- * @param  vcount A reference to the vcounter value corresponding to the time event to be built
- * @param  abstime_fp A reference to the long double time value to be filled 
- * @return 0 on success
- * @return 1 on error
- * @return 2 on possibly poor quality timestamp (clock could not be reached, but
- * last data is recent)
- * @return 3 on very poor quality timestamp (clock could not be reached, and
- * last dat is really old)
- */
-int radclock_vcount_to_abstime_fp(struct radclock *handle, const vcounter_t *vcount, long double *abstime_fp);
+int radclock_vcount_to_abstime(struct radclock *handle, const vcounter_t *vcount,
+		long double *abstime);
 
 
 /** 
@@ -204,24 +171,8 @@ int radclock_vcount_to_abstime_fp(struct radclock *handle, const vcounter_t *vco
  * @return 3 on very poor quality timestamp (clock could not be reached, and
  * last dat is really old)
  */
-int radclock_elapsed(struct radclock *handle, const vcounter_t *past_vcount, struct timeval *duration_tv);
-
-
-/** 
- * Get the time elapsed from a vcount event in a long double format based on the current radclock parameters.
- * The exact resolution obtained depends on the system architecture and the CPU 
- * oscillator frequency.
- * @param  handle The private handle for accessing global data 
- * @param  past_vcount A reference to the vcount value corresponding to the past event
- * @param  duration_fp A reference to the long double time value to be filled 
- * @return 0 on success
- * @return 1 on error
- * @return 2 on possibly poor quality timestamp (clock could not be reached, but
- * last data is recent)
- * @return 3 on very poor quality timestamp (clock could not be reached, and
- * last dat is really old)
- */
-int radclock_elapsed_fp(struct radclock *handle, const vcounter_t *past_vcount, long double *duration_fp);
+int radclock_elapsed(struct radclock *handle, const vcounter_t *past_vcount,
+		long double *duration);
 
 
 /** 
@@ -238,25 +189,8 @@ int radclock_elapsed_fp(struct radclock *handle, const vcounter_t *past_vcount, 
  * @return 3 on very poor quality timestamp (clock could not be reached, and
  * last dat is really old)
  */
-int radclock_duration(struct radclock *handle, const vcounter_t *start_vcount, const vcounter_t *end_vcount, struct timeval *duration_tv);
-
-
-/** 
- * Get a duration between two vcount events in a long double format based on the current radclock parameters.
- * The exact resolution obtained depends on the system architecture and the CPU 
- * oscillator frequency.
- * @param  handle The private handle for accessing global data 
- * @param  start_vcount A reference to the vcount value corresponding to the starting event
- * @param  end_vcount A reference to the vcount value corresponding to the ending event
- * @param  duration_fp A reference to the long double time value to be filled 
- * @return 0 on success
- * @return 1 on error
- * @return 2 on possibly poor quality timestamp (clock could not be reached, but
- * last data is recent)
- * @return 3 on very poor quality timestamp (clock could not be reached, and
- * last dat is really old)
- */
-int radclock_duration_fp(struct radclock *handle, const vcounter_t *start_vcount, const vcounter_t *end_vcount, long double *duration_fp);
+int radclock_duration(struct radclock *handle, const vcounter_t *start_vcount,
+		const vcounter_t *end_vcount, long double *duration);
 
 
 /** 
