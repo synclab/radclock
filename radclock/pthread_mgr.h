@@ -48,10 +48,10 @@
 /**
  *  Threads starters
  */
-int start_thread_DATA_PROC(struct radclock *clock_handle);
-int start_thread_TRIGGER(struct radclock *clock_handle);
-int start_thread_NTP_SERV(struct radclock *clock_handle);
-int start_thread_FIXEDPOINT(struct radclock *clock_handle);
+int start_thread_DATA_PROC(struct radclock_handle *handle);
+int start_thread_TRIGGER(struct radclock_handle *handle);
+int start_thread_NTP_SERV(struct radclock_handle *handle);
+int start_thread_FIXEDPOINT(struct radclock_handle *handle);
 
 
 /**
@@ -61,15 +61,15 @@ void* thread_data_processing(void *c_handle);
 void* thread_trigger(void *c_handle);
 void* thread_ntp_server(void *c_handle);
 
-int trigger_work(struct radclock *clock_handle); 
-int process_rawdata(struct radclock *clock_handle, struct bidir_peer *peer);
+int trigger_work(struct radclock_handle *handle); 
+int process_rawdata(struct radclock_handle *handle, struct bidir_peer *peer);
 
 
 /**
  * Threads initialisation
  */
 void init_thread_signal_mgt();
-int trigger_init(struct radclock *clock_handle);
+int trigger_init(struct radclock_handle *handle);
 
 
 #endif

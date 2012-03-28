@@ -2,17 +2,17 @@
  * Copyright (C) 2006-2011 Julien Ridoux <julien@synclab.org>
  *
  * This file is part of the radclock program.
- * 
+ *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
@@ -20,10 +20,6 @@
  */
 
 
-/*
- * functions for verbosity...
- *
- */
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -34,8 +30,10 @@
 #include "../config.h"
 #include "radclock.h"
 #include "radclock-private.h"
-#include "misc.h"
+#include "radclock_daemon.h"
+#include "sync_history.h"
 #include "sync_algo.h"
+#include "misc.h"
 #include "config_mgr.h"
 #include "verbose.h"
 #include "jdebug.h"
@@ -46,17 +44,17 @@
 struct verbose_data_t verbose_data;
 
 
-void set_verbose(struct radclock *clock, int verbose_level, int initialized) 
+void set_verbose(struct radclock_handle *handle, int verbose_level, int initialized) 
 {
 	JDEBUG
-	verbose_data.clock = clock;
+	verbose_data.handle = handle;
 	verbose_data.verbose_level = verbose_level;
-	verbose_data.is_daemon = clock->is_daemon;
+	verbose_data.is_daemon = handle->is_daemon;
 	verbose_data.is_initialized = initialized;
 
 	// We got the string, let's output in the log files
-	if (strlen(clock->conf->logfile))
-		strcpy(verbose_data.logfile, clock->conf->logfile);
+	if (strlen(handle->conf->logfile))
+		strcpy(verbose_data.logfile, handle->conf->logfile);
 	else
 	{
 		if ( verbose_data.is_daemon )
@@ -70,7 +68,7 @@ void set_verbose(struct radclock *clock, int verbose_level, int initialized)
 void unset_verbose()
 {
 	JDEBUG
-	verbose_data.clock = NULL;
+	verbose_data.handle = NULL;
 	verbose_data.verbose_level = 0;
 	verbose_data.is_daemon = 0;
 	if ( verbose_data.fd != NULL)
@@ -166,8 +164,7 @@ void verbose(int facility, const char* format, ...)
 	JDEBUG_MEMORY(JDBG_MALLOC, str);
 
 	while (1) {
-		if (str == NULL) 
-		{
+		if (str == NULL) {
 			if ( verbose_data.is_daemon )
 				syslog(LOG_ALERT, "Verbose failed to allocate memory\n");
 			else
@@ -195,61 +192,53 @@ void verbose(int facility, const char* format, ...)
 	 * between syslog timestamps and log file timestamps. The minute resolution
 	 * will hide that in most cases.
 	 */
-	if ( !verbose_data.is_initialized )
-	{
+	if (!verbose_data.is_initialized)
 		sprintf(ctime_buf, "-RADclock Init-");
-	}
-	else
-	{
-		if ( verbose_data.clock->run_mode == RADCLOCK_SYNC_DEAD  )
-		{
+	else {
+		if (verbose_data.handle->run_mode == RADCLOCK_SYNC_DEAD)
 			sprintf(ctime_buf, "Replay");
-		}
-		else
-		{
-			radclock_get_vcounter(verbose_data.clock, &vcount);
-			counter_to_time(verbose_data.clock, &vcount, &currtime);
+		else {
+			radclock_get_vcounter(verbose_data.handle->clock, &vcount);
+			counter_to_time(&verbose_data.handle->rad_data, &vcount, &currtime);
 			/* The cast should 'floor' currtime */
-			currsec = (time_t) currtime;      
+			currsec = (time_t) currtime;
 			t = localtime(&currsec);
-			sprintf(ctime_buf, "%s %02d %02d:%02d:%02d", 
-					months[t->tm_mon], t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
+			sprintf(ctime_buf, "%s %02d %02d:%02d:%02d", months[t->tm_mon],
+					t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
 		}
 	}
 
-	
-	/* Output messages to the log file, depending on the verbose level */ 
-	switch (facility) {	
-		case VERB_DEBUG:
-			if (verbose_data.verbose_level > 1)
-			{
-				/* If the log file could not be opened, spit everything to stderr */
-				if (verbose_data.fd == NULL)
-					fprintf(stderr, "%s: %s%s\n", ctime_buf, customize, str);
-				else
-					fprintf(verbose_data.fd, "%s: %s%s\n", ctime_buf, customize, str);
-			}
-			break;
-
-		case VERB_QUALITY:
-		case VERB_CAUSALITY:
-		case VERB_SANITY:
-		case VERB_CONTROL:
-		case VERB_SYNC:
-		case VERB_DEFAULT:
-			if (verbose_data.verbose_level > 0) 
-				fprintf(verbose_data.fd, "%s: %s%s\n", ctime_buf, customize, str);
-			break;
-
-		default:
-			/* In all other cases output in log file (if could open it) */
-			if (verbose_data.fd != NULL)
-				fprintf(verbose_data.fd, "%s: %s%s\n", ctime_buf, customize, str);
-			if ( verbose_data.is_daemon )
-				syslog(facility, "%s%s", customize, str);
-			else
+	/* Output messages to the log file, depending on the verbose level */
+	switch (facility) {
+	case VERB_DEBUG:
+		if (verbose_data.verbose_level > 1) {
+			/* If the log file could not be opened, spit everything to stderr */
+			if (verbose_data.fd == NULL)
 				fprintf(stderr, "%s: %s%s\n", ctime_buf, customize, str);
-			break;
+			else
+				fprintf(verbose_data.fd, "%s: %s%s\n", ctime_buf, customize, str);
+		}
+		break;
+
+	case VERB_QUALITY:
+	case VERB_CAUSALITY:
+	case VERB_SANITY:
+	case VERB_CONTROL:
+	case VERB_SYNC:
+	case VERB_DEFAULT:
+		if (verbose_data.verbose_level > 0)
+			fprintf(verbose_data.fd, "%s: %s%s\n", ctime_buf, customize, str);
+		break;
+
+	default:
+		/* In all other cases output in log file (if could open it) */
+		if (verbose_data.fd != NULL)
+			fprintf(verbose_data.fd, "%s: %s%s\n", ctime_buf, customize, str);
+		if (verbose_data.is_daemon)
+			syslog(facility, "%s%s", customize, str);
+		else
+			fprintf(stderr, "%s: %s%s\n", ctime_buf, customize, str);
+		break;
 	}
 
 	/* To get to this point logfile and str are non-NULL!)*/

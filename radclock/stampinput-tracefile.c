@@ -2,17 +2,17 @@
  * Copyright (C) 2006-2011 Julien Ridoux <julien@synclab.org>
  *
  * This file is part of the radclock program.
- * 
+ *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
@@ -20,8 +20,8 @@
  */
 
 #include <arpa/inet.h>
-#include <sys/socket.h> 
-#include <netinet/in.h> 
+#include <sys/socket.h>
+#include <netinet/in.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -30,6 +30,11 @@
 #include <assert.h>
 
 #include "../config.h"
+#include "radclock.h"
+#include "radclock-private.h"
+
+#include "radclock_daemon.h"
+#include "sync_history.h"
 #include "sync_algo.h"
 #include "config_mgr.h"
 #include "verbose.h"
@@ -58,7 +63,7 @@ struct tracefile_data {
  * -1 error to break upper loop
  */
 static int
-get_packet_tracefile(struct radclock *handle, void *userdata,
+get_packet_tracefile(struct radclock_handle *handle, void *userdata,
 		radpcap_packet_t **packet_p)
 {
 	int ret;
@@ -110,7 +115,7 @@ get_packet_tracefile(struct radclock *handle, void *userdata,
 
 
 static int
-tracefilestamp_init(struct radclock *handle, struct stampsource *source)
+tracefilestamp_init(struct radclock_handle *handle, struct stampsource *source)
 {
 	struct sockaddr_in *sin;
 	struct radclock_config *conf;
@@ -163,7 +168,7 @@ tracefilestamp_init(struct radclock *handle, struct stampsource *source)
 
 
 static int
-tracefilestamp_get_next(struct radclock *clock, struct stampsource *source,
+tracefilestamp_get_next(struct radclock_handle *handle, struct stampsource *source,
 	struct stamp_t *stamp)
 {
 	int err;
@@ -172,7 +177,7 @@ tracefilestamp_get_next(struct radclock *clock, struct stampsource *source,
 	stamp->type = STAMP_NTP;
 	stamp->qual_warning = 0;
 
-	err = get_network_stamp(clock, (void *)TRACEFILE_DATA(source),
+	err = get_network_stamp(handle, (void *)TRACEFILE_DATA(source),
 			get_packet_tracefile, stamp, &source->ntp_stats);
 	
 	return (err);
@@ -180,15 +185,15 @@ tracefilestamp_get_next(struct radclock *clock, struct stampsource *source,
 
 
 static void
-tracefilestamp_breakloop(struct radclock *handle, struct stampsource *source)
+tracefilestamp_breakloop(struct radclock_handle *handle, struct stampsource *source)
 {
+
 	verbose(LOG_WARNING, "Call to breakloop in tracefile replay has no effect");
-	return;
 }
 
 
 static void
-tracefilestamp_finish(struct radclock *handle, struct stampsource *source)
+tracefilestamp_finish(struct radclock_handle *handle, struct stampsource *source)
 {
 	pcap_close(TRACEFILE_DATA(source)->trace_input);
 	JDEBUG_MEMORY(JDBG_FREE, TRACEFILE_DATA(source));
@@ -197,14 +202,14 @@ tracefilestamp_finish(struct radclock *handle, struct stampsource *source)
 
 
 static int
-tracefilestamp_update_filter(struct radclock *handle, struct stampsource *source)
+tracefilestamp_update_filter(struct radclock_handle *handle, struct stampsource *source)
 {
 	/* So far this does nothing .. */
 	return (0);
 }
 
 static int
-tracefilestamp_update_dumpout(struct radclock *handle, struct stampsource *source)
+tracefilestamp_update_dumpout(struct radclock_handle *handle, struct stampsource *source)
 {
 	/* So far this does nothing .. */
 	return (0);

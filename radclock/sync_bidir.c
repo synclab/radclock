@@ -27,29 +27,32 @@
 
 /* Bidirectional algo */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
 #include <sys/types.h>
 #include <sys/time.h>
-#include <syslog.h>
-#include <pthread.h>
-#include <pcap.h>
-#include <string.h>
+
 #include <math.h>
+#include <pcap.h>
+#include <pthread.h>	// TODO remove once globaldata locking is fixed
+#include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <syslog.h>
+#include <unistd.h>
 
 
 #include "../config.h"
 #include "radclock.h"
 /* The algo needs access to the global_data structure to update the user level clock */
 #include "radclock-private.h"
+#include "radclock_daemon.h"
+#include "sync_history.h"
 #include "sync_algo.h"
 #include "create_stamp.h"
 #include "rawdata.h"
 #include "verbose.h"
 #include "config_mgr.h"
 #include "proto_ntp.h"
-#include "sync_history.h"
 #include "jdebug.h"
 
 
@@ -206,7 +209,7 @@ static void init_errthresholds( struct radclock_phyparam *phyparam, struct bidir
 	 */
 	peer->Eoffset				= phyparam->offset_ratio * phyparam->TSLIMIT;
 
-	/* XXX Tuning history: 
+	/* XXX Tuning history:
 	 * We should decouple Eoffset and Eoffset_qual ... conclusion of shouf shouf analysis 
 	 * Added the effect of poll period as a first try (~ line 740) 
 	 * [UPDATE] - reverted ... see below
@@ -248,7 +251,7 @@ static void print_algo_parameters(struct radclock_phyparam *phyparam, struct bid
 
 
 /* Peer initialisation */
-void init_peer( struct radclock *clock_handle, struct radclock_phyparam *phyparam,
+void init_peer( struct radclock_handle *handle, struct radclock_phyparam *phyparam,
 				struct bidir_peer *peer, struct bidir_stamp *stamp, 
 				unsigned int plocal_winratio, int poll_period)
 {
@@ -341,10 +344,10 @@ void init_peer( struct radclock *clock_handle, struct radclock_phyparam *phypara
 	 * trust his choice. Otherwise, use kernel info from the first
 	 * ffclock_getestimate.
 	 */
-	if (clock_handle->conf->phat_init == DEFAULT_PHAT_INIT)
-		peer->phat = RAD_DATA(clock_handle)->phat;
+	if (handle->conf->phat_init == DEFAULT_PHAT_INIT)
+		peer->phat = RAD_DATA(handle)->phat;
 	else
-		peer->phat = clock_handle->conf->phat_init;
+		peer->phat = handle->conf->phat_init;
 	peer->perr = 0;
 	peer->plocal = peer->phat;
 
@@ -1049,10 +1052,9 @@ void record_packet_j (struct bidir_peer* peer, vcounter_t RTT,
 
 
 
-int process_phat_full (struct bidir_peer* peer, struct radclock* clock_handle, 
-						struct radclock_phyparam *phyparam, vcounter_t RTT, 
-						struct bidir_stamp* stamp, int qual_warning)
-
+int process_phat_full (struct bidir_peer* peer, struct radclock_handle* handle,
+	struct radclock_phyparam *phyparam, vcounter_t RTT,
+	struct bidir_stamp* stamp, int qual_warning)
 {
 	int ret;
 	long double DelTb; 	// Server time interval between stamps j and i
@@ -1141,20 +1143,20 @@ int process_phat_full (struct bidir_peer* peer, struct radclock* clock_handle,
 			"rel diff = %.10g, perr = %.3g, baseerr = %.10g, "
 			"DelTb = %5.3Lg [hrs]",
 			peer->pstamp_i,
-		   	peer->stamp_i, (phat - peer->phat)/phat, 
+			peer->stamp_i, (phat - peer->phat)/phat, 
 			peer->perr, baseerr, DelTb/3600);
 
 		peer->phat_sanity_count++;
-		ADD_STATUS(clock_handle, STARAD_PERIOD_SANITY);
+		ADD_STATUS(handle, STARAD_PERIOD_SANITY);
 		ret = STARAD_PERIOD_SANITY;
 	}
 	else {
 		peer->C += peer->stamp.Ta * (long double) (peer->phat - phat);
 		peer->phat = phat;
-		DEL_STATUS(clock_handle, STARAD_PERIOD_SANITY);
+		DEL_STATUS(handle, STARAD_PERIOD_SANITY);
 	}
 
-	return ret;
+	return (ret);
 }
 
 
@@ -1178,8 +1180,7 @@ process_plocal_warmup(struct bidir_peer* peer)
 
 
 int
-process_plocal_full(struct bidir_peer* peer, struct radclock* clock_handle,
-//		unsigned int plocal_winratio, int sig_plocal, struct bidir_stamp* stamp,
+process_plocal_full(struct bidir_peer* peer, struct radclock_handle* handle,
 		unsigned int plocal_winratio, struct bidir_stamp* stamp,
 		int phat_sanity_raised, int qual_warning)
 {
@@ -1265,7 +1266,7 @@ process_plocal_full(struct bidir_peer* peer, struct radclock* clock_handle,
 				"(%lu,%lu), not updating plocalerr = %5.3lg, "
 				"Eplocal_qual = %5.3lg ", peer->stamp_i, peer->far_i,
 				peer->near_i, peer->plocalerr, peer->Eplocal_qual);
-		ADD_STATUS(clock_handle, STARAD_PERIOD_QUALITY);
+		ADD_STATUS(handle, STARAD_PERIOD_QUALITY);
 		return 0;
 	}
 
@@ -1282,7 +1283,7 @@ process_plocal_full(struct bidir_peer* peer, struct radclock* clock_handle,
 		verbose(VERB_SANITY, "i=%lu: plocal update fails sanity check: relative "
 				"difference is: %5.3lg estimated error was %5.3lg",
 				peer->stamp_i, fabs(peer->plocal-plocal)/peer->plocal, plocalerr);
-		ADD_STATUS(clock_handle, STARAD_PERIOD_SANITY);
+		ADD_STATUS(handle, STARAD_PERIOD_SANITY);
 		peer->plocal_sanity_count++;
 	}
 	else {
@@ -1290,9 +1291,9 @@ process_plocal_full(struct bidir_peer* peer, struct radclock* clock_handle,
 		// TODO, we should actually age this stored value if quality is
 		// bad or sanity and we cannot update to the latest computed
 		peer->plocalerr = plocalerr;
-		DEL_STATUS(clock_handle, STARAD_PERIOD_QUALITY);
+		DEL_STATUS(handle, STARAD_PERIOD_QUALITY);
 		if ( phat_sanity_raised != STARAD_PERIOD_SANITY )
-			DEL_STATUS(clock_handle, STARAD_PERIOD_SANITY);
+			DEL_STATUS(handle, STARAD_PERIOD_SANITY);
 	}
 	return 0;
 }
@@ -1306,7 +1307,7 @@ process_plocal_full(struct bidir_peer* peer, struct radclock* clock_handle,
  */
 
 void
-process_thetahat_warmup(struct bidir_peer* peer, struct radclock* clock_handle,
+process_thetahat_warmup(struct bidir_peer* peer, struct radclock_handle* handle,
 		struct radclock_phyparam *phyparam, vcounter_t RTT,
 		struct bidir_stamp* stamp)
 {
@@ -1463,11 +1464,11 @@ process_thetahat_warmup(struct bidir_peer* peer, struct radclock* clock_handle,
 					"difference is: %5.3lg [ms], estimated error was  %5.3lg [ms]",
 					peer->stamp_i, 1000*(thetahat-peer->thetahat), 1000*minET);
 			peer->offset_sanity_count++;
-			ADD_STATUS(clock_handle, STARAD_OFFSET_SANITY);
+			ADD_STATUS(handle, STARAD_OFFSET_SANITY);
 		}
 		else {
-			DEL_STATUS(clock_handle, STARAD_OFFSET_QUALITY);
-			DEL_STATUS(clock_handle, STARAD_OFFSET_SANITY);
+			DEL_STATUS(handle, STARAD_OFFSET_QUALITY);
+			DEL_STATUS(handle, STARAD_OFFSET_SANITY);
 		}
 
 		/* update value of thetahat, even if sanity triggered */
@@ -1477,7 +1478,7 @@ process_thetahat_warmup(struct bidir_peer* peer, struct radclock* clock_handle,
 	else {
 		verbose(VERB_QUALITY, "i=%lu: thetahat quality over offset window very poor "
 				"(%5.3lg [ms]), repeating current value", peer->stamp_i, 1000*minET);
-		ADD_STATUS(clock_handle, STARAD_OFFSET_QUALITY);
+		ADD_STATUS(handle, STARAD_OFFSET_QUALITY);
 	}
 
 // TODO should we check causality if peer->thetahat has not been updated? Check with Darryl
@@ -1512,18 +1513,18 @@ process_thetahat_warmup(struct bidir_peer* peer, struct radclock* clock_handle,
 	/* Fill output data structure to print internal local variables */
 	errTa -= peer->thetahat;
 	errTf -= peer->thetahat;
-	OUTPUT(clock_handle, errTa) 		= errTa;
-	OUTPUT(clock_handle, errTf) 		= errTf;
-	OUTPUT(clock_handle, th_naive) 		= th_naive;
-	OUTPUT(clock_handle, minET) 		= minET;
-	OUTPUT(clock_handle, minET_last)	= peer->minET;
-	OUTPUT(clock_handle, wsum) 			= wsum;
+	OUTPUT(handle, errTa) 		= errTa;
+	OUTPUT(handle, errTf) 		= errTf;
+	OUTPUT(handle, th_naive) 		= th_naive;
+	OUTPUT(handle, minET) 		= minET;
+	OUTPUT(handle, minET_last)	= peer->minET;
+	OUTPUT(handle, wsum) 			= wsum;
 	stamp_tmp = history_find(&peer->stamp_hist, jbest);
-	OUTPUT(clock_handle, best_Tf) 		= stamp_tmp->Tf;
+	OUTPUT(handle, best_Tf) 		= stamp_tmp->Tf;
 }
 
 
-void process_thetahat_full (struct bidir_peer* peer, struct radclock* clock_handle,
+void process_thetahat_full (struct bidir_peer* peer, struct radclock_handle* handle,
 		struct radclock_phyparam *phyparam, vcounter_t RTT,
 		struct bidir_stamp* stamp, int qual_warning)
 {
@@ -1726,7 +1727,7 @@ void process_thetahat_full (struct bidir_peer* peer, struct radclock* clock_hand
 				"curr err = %5.3lg, old = %5.3lg, this pt-err = [%5.3lg] [ms]",
 				peer->stamp_i, wsum, 1000*minET, 1000*peer->minET, 1000*ET);
 		peer->offset_quality_count++;
-		ADD_STATUS(clock_handle, STARAD_OFFSET_QUALITY);
+		ADD_STATUS(handle, STARAD_OFFSET_QUALITY);
 	}
 
 // TODO behaviour different in warmup and full algo, should check causality on
@@ -1762,7 +1763,7 @@ void process_thetahat_full (struct bidir_peer* peer, struct radclock* clock_hand
 				peer->stamp_i, 1000*(thetahat-peer->thetahat), 1000*minET, 
 				1000*(peer->Eoffset_sanity_min+peer->Eoffset_sanity_rate*gapsize), gapsize);
 		peer->offset_sanity_count++;
-		ADD_STATUS(clock_handle, STARAD_OFFSET_SANITY);
+		ADD_STATUS(handle, STARAD_OFFSET_SANITY);
 	}
 	else {
 		/* it passes or the candidate has been overwritten to last good one
@@ -1770,20 +1771,20 @@ void process_thetahat_full (struct bidir_peer* peer, struct radclock* clock_hand
 		 *      and the reason why the status flag have to be tested first.
 		 */
 		if (peer->thetahat != thetahat)
-			DEL_STATUS(clock_handle, STARAD_OFFSET_QUALITY);
+			DEL_STATUS(handle, STARAD_OFFSET_QUALITY);
 
-		 /* update current value 
+		 /* update current value
 		 * both sane and quality, then a `true' update, record event for sanity test
 		 */
 		peer->thetahat = thetahat;
 		if ( ( minET < peer->Eoffset_qual ) && ( wsum != 0 ) ) {
-// TODO check the logic of this branch, why thetahat update not in here as well 			
+// TODO check the logic of this branch, why thetahat update not in here as well
 			copystamp(stamp, &peer->thetastamp);
-			/* Record last good estimate of error bound after sanity check */ 
+			/* Record last good estimate of error bound after sanity check */
 			PEER_ERROR(peer)->Ebound_min_last = Ebound_min;
 		}
-//		DEL_STATUS(clock_handle, STARAD_OFFSET_QUALITY);
-		DEL_STATUS(clock_handle, STARAD_OFFSET_SANITY);
+//		DEL_STATUS(handle, STARAD_OFFSET_QUALITY);
+		DEL_STATUS(handle, STARAD_OFFSET_SANITY);
 	}
 
 	if ( !(peer->stamp_i % (int)(6 * 3600 / peer->poll_period)) )
@@ -1797,14 +1798,14 @@ void process_thetahat_full (struct bidir_peer* peer, struct radclock* clock_hand
 	/* Fill output data structure to print internal local variables */
 	errTa -= peer->thetahat;
 	errTf -= peer->thetahat;
-	OUTPUT(clock_handle, errTa) 		= errTa;
-	OUTPUT(clock_handle, errTf) 		= errTf;
-	OUTPUT(clock_handle, th_naive) 		= th_naive;
-	OUTPUT(clock_handle, minET) 		= minET;
-	OUTPUT(clock_handle, minET_last)	= peer->minET;
-	OUTPUT(clock_handle, wsum) 			= wsum;
+	OUTPUT(handle, errTa) 		= errTa;
+	OUTPUT(handle, errTf) 		= errTf;
+	OUTPUT(handle, th_naive) 		= th_naive;
+	OUTPUT(handle, minET) 		= minET;
+	OUTPUT(handle, minET_last)	= peer->minET;
+	OUTPUT(handle, wsum) 			= wsum;
 	stamp_tmp = history_find(&peer->stamp_hist, jbest);
-	OUTPUT(clock_handle, best_Tf) 		= stamp_tmp->Tf;
+	OUTPUT(handle, best_Tf) 		= stamp_tmp->Tf;
 
 }
 
@@ -1825,7 +1826,7 @@ void process_thetahat_full (struct bidir_peer* peer, struct radclock* clock_hand
  * theta(t) = C(t) - t
  */
 int
-process_bidir_stamp(struct radclock *clock, struct bidir_peer *peer,
+process_bidir_stamp(struct radclock_handle *handle, struct bidir_peer *peer,
 		struct bidir_stamp *input_stamp, int qual_warning)
 {
 	struct bidir_stamp *stamp;
@@ -1855,8 +1856,8 @@ process_bidir_stamp(struct radclock *clock, struct bidir_peer *peer,
 	JDEBUG
 
 	stamp = input_stamp;
-	phyparam = &(clock->conf->phyparam);
-	conf = clock->conf;
+	phyparam = &(handle->conf->phyparam);
+	conf = handle->conf;
 	poll_period = conf->poll_period;
 
 	/*
@@ -1882,7 +1883,7 @@ process_bidir_stamp(struct radclock *clock, struct bidir_peer *peer,
 	 * window sizes, history structures, states, poll period effects and return
 	 */
 	if (peer->stamp_i == 0) {
-		init_peer(clock, phyparam, peer, stamp, plocal_winratio, poll_period);
+		init_peer(handle, phyparam, peer, stamp, plocal_winratio, poll_period);
 		copystamp(stamp, &peer->stamp);
 		peer->stamp_i++;
  	
@@ -1891,11 +1892,11 @@ process_bidir_stamp(struct radclock *clock, struct bidir_peer *peer,
 		RTT = MAX(1,stamp->Tf - stamp->Ta);
 
 // TODO This may go one day, but will break regression test
-		OUTPUT(clock, best_Tf) = stamp->Tf;
+		OUTPUT(handle, best_Tf) = stamp->Tf;
 
 		/* Set the status of the clock to STARAD_WARMUP */
-		ADD_STATUS(clock, STARAD_WARMUP);
-		ADD_STATUS(clock, STARAD_UNSYNC);
+		ADD_STATUS(handle, STARAD_WARMUP);
+		ADD_STATUS(handle, STARAD_UNSYNC);
 
 		goto output_results;
 	}
@@ -1907,8 +1908,8 @@ process_bidir_stamp(struct radclock *clock, struct bidir_peer *peer,
 //	{
 //		/* Set the status of the clock to STARAD_WARMUP */
 //		verbose(VERB_CONTROL, "Beginning Warmup Phase");
-//		ADD_STATUS(clock, STARAD_WARMUP);
-//		ADD_STATUS(clock, STARAD_UNSYNC);
+//		ADD_STATUS(handle, STARAD_WARMUP);
+//		ADD_STATUS(handle, STARAD_UNSYNC);
 //	}
 
 
@@ -1925,7 +1926,7 @@ process_bidir_stamp(struct radclock *clock, struct bidir_peer *peer,
 	 */
 	if (peer->stamp_i == NTP_BURST) {
 		/* Set the status of the clock to STARAD_UNSYNC */
-		DEL_STATUS(clock, STARAD_UNSYNC);
+		DEL_STATUS(handle, STARAD_UNSYNC);
 	}
 
 
@@ -2068,22 +2069,22 @@ process_bidir_stamp(struct radclock *clock, struct bidir_peer *peer,
 		process_RTT_warmup(peer, RTT);
 		process_phat_warmup(peer, RTT, warmup_winratio);
 		process_plocal_warmup(peer);
-		process_thetahat_warmup(peer, clock, phyparam, RTT, stamp);
+		process_thetahat_warmup(peer, handle, phyparam, RTT, stamp);
 	}
 	else {
 		process_RTT_full(peer, RTT);
 		record_packet_j (peer, RTT, stamp);
-		phat_sanity_raised = process_phat_full(peer, clock, phyparam, RTT,
+		phat_sanity_raised = process_phat_full(peer, handle, phyparam, RTT,
 				stamp, qual_warning);
 
 		// XXX TODO stamp is passed only for quality warning, but plocal
 		// windows exclude the current stamp!! should take into account the
 		// quality warnings of the stamps actually picked up, no?
 		// Check with Darryl
-		process_plocal_full(peer, clock, plocal_winratio, stamp,
+		process_plocal_full(peer, handle, plocal_winratio, stamp,
 				phat_sanity_raised, qual_warning);
 
-		process_thetahat_full(peer, clock, phyparam, RTT, stamp, qual_warning);
+		process_thetahat_full(peer, handle, phyparam, RTT, stamp, qual_warning);
 	}
 
 
@@ -2109,7 +2110,7 @@ process_bidir_stamp(struct radclock *clock, struct bidir_peer *peer,
 				peer->stamp_i, stamp->Ta,stamp->Tb,stamp->Te,stamp->Tf);
 
 		/* Remove STARAD_WARMUP from the clock's status */
-		DEL_STATUS(clock, STARAD_WARMUP);
+		DEL_STATUS(handle, STARAD_WARMUP);
 	}
 
 
@@ -2147,16 +2148,18 @@ output_results:
 	 * Also we lock the matlab output data at the same time
 	 * to ensure consistency for live captures.
 	 */
-	pthread_mutex_lock(&clock->globaldata_mutex);
+// TODO FIXME : locking should go away. Should update peer data, then lock and
+// copy to radclock_handle outside of here
+	pthread_mutex_lock(&handle->globaldata_mutex);
 
-	/* Update clock variable for returning. */
-	RAD_DATA(clock)->phat			= peer->phat;
-	RAD_DATA(clock)->phat_err		= peer->perr;
-	RAD_DATA(clock)->phat_local		= peer->plocal;
-	RAD_DATA(clock)->phat_local_err	= peer->plocalerr;
-	RAD_DATA(clock)->ca				= peer->C-(long double)peer->thetahat;
-	RAD_DATA(clock)->ca_err			= peer->minET;
-	RAD_DATA(clock)->last_changed	= stamp->Tf;
+	/* Update handle variable for returning. */
+	RAD_DATA(handle)->phat			= peer->phat;
+	RAD_DATA(handle)->phat_err		= peer->perr;
+	RAD_DATA(handle)->phat_local		= peer->plocal;
+	RAD_DATA(handle)->phat_local_err	= peer->plocalerr;
+	RAD_DATA(handle)->ca				= peer->C-(long double)peer->thetahat;
+	RAD_DATA(handle)->ca_err			= peer->minET;
+	RAD_DATA(handle)->last_changed	= stamp->Tf;
 	
 	/* The valid_till field has to take into account the fact that ntpd sends
 	 * packets with true period intervals [poll-1,poll+2] (see an histogram of 
@@ -2167,8 +2170,8 @@ output_results:
 	if (peer->stamp_i > 1)
 		/* TODO: XXX Previously valid till was offset by 1.5s to allow for NTP's
 		 * varying poll period when in piggy back mode
-		 * RAD_DATA(clock)->valid_till	= stamp->Tf + ((peer->poll_period -1.5) / peer->phat); */
-		RAD_DATA(clock)->valid_till	= stamp->Tf + ((peer->poll_period) / peer->phat);
+		 * RAD_DATA(handle)->valid_till	= stamp->Tf + ((peer->poll_period -1.5) / peer->phat); */
+		RAD_DATA(handle)->valid_till	= stamp->Tf + ((peer->poll_period) / peer->phat);
 
 
 	/* Clock error estimates.
@@ -2193,58 +2196,57 @@ output_results:
 		sq_cumsum	= PEER_ERROR(peer)->sq_cumsum + (error_bound * error_bound);
 		nerror		= PEER_ERROR(peer)->nerror + 1;
 
-		RAD_ERROR(clock)->error_bound = error_bound;
+		RAD_ERROR(handle)->error_bound = error_bound;
 		if (nerror > 2) {
-			RAD_ERROR(clock)->error_bound_avg = cumsum / nerror;
-			RAD_ERROR(clock)->error_bound_std = sqrt((sq_cumsum -
+			RAD_ERROR(handle)->error_bound_avg = cumsum / nerror;
+			RAD_ERROR(handle)->error_bound_std = sqrt((sq_cumsum -
 						(cumsum * cumsum / nerror)) / (nerror - 1));
 		}
 		PEER_ERROR(peer)->cumsum	= cumsum;
 		PEER_ERROR(peer)->sq_cumsum	= sq_cumsum;
 		PEER_ERROR(peer)->nerror	= nerror;
-		RAD_ERROR(clock)->min_RTT	= peer->RTThat * peer->phat;
+		RAD_ERROR(handle)->min_RTT	= peer->RTThat * peer->phat;
 	}
 
 	/* We don't want the leapsecond to create a jump in post processing of data,
 	 * so we reverse the operation performed in get_bidir_stamp. With this
 	 * implementation this will not have an impact on the matlab output file
 	 */
-	RAD_DATA(clock)->ca -= ((struct
-	bidir_output*)clock->algo_output)->leapsectotal;
-	
+	RAD_DATA(handle)->ca -= ((struct bidir_output *)handle->algo_output)->leapsectotal;
+
 //	errTa -= peer->thetahat;
 //	errTf -= peer->thetahat;
 
 	/* Fill the output structure, used mainly to fill the matlab file
 	 * TODO: there is a bit of redundancy in here
 	 */
-	OUTPUT(clock, RTT)			= RTT;
-	OUTPUT(clock, phat)			= peer->phat;
-	OUTPUT(clock, perr)			= peer->perr;
-	OUTPUT(clock, plocal)		= peer->plocal;
-	OUTPUT(clock, plocalerr)	= peer->plocalerr;
-	OUTPUT(clock, C)			= peer->C;
-	OUTPUT(clock, thetahat)		= peer->thetahat;
-	OUTPUT(clock, RTThat)		= peer->RTThat;
-	OUTPUT(clock, RTThat_new)	= peer->next_RTThat;
-	OUTPUT(clock, RTThat_shift)	= peer->RTThat_shift;
-//	OUTPUT(clock, th_naive)		= th_naive;
-//	OUTPUT(clock, minET)		= minET;
-	OUTPUT(clock, minET_last)	= peer->minET;
-//	OUTPUT(clock, errTa)		= errTa;
-//	OUTPUT(clock, errTf)		= errTf;
-//	OUTPUT(clock, wsum)		= wsum;
+	OUTPUT(handle, RTT)			= RTT;
+	OUTPUT(handle, phat)			= peer->phat;
+	OUTPUT(handle, perr)			= peer->perr;
+	OUTPUT(handle, plocal)		= peer->plocal;
+	OUTPUT(handle, plocalerr)	= peer->plocalerr;
+	OUTPUT(handle, C)			= peer->C;
+	OUTPUT(handle, thetahat)		= peer->thetahat;
+	OUTPUT(handle, RTThat)		= peer->RTThat;
+	OUTPUT(handle, RTThat_new)	= peer->next_RTThat;
+	OUTPUT(handle, RTThat_shift)	= peer->RTThat_shift;
+//	OUTPUT(handle, th_naive)		= th_naive;
+//	OUTPUT(handle, minET)		= minET;
+	OUTPUT(handle, minET_last)	= peer->minET;
+//	OUTPUT(handle, errTa)		= errTa;
+//	OUTPUT(handle, errTf)		= errTf;
+//	OUTPUT(handle, wsum)		= wsum;
 //	stamp_tmp = history_find(&peer->stamp_hist, jbest);
-//	OUTPUT(clock, best_Tf)		= stamp_tmp->Tf;
-	OUTPUT(clock, status)		= RAD_DATA(clock)->status;
+//	OUTPUT(handle, best_Tf)		= stamp_tmp->Tf;
+	OUTPUT(handle, status)		= RAD_DATA(handle)->status;
 
 
 	/* NTP server specific data */
 	// TODO this is a bit dodgy to have this here ... 
-	SERVER_DATA(clock)->serverdelay = peer->RTThat * peer->phat;
+	SERVER_DATA(handle)->serverdelay = peer->RTThat * peer->phat;
 
 	/* Unlock Global Data */
-	pthread_mutex_unlock(&clock->globaldata_mutex);
+	pthread_mutex_unlock(&handle->globaldata_mutex);
 
 	return (0);
 }

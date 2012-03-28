@@ -23,7 +23,6 @@
 #ifndef _SYNC_HISTORY_H
 #define _SYNC_HISTORY_H
 
-#include <stddef.h>
 
 typedef unsigned long int index_t;
 

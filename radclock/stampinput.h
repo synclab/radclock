@@ -32,7 +32,7 @@ struct stampsource;
 /**
  * Test if the source given as input is unique and a live one
  */
-int is_live_source(struct radclock *handle);
+int is_live_source(struct radclock_handle *handle);
 
 
 /**
@@ -41,7 +41,7 @@ int is_live_source(struct radclock *handle);
  * @param is_live will be set to 1 if the source is a live source
  * @returns NULL on error or the handle
  */
-struct stampsource *create_source(struct radclock *handle);
+struct stampsource *create_source(struct radclock_handle *handle);
 
 /**
  * Get the next stamp
@@ -49,7 +49,7 @@ struct stampsource *create_source(struct radclock *handle);
  * @return 0 on success if stamp was filled
  *  or a negative value on failure.
  */
-int get_next_stamp(struct radclock *handle, struct stampsource *source,
+int get_next_stamp(struct radclock_handle *handle, struct stampsource *source,
 struct stamp_t *stamp);
 
 /**
@@ -58,21 +58,21 @@ struct stamp_t *stamp);
  * @param The handler to the input source
  * @return void. Error code given by get_next_stamp function
  */
-void source_breakloop(struct radclock *handle, struct stampsource *source);
+void source_breakloop(struct radclock_handle *handle, struct stampsource *source);
 
 /**
  * Destroy the source once it's no longer required
  */
-void destroy_source(struct radclock *handle, struct stampsource *source);
+void destroy_source(struct radclock_handle *handle, struct stampsource *source);
 
 /**
  * Update the BPF filter for the source 
  */
-int update_filter_source(struct radclock *handle, struct stampsource *source);
+int update_filter_source(struct radclock_handle *handle, struct stampsource *source);
 
 /**
  * Update the RAW file output for the source 
  */
-int update_dumpout_source(struct radclock *handle, struct stampsource *source);
+int update_dumpout_source(struct radclock_handle *handle, struct stampsource *source);
 
 #endif

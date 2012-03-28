@@ -216,8 +216,7 @@ int main (int argc, char *argv[])
 		}
 
 		/* Create absolute time from RAD */
-		err = radclock_vcount_to_abstime_fp(clock_handle, &vcount, &currtime);
-
+		err = radclock_vcount_to_abstime(clock_handle, &vcount, &currtime);
 
 		/* output to file */
 		fprintf(output_fd,  "%ld.%.6d %"VC_FMT" %.9Lf\n", tv.tv_sec, (int)tv.tv_usec, vcount, currtime); 

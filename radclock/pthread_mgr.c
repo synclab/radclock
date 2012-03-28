@@ -2,17 +2,17 @@
  * Copyright (C) 2006-2011 Julien Ridoux <julien@synclab.org>
  *
  * This file is part of the radclock program.
- * 
+ *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
@@ -31,9 +31,11 @@
 #include <errno.h>
 
 #include "../config.h"
-#include "sync_algo.h"
 #include "radclock.h"
 #include "radclock-private.h"
+#include "radclock_daemon.h"
+#include "sync_history.h"
+#include "sync_algo.h"
 #include "config_mgr.h"
 #include "ffclock.h"		// this one can go once fixedpoint thread is removed
 #include "fixedpoint.h"		// this one can go once fixedpoint thread is removed
@@ -45,10 +47,11 @@
 
 
 
-void init_thread_signal_mgt() 
+void
+init_thread_signal_mgt()
 {
 	/* We just started a new thread and we don't want it to catch any
-	 * Unix signal. This would be a bad behavior and would make the 
+	 * Unix signal. This would be a bad behavior and would make the
 	 * recvfrom() call return with an error on SIGHUP or SIGTERM for
 	 * example. We want the main program to catch signals and do what
 	 * it want to deal with threads.
@@ -62,12 +65,10 @@ void init_thread_signal_mgt()
 }
 
 
-
-
-
 void *
 thread_trigger(void *c_handle)
 {
+	struct radclock_handle *handle;
 	int err;
 
 	JDEBUG
@@ -76,48 +77,47 @@ thread_trigger(void *c_handle)
 	init_thread_signal_mgt();
 	
 	/* Clock handle to be able to read global data */
-	struct radclock *clock_handle;
-	clock_handle = (struct radclock*) c_handle;
+	handle = (struct radclock_handle *) c_handle;
 
 	/* Initialise the trigger thread.
 	 * If this fails, we commit a collective suicide
 	 */
-	err = trigger_init(clock_handle);
-	if (err) {
-		clock_handle->pthread_flag_stop = PTH_STOP_ALL; 
-	}
+	err = trigger_init(handle);
+	if (err)
+		handle->pthread_flag_stop = PTH_STOP_ALL;
 	
-	while ((clock_handle->pthread_flag_stop & PTH_TRIGGER_STOP) != PTH_TRIGGER_STOP)
-	{
-		/* Check if processing thread did grab the lock, we don't want to
-		 * lock repeatidly for ever. If we marked data ready to be processed, then
-		 * the processing thread has to do his job. We signal again in case the 
-		 * processing thread hadn't be listening before (at startup for example), then
-		 * we sleep a little and probably get rescheduled.
+	while ((handle->pthread_flag_stop & PTH_TRIGGER_STOP) != PTH_TRIGGER_STOP) {
+
+		/*
+		 * Check if processing thread did grab the lock, we don't want to lock
+		 * repeatidly for ever. If we marked data ready to be processed, then
+		 * the processing thread has to do his job. We signal again in case the
+		 * processing thread hadn't be listening before (at startup for
+		 * example), then we sleep a little and probably get rescheduled.
 		 */
-		if (clock_handle->wakeup_data_ready == 1 && !VM_SLAVE(clock_handle)) {
-			pthread_cond_signal(&clock_handle->wakeup_cond);
+		if (handle->wakeup_data_ready == 1 && !VM_SLAVE(handle)) {
+			pthread_cond_signal(&handle->wakeup_cond);
 			usleep(50);
 			continue;
 		}
 
 		/* Lock the pthread_mutex we share with the processing thread */
-		pthread_mutex_lock(&clock_handle->wakeup_mutex);
+		pthread_mutex_lock(&handle->wakeup_mutex);
 
 		/* Do our job */
-		trigger_work(clock_handle);
+		trigger_work(handle);
 
 		/* Raise wakeup_dat_ready flag.
 		 * Signal the processing thread, and unlock mutex to give the processing
 		 * thread a chance at it. To be sure it grabs the lock we sleep for a
-		 * little while ... 
+		 * little while ...
 		 */
-		clock_handle->wakeup_data_ready = 1;
-		pthread_cond_signal(&clock_handle->wakeup_cond);
-		pthread_mutex_unlock(&clock_handle->wakeup_mutex);
+		handle->wakeup_data_ready = 1;
+		pthread_cond_signal(&handle->wakeup_cond);
+		pthread_mutex_unlock(&handle->wakeup_mutex);
 	}
 
-	/* Thread exit 
+	/* Thread exit
 	 * In case we pass into the continue statement but then ordered to die, make
 	 * sure we release the lock (and maybe silently fail)
 	 */
@@ -133,61 +133,62 @@ thread_trigger(void *c_handle)
  * Here we only deal with thread synchronisation
  * see process_data() for the real job
  */
-void* thread_data_processing(void *c_handle)
+void *
+thread_data_processing(void *c_handle)
 {
-	JDEBUG
-
-	int err;
 	struct bidir_peer peer;
+	struct radclock_handle *handle;
+	int err;
+
+	JDEBUG
 
 	/* Deal with UNIX signal catching */
 	init_thread_signal_mgt();
 	
 	/* Clock handle to be able to read global data */
-	struct radclock *clock;
-	clock = (struct radclock*) c_handle;
+	handle = (struct radclock_handle *) c_handle;
 
 	/* Init peer stamp counter, everything rely on this starting at 0 */
-	init_peer_stamp_queue(&peer); 
+	init_peer_stamp_queue(&peer);
 	peer.stamp_i = 0;
 	
 	// TODO XXX Need to manage peers better !!
 	/* Register active peer */
-	clock->active_peer = (void*) &peer;
+	handle->active_peer = (void*) &peer;
 
-	while ((clock->pthread_flag_stop & PTH_DATA_PROC_STOP) != PTH_DATA_PROC_STOP)
+	while ((handle->pthread_flag_stop & PTH_DATA_PROC_STOP) != PTH_DATA_PROC_STOP)
 	{
 		/* Block until we acquire the lock first, then release it and wait */
-		pthread_mutex_lock(&clock->wakeup_mutex);
+		pthread_mutex_lock(&handle->wakeup_mutex);
 
-		/* Loosely signal this thread did lock the mutex */ 
-		clock->wakeup_data_ready = 0;
+		/* Loosely signal this thread did lock the mutex */
+		handle->wakeup_data_ready = 0;
 	
 		/* We may have been waiting for acquiring the lock, but the trigger
 		 * thread has been gone dying, so it will never signal again. So we need
 		 * to die
 		 */
-		if ((clock->pthread_flag_stop & PTH_DATA_PROC_STOP) ==
+		if ((handle->pthread_flag_stop & PTH_DATA_PROC_STOP) ==
 				PTH_DATA_PROC_STOP) {
-			pthread_mutex_unlock(&clock->wakeup_mutex);
+			pthread_mutex_unlock(&handle->wakeup_mutex);
 			break;
 		}
 
-		pthread_cond_wait(&clock->wakeup_cond, &clock->wakeup_mutex);
+		pthread_cond_wait(&handle->wakeup_cond, &handle->wakeup_mutex);
 
 		/* Process rawdata until there is something to process */
 		do {
-			err = process_rawdata(clock, &peer);
+			err = process_rawdata(handle, &peer);
 			
 			/* Something really bad, get out of here */
 			if (err == -1) {
-				clock->pthread_flag_stop = PTH_STOP_ALL;
-				source_breakloop(clock, (struct stampsource *)clock->stamp_source);
+				handle->pthread_flag_stop = PTH_STOP_ALL;
+				source_breakloop(handle, (struct stampsource *)handle->stamp_source);
 				break;
 			}
-		} while (err == 0); 
+		} while (err == 0);
 
-		pthread_mutex_unlock(&clock->wakeup_mutex);
+		pthread_mutex_unlock(&handle->wakeup_mutex);
 	}
 
 	destroy_peer_stamp_queue(&peer);
@@ -201,19 +202,18 @@ void* thread_data_processing(void *c_handle)
 void *
 thread_fixedpoint(void *c_handle)
 {
+	struct radclock_handle *handle;
+	long int mus;
+
 	JDEBUG
 
 	/* Deal with UNIX signal catching */
 	init_thread_signal_mgt();
 	
 	/* Clock handle to be able to read global data */
-	struct radclock *clock_handle;
-	clock_handle = (struct radclock*) c_handle;
+	handle = (struct radclock_handle *)c_handle;
 
-	long int mus;
-
-	while ( (clock_handle->pthread_flag_stop & PTH_FIXEDPOINT_STOP) != PTH_FIXEDPOINT_STOP )
-	{
+	while ((handle->pthread_flag_stop & PTH_FIXEDPOINT_STOP) != PTH_FIXEDPOINT_STOP) {
 		/* How long can we sleep? It depends on the number of bits allocated for a
 		 * vcount diff to be sure we don't roll over.
 		 * sleep = 2^bitcountll(COUNTERDIFF_MAX) * phat
@@ -223,7 +223,7 @@ thread_fixedpoint(void *c_handle)
 		mus = (long int) (COUNTERDIFF_MAX / 5 * 1e6);
 		usleep(mus);
 
-		update_kernel_fixed(clock_handle);
+		update_kernel_fixed(handle);
 		verbose(VERB_DEBUG, "FP thread updated fixedpoint data to kernel.");
 	}
 
@@ -234,7 +234,7 @@ thread_fixedpoint(void *c_handle)
 
 
 int
-start_thread_NTP_SERV(struct radclock *clock_handle) 
+start_thread_NTP_SERV(struct radclock_handle *handle)
 {
 	int err;
 	pthread_attr_t thread_attr;
@@ -242,15 +242,16 @@ start_thread_NTP_SERV(struct radclock *clock_handle)
 	pthread_attr_setdetachstate(&thread_attr, PTHREAD_CREATE_JOINABLE);
 
 	verbose(LOG_NOTICE, "Starting NTP server thread");
-	err = pthread_create(&(clock_handle->threads[PTH_NTP_SERV]), &thread_attr, 
-			thread_ntp_server, (void *)(clock_handle));
-	if (err) 
+	err = pthread_create(&(handle->threads[PTH_NTP_SERV]), &thread_attr,
+			thread_ntp_server, (void *)(handle));
+	if (err)
 		verbose(LOG_ERR, "pthread_create() returned error number %d", err);
-	 return err;
+	 return (err);
 }
 
 
-int start_thread_DATA_PROC(struct radclock *clock_handle) 
+int
+start_thread_DATA_PROC(struct radclock_handle *handle)
 {
 	int err;
 	pthread_attr_t thread_attr;
@@ -258,15 +259,15 @@ int start_thread_DATA_PROC(struct radclock *clock_handle)
 	pthread_attr_setdetachstate(&thread_attr, PTHREAD_CREATE_JOINABLE);
 
 	verbose(LOG_NOTICE, "Starting data processing thread");
-	err = pthread_create(&(clock_handle->threads[PTH_DATA_PROC]), &thread_attr,
-			thread_data_processing, (void *)(clock_handle));
-	if (err) 
+	err = pthread_create(&(handle->threads[PTH_DATA_PROC]), &thread_attr,
+			thread_data_processing, (void *)(handle));
+	if (err)
 		verbose(LOG_ERR, "pthread_create() returned error number %d", err);
-	 return err;
+	 return (err);
 }
 
 
-int start_thread_TRIGGER(struct radclock *clock_handle) 
+int start_thread_TRIGGER(struct radclock_handle *handle)
 {
 	int err;
 	pthread_attr_t thread_attr;
@@ -274,7 +275,8 @@ int start_thread_TRIGGER(struct radclock *clock_handle)
 	pthread_attr_setdetachstate(&thread_attr, PTHREAD_CREATE_JOINABLE);
 	struct sched_param sched;
 
-	/* Increase the priority of that particular thread to improve the accuracy
+	/*
+	 * Increase the priority of that particular thread to improve the accuracy
 	 * of the packet sender
 	 */
 	err = pthread_attr_getschedparam (&thread_attr, &sched);
@@ -284,16 +286,16 @@ int start_thread_TRIGGER(struct radclock *clock_handle)
 	pthread_attr_setschedpolicy(&thread_attr, SCHED_FIFO);
 
 	verbose(LOG_NOTICE, "Starting trigger thread");
-	err = pthread_create(&(clock_handle->threads[PTH_TRIGGER]), &thread_attr, 
-			thread_trigger, (void *)(clock_handle));
-	if (err) 
+	err = pthread_create(&(handle->threads[PTH_TRIGGER]), &thread_attr,
+			thread_trigger, (void *)(handle));
+	if (err)
 		verbose(LOG_ERR, "pthread_create() returned error number %d", err);
 	
-	return err;
+	return (err);
 }
 
 
-int start_thread_FIXEDPOINT(struct radclock *clock_handle) 
+int start_thread_FIXEDPOINT(struct radclock_handle *handle)
 {
 	int err;
 	pthread_attr_t thread_attr;
@@ -301,10 +303,10 @@ int start_thread_FIXEDPOINT(struct radclock *clock_handle)
 	pthread_attr_setdetachstate(&thread_attr, PTHREAD_CREATE_JOINABLE);
 
 	verbose(LOG_NOTICE, "Starting fixedpoint thread");
-	err = pthread_create(&(clock_handle->threads[PTH_FIXEDPOINT]), &thread_attr, 
-			thread_fixedpoint, (void *)(clock_handle));
-	if (err) 
+	err = pthread_create(&(handle->threads[PTH_FIXEDPOINT]), &thread_attr,
+			thread_fixedpoint, (void *)(handle));
+	if (err)
 		verbose(LOG_ERR, "pthread_create() returned error number %d", err);
-	 return err;
+	 return (err);
 }
 

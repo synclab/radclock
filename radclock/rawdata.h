@@ -90,10 +90,11 @@ struct raw_data_bundle {
 
 
 
-int capture_raw_data(struct radclock *clock_handle );
+int capture_raw_data(struct radclock_handle *handle);
 
-int deliver_rawdata_ntp(struct radclock *clock_handle, struct radpcap_packet_t *pkt, vcounter_t *vcount);
+int deliver_rawdata_ntp(struct radclock_handle *handle,
+		struct radpcap_packet_t *pkt, vcounter_t *vcount);
 
-int deliver_rawdata_spy(struct radclock *clock_handle, struct stamp_t *stamp);
+int deliver_rawdata_spy(struct radclock_handle *handle, struct stamp_t *stamp);
 
 #endif

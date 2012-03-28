@@ -34,29 +34,29 @@ struct stampsource_def
 	/** 
 	 * Initialise the source
 	 */
-	int (*init)(struct radclock *handle, struct stampsource *source);
+	int (*init)(struct radclock_handle *handle, struct stampsource *source);
 	/**
 	 * Get the next stamp, return 0 on sucess
 	 */
-	int (*get_next_stamp)(struct radclock *handle, struct stampsource *source, struct stamp_t *stamp);
+	int (*get_next_stamp)(struct radclock_handle *handle, struct stampsource *source, struct stamp_t *stamp);
 
 	/**
 	 * Break blocking loop getting packets
 	 */
-	void (*source_breakloop)(struct radclock *handle, struct stampsource *source);
+	void (*source_breakloop)(struct radclock_handle *handle, struct stampsource *source);
 	
 	/**
 	 * Clean up
 	 */
-	void (*destroy)(struct radclock *handle, struct stampsource *source);
+	void (*destroy)(struct radclock_handle *handle, struct stampsource *source);
 	/**
 	 * Update source BPF filter
 	 */
-	int (*update_filter)(struct radclock *handle, struct stampsource *source);
+	int (*update_filter)(struct radclock_handle *handle, struct stampsource *source);
 	/**
 	 * Update source RAW file dump out 
 	 */
-	int (*update_dumpout)(struct radclock *handle, struct stampsource *source);
+	int (*update_dumpout)(struct radclock_handle *handle, struct stampsource *source);
 };
 
 struct stampsource

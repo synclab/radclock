@@ -32,6 +32,10 @@
 #define BIN_CONFIG_FILE			"radclock.conf"
 
 
+#define	RAD_MINPOLL	1		/* min poll interval (s) */
+#define	RAD_MAXPOLL	1024	/* max poll interval (s) */
+
+
 /* 
  * Define max size for command line and configuration file parameters 
  */

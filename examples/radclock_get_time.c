@@ -59,7 +59,6 @@ int main (int argc, char *argv[])
 	double offset_error;
 
 	/* Time data structure */
-	struct timeval tv;
 	long double currtime;
 	time_t currtime_t;
 
@@ -113,41 +112,26 @@ int main (int argc, char *argv[])
 	for ( j=0; j<5; j++ ) {
 
 		err = radclock_get_vcounter(clock_handle, &vcount2);
-		radclock_duration_fp(clock_handle, &vcount1, &vcount2, &currtime);
+		radclock_duration(clock_handle, &vcount1, &vcount2, &currtime);
 		printf(" Delta(vcount) from previous vcount = %"VC_FMT"  (%9.4Lg [ms]) error=%d\n", vcount2-vcount1, currtime*1e3, err);
 		vcount1 = vcount2;
 	}
 	printf("\n");
 
 
-	/* radclock_gettimeofday 
-	 *
-	 * This uses the absolute RADclock, and passes back a tval, 
-	 * on the UNIX timescale. It is based on a vcounter reading made 
-	 * in user space
-	 */
-	printf("Calling the RADclock equivalent to gettimeofday\n");
-	err = radclock_gettimeofday(clock_handle, &tv);
-	if ( err ) {
-		printf("ERROR: could not get time from the vcount clock\n");
-		exit (1);
-	}
-	printf(" - radclock_gettimeofday now: %s (UNIX time: %ld.%6d)\n", ctime((time_t *)&(tv.tv_sec)), tv.tv_sec, (int)tv.tv_usec);
-
-
-	/* radclock_gettimeofday_fp
+	/* radclock_gettimeofday
 	 * 
 	 * This uses the absolute RADclock, and passes back a long double,
 	 * the resolution depends on the selected oscillator frequency and 
 	 * the definition of a long double on your architecture
 	 */
 	printf("Calling the RADclock equivalent to gettimeofday with possibly higher resolution'\n");
-	err = radclock_gettimeofday_fp(clock_handle, &currtime);
+	err = radclock_gettime(clock_handle, &currtime);
 	currtime_t = (time_t) currtime;
 	printf(" - radclock_gettimeofday now: %s (UNIX time: %12.20Lf)\n", ctime(&currtime_t), currtime);
 
 
-	/* radclock_vcount_to_abstime and radclock_vcount_to_abstime_fp
+	/* radclock_vcount_to_abstime and radclock_vcount_to_abstime
 	 *
 	 * This allows to quickly read the counter, store the value and
 	 * convert it to time information later on.
@@ -157,15 +141,12 @@ int main (int argc, char *argv[])
 	err = radclock_get_vcounter(clock_handle, &vcount1);
 	printf("Reading a vcount value now: %"VC_FMT" \n", vcount1);
 
-	err = radclock_vcount_to_abstime(clock_handle, &vcount1, &tv);
-	printf(" - converted to timeval: %s (UNIX time: %ld.%6d)\n", ctime((time_t *)&(tv.tv_sec)), tv.tv_sec, (int)tv.tv_usec);
-
-	err = radclock_vcount_to_abstime_fp(clock_handle, &vcount1, &currtime);
+	err = radclock_vcount_to_abstime(clock_handle, &vcount1, &currtime);
 	currtime_t = (time_t) currtime;
 	printf(" - converted to long double: %s (UNIX time: %12.20Lf)\n", ctime(&currtime_t), currtime);
 
 
-	/* radclock_elapsed and radclock_elapsed_fp
+	/* radclock_elapsed
 	 *
 	 * These take advantage of the stability of the difference RADclock. These
 	 * are the function to use to measure time intervals over a short time scale
@@ -177,14 +158,11 @@ int main (int argc, char *argv[])
 	printf(" - We have a little rest and sleep for 2 seconds...\n");
 	sleep(2);
 
-	err = radclock_elapsed(clock_handle, &vcount1, &tv);
-	err = radclock_elapsed_fp(clock_handle, &vcount1, &currtime);
-
-	printf(" - radclock_elapsed says we have been sleeping for [sec] %ld.%6d\n", tv.tv_sec, (int)tv.tv_usec);
-	printf(" - radclock_elapsed_fp says we have been sleeping for [sec] %12.20Lf\n", currtime);
+	err = radclock_elapsed(clock_handle, &vcount1, &currtime);
+	printf(" - radclock_elapsed says we have been sleeping for [sec] %12.20Lf\n", currtime);
 
 
-	/* radclock_duration and radclock_duration_fp 
+	/* radclock_duration
 	 *
 	 * These take advantage of the stability of the difference RADclock. These
 	 * are the function to use to measure time intervals over a short time scale
@@ -199,11 +177,9 @@ int main (int argc, char *argv[])
 	err = radclock_get_vcounter(clock_handle, &vcount2);
 	printf("Reading a second vcount value now: %"VC_FMT" \n", vcount2);
 
-	err = radclock_duration(clock_handle, &vcount1, &vcount2, &tv);
-	err = radclock_duration_fp(clock_handle, &vcount1, &vcount2, &currtime);
+	err = radclock_duration(clock_handle, &vcount1, &vcount2, &currtime);
 	
-	printf(" - radclock_duration says we have been sleeping for [sec] %ld.%6d\n", tv.tv_sec, (int)tv.tv_usec);
-	printf(" - radclock_duration_fp says we have been sleeping for [sec] %12.20Lf\n", currtime);
+	printf(" - radclock_duration says we have been sleeping for [sec] %12.20Lf\n", currtime);
 
 	return 0;
 }

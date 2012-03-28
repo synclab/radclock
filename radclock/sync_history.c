@@ -19,11 +19,13 @@
  * 02110-1301, USA.
  */
 
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 #include <syslog.h>
 
 #include "../config.h"
+#include "radclock.h"
 #include "verbose.h"
 #include "sync_history.h"
 #include "jdebug.h"

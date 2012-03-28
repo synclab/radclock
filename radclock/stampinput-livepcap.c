@@ -43,6 +43,11 @@
 # error Need ifaddrs.h or go back to using the ioctl
 #endif
 
+#include "radclock.h"
+#include "radclock-private.h"
+
+#include "radclock_daemon.h"
+#include "sync_history.h"
 #include "sync_algo.h"
 #include "config_mgr.h"
 #include "verbose.h"
@@ -51,7 +56,6 @@
 #include "stampinput_int.h"
 #include "ntohll.h"
 #include "rawdata.h"
-#include "radclock.h"
 #include "misc.h"
 #include "jdebug.h"
 
@@ -234,7 +238,7 @@ set_vcount_in_sll(radpcap_packet_t *packet, vcounter_t vcount)
  * replaced by a Linux SLL header and the vcount is stored in its address field.
  */
 static int
-get_packet_livepcap(struct radclock *clock, void *userdata,
+get_packet_livepcap(struct radclock_handle *handle, void *userdata,
 		radpcap_packet_t **packet_p)
 {
 	struct livepcap_data *data;
@@ -255,7 +259,7 @@ get_packet_livepcap(struct radclock *clock, void *userdata,
 	packet = *packet_p;
 
 	/* Retrieve the next packet from the raw data buffer */
-	ret = deliver_rawdata_ntp(clock, packet, &vcount);
+	ret = deliver_rawdata_ntp(handle, packet, &vcount);
 	if (ret < 0) {
 		/* Raw data buffer is empty */
 		return (ret);
@@ -275,9 +279,9 @@ get_packet_livepcap(struct radclock *clock, void *userdata,
 #ifdef WITH_RADKERNEL_FBSD
 	// TODO: messy stuff again, should actually test if the timestamp format is
 	// RAW_COUNTER, that would clean things up pretty well
-	if (clock->kernel_version == 2) {
+	if (handle->clock->kernel_version == 2) {
 		verbose(LOG_ERR, "Create pcap timestamp from RADclock !! CHECK ME");
-		counter_to_time(clock, &vcount, &time);
+		counter_to_time(&handle->rad_data, &vcount, &time);
 		pcap_hdr = (struct pcap_pkthdr *)packet->header;
 		pcap_hdr->ts.tv_sec = (time_t) time;
 		pcap_hdr->ts.tv_usec = (suseconds_t)(1e6 * (time - (time_t)time));
@@ -301,8 +305,6 @@ get_packet_livepcap(struct radclock *clock, void *userdata,
 	/* Return packet quality */
 	return (ret);
 }
-
-
 
 
 /*
@@ -414,9 +416,6 @@ get_interface(char* if_name, char* ip_addr)
 }
 
 
-
-
-
 /** Get the IP address of the localhost */
 int get_address_by_name(char* addr, char* hostname)
 {
@@ -437,7 +436,7 @@ int get_address_by_name(char* addr, char* hostname)
 		verbose(LOG_NOTICE, "Attempt to discover hostname");
 		if (gethostname(host, lhost) < 0) {
 			verbose(LOG_ERR, "Can't get localhost name");
-			return 1;
+			return (1);
 		}
 		sprintf(hostname, "%s", host);
 		verbose(LOG_NOTICE, "Found hostname %s", hostname);
@@ -447,7 +446,7 @@ int get_address_by_name(char* addr, char* hostname)
 	he = gethostbyname(hostname);
 	if ( he == NULL ) {
 		verbose(LOG_INFO, "Could not retrieve IP address based on hostname %s", hostname);
-		return 1;
+		return (1);
 	}
 
 	// Select an address that makes sense
@@ -471,7 +470,7 @@ int get_address_by_name(char* addr, char* hostname)
 		free(host);
 		JDEBUG_MEMORY(JDBG_FREE, s);
 		free(s);
-		return 1;
+		return (1);
 	}
 	strcpy(addr, inet_ntoa(s->sin_addr));
 
@@ -479,10 +478,8 @@ int get_address_by_name(char* addr, char* hostname)
 	free(host);
 	JDEBUG_MEMORY(JDBG_FREE, s);
 	free(s);
-	return 0;
+	return (0);
 }
-
-
 
 
 /** Create a BPF filter expression
@@ -490,14 +487,16 @@ int get_address_by_name(char* addr, char* hostname)
  * (port number, remote host name, etc)
  */
 // XXX TODO: should accept IP addresses only, and make it IPv6 friendly
-int build_BPFfilter(struct radclock *handle, char *fltstr, int maxsize, char *hostname, char *ntp_host)
+int
+build_BPFfilter(struct radclock_handle *handle, char *fltstr, int maxsize,
+		char *hostname, char *ntp_host)
 {
 	int strsize;
 	char ntp_filter[150];
 	
 	if (strlen(hostname) == 0) {
 		verbose(LOG_ERR, "No host info, no BPF filter");
-		return -1;
+		return (-1);
 	}
 	if (strlen(ntp_host) == 0) {
 		verbose(LOG_WARNING, "No NTP server specified, the BPF filter is not tight enough !!!");
@@ -505,24 +504,19 @@ int build_BPFfilter(struct radclock *handle, char *fltstr, int maxsize, char *ho
 	}
 	else
 		sprintf(ntp_filter, "and dst host %s) or (src host %s and", ntp_host, ntp_host);
-	
-	strsize = snprintf(fltstr, maxsize,
-			"(src host %s and dst port %d %s dst host %s and src port %d)",
-			hostname,
-                        handle->conf->ntp_upstream_port,
-                        ntp_filter,
-                        hostname,
-                        handle->conf->ntp_upstream_port);
 
-	return strsize;
+	strsize = snprintf(fltstr, maxsize, "(src host %s and dst port %d %s "
+			"dst host %s and src port %d)", hostname,
+			handle->conf->ntp_upstream_port, ntp_filter, hostname,
+			handle->conf->ntp_upstream_port);
+
+	return (strsize);
 }
-
-
 
 
 /* Open a live device with a BPF filter */
 static pcap_t *
-open_live(struct radclock *clock, struct livepcap_data *ldata)
+open_live(struct radclock_handle *handle, struct livepcap_data *ldata)
 {
 	pcap_t* p_handle = NULL;
 	struct bpf_program filter;
@@ -536,14 +530,14 @@ open_live(struct radclock *clock, struct livepcap_data *ldata)
 	char addr_if[16] = "";
 	int err = 0;
 
-	conf = clock->conf;
+	conf = handle->conf;
 
 	/* Retrieve required IP addresses
 	 * - useful to identify right interface to open
 	 * - set a valid BPF filter to get rid of packets we don't want
 	 */
 	err = get_address_by_name(addr_name, conf->hostname);
-//	if (err)  { return NULL; }
+//	if (err)  { return (NULL); }
 	
 	/* If we have a host, means we supposely know who we are */
 	if (strlen(conf->hostname) > 0)
@@ -553,7 +547,7 @@ open_live(struct radclock *clock, struct livepcap_data *ldata)
 	if (!get_interface(conf->network_device, addr_if)) {
 		verbose(LOG_ERR, "Failed to find free device, pcap says: %s",
 				pcap_geterr(p_handle));
-		return NULL;
+		return (NULL);
 	}
 
 	// TODO this code is not protocol independent
@@ -574,7 +568,7 @@ open_live(struct radclock *clock, struct livepcap_data *ldata)
 	/* Build the BPF filter string
 	 */
 	strcpy(fltstr, "");
-	strsize = build_BPFfilter(clock, fltstr, MAXLINE, addr_if,
+	strsize = build_BPFfilter(handle, fltstr, MAXLINE, addr_if,
 			conf->time_server);
 	if ((strsize < 0) || (strsize > MAXLINE-2)) {
 		verbose(LOG_ERR, "BPF filter string error (too long?)");
@@ -611,28 +605,27 @@ open_live(struct radclock *clock, struct livepcap_data *ldata)
 		goto pcap_err;
 	}
 
-	return p_handle;
+	return (p_handle);
 pcap_err:
 	pcap_close(p_handle);
-	return NULL;
+	return (NULL);
 }
 
 
-
-
 static int
-livepcapstamp_init(struct radclock *clock, struct stampsource *source)
+livepcapstamp_init(struct radclock_handle *handle, struct stampsource *source)
 {
-	/* Create the handle to be sure to dump the packet in the right format while
+	/*
+	 * Create the handle to be sure to dump the packet in the right format while
 	 * being able to support any link layer type thanks to the LINUX_SLL
-	 * encapsulation of the link layer .
+	 * encapsulation of the link layer.
 	 */
 	radclock_tsmode_t capture_mode;
 	pcap_t *p_handle_traceout;
 	struct radclock_config *conf;
 	int err;
 
-	conf = clock->conf;
+	conf = handle->conf;
 
 	/* Open the handle early to assure we have permissions to access it.
 	 * We do not close this, even though for libpcap 1.1.1 it is never used
@@ -656,7 +649,7 @@ livepcapstamp_init(struct radclock *clock, struct stampsource *source)
 		return (-1);
 	}
 
-	LIVEPCAP_DATA(source)->live_input = open_live(clock, LIVEPCAP_DATA(source));
+	LIVEPCAP_DATA(source)->live_input = open_live(handle, LIVEPCAP_DATA(source));
 
 	if (!LIVEPCAP_DATA(source)->live_input) {
 		verbose(LOG_ERR, "Error creating pcap handle");
@@ -666,7 +659,7 @@ livepcapstamp_init(struct radclock *clock, struct stampsource *source)
 		return (-1);
 	}
 	// TODO that could be written in a more simpler way once we clean the sources
-	clock->pcap_handle = LIVEPCAP_DATA(source)->live_input;
+	handle->clock->pcap_handle = LIVEPCAP_DATA(source)->live_input;
 
 	/* Set the timestamping mode of the pcap handle for the radclock
 	 * It should be RADCLOCK_TSMODE_SYSCLOCK !
@@ -678,14 +671,14 @@ livepcapstamp_init(struct radclock *clock, struct stampsource *source)
 	// mess
 	// TODO this is messy
 #ifdef WITH_RADKERNEL_FBSD
-	if (clock->kernel_version == 2)
-		err = radclock_set_tsmode(clock, LIVEPCAP_DATA(source)->live_input,
+	if (handle->clock->kernel_version == 2)
+		err = radclock_set_tsmode(handle->clock, LIVEPCAP_DATA(source)->live_input,
 			RADCLOCK_TSMODE_RADCLOCK);
 	else
-		err = radclock_set_tsmode(clock, LIVEPCAP_DATA(source)->live_input,
+		err = radclock_set_tsmode(handle->clock, LIVEPCAP_DATA(source)->live_input,
 			RADCLOCK_TSMODE_SYSCLOCK);
 #else
-		err = radclock_set_tsmode(clock, LIVEPCAP_DATA(source)->live_input,
+		err = radclock_set_tsmode(handle->clock, LIVEPCAP_DATA(source)->live_input,
 			RADCLOCK_TSMODE_SYSCLOCK);
 #endif
 	if (err) {
@@ -694,7 +687,7 @@ livepcapstamp_init(struct radclock *clock, struct stampsource *source)
 	}
 
 	/* Let's check we did things right */
-	radclock_get_tsmode(clock, LIVEPCAP_DATA(source)->live_input, &capture_mode);
+	radclock_get_tsmode(handle->clock, LIVEPCAP_DATA(source)->live_input, &capture_mode);
 	switch(capture_mode) {
 	case RADCLOCK_TSMODE_SYSCLOCK:
 		verbose(LOG_NOTICE, "Capture mode is SYSCLOCK");
@@ -752,7 +745,7 @@ livepcapstamp_init(struct radclock *clock, struct stampsource *source)
 
 
 static int
-livepcapstamp_get_next(struct radclock *clock, struct stampsource *source,
+livepcapstamp_get_next(struct radclock_handle *handle, struct stampsource *source,
 	struct stamp_t *stamp)
 {
 	int err;
@@ -763,12 +756,11 @@ livepcapstamp_get_next(struct radclock *clock, struct stampsource *source,
 	stamp->type = STAMP_NTP;
 	stamp->qual_warning = 0;
 
-	err = get_network_stamp(clock, (void *)LIVEPCAP_DATA(source),
+	err = get_network_stamp(handle, (void *)LIVEPCAP_DATA(source),
 			get_packet_livepcap, stamp, &source->ntp_stats);
 
 	return (err);
 }
-
 
 
 /*
@@ -778,15 +770,15 @@ livepcapstamp_get_next(struct radclock *clock, struct stampsource *source,
  * otherwise
  */
 static void
-livepcapstamp_breakloop(struct radclock *handle, struct stampsource *source)
+livepcapstamp_breakloop(struct radclock_handle *handle, struct stampsource *source)
 {
+
 	pcap_breakloop(LIVEPCAP_DATA(source)->live_input);
-	return;
 }
 
 
 static void
-livepcapstamp_finish(struct radclock *handle, struct stampsource *source)
+livepcapstamp_finish(struct radclock_handle *handle, struct stampsource *source)
 {
 	if (LIVEPCAP_DATA(source)->trace_output) {
 		pcap_dump_flush(LIVEPCAP_DATA(source)->trace_output);
@@ -799,9 +791,8 @@ livepcapstamp_finish(struct radclock *handle, struct stampsource *source)
 }
 
 
-
 static int
-livepcapstamp_update_filter(struct radclock *handle, struct stampsource *source)
+livepcapstamp_update_filter(struct radclock_handle *handle, struct stampsource *source)
 {
 	struct bpf_program filter;
 	char fltstr[MAXLINE];               // bpf filter string
@@ -844,7 +835,8 @@ err_out:
 
 
 static int
-livepcapstamp_update_dumpout(struct radclock *handle, struct stampsource *source)
+livepcapstamp_update_dumpout(struct radclock_handle *handle,
+		struct stampsource *source)
 {
 	if (LIVEPCAP_DATA(source)->trace_output) {
 		pcap_dump_flush(LIVEPCAP_DATA(source)->trace_output);

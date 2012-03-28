@@ -66,8 +66,6 @@ struct ffclock_estimate
 #endif
 
 
-#include "radclock.h"
-
 
 /**
  * Init the kernel support. 
@@ -76,7 +74,7 @@ struct ffclock_estimate
  */
 int init_kernel_support(struct radclock *clock_handle);
 
-int set_kernel_ffclock(struct radclock *clock_handle);
+int set_kernel_ffclock(struct radclock *clock, struct radclock_data *rad_data, struct radclock_error *rad_err);
 
 int has_vm_vcounter(struct radclock *clock_handle);
 

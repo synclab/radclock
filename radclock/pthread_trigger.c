@@ -2,17 +2,17 @@
  * Copyright (C) 2006-2011 Julien Ridoux <julien@synclab.org>
  *
  * This file is part of the radclock program.
- * 
+ *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
@@ -35,8 +35,10 @@
 #include "../config.h"
 #include "radclock.h"
 #include "radclock-private.h"
+#include "radclock_daemon.h"
 #include "misc.h"
 #include "verbose.h"
+#include "sync_history.h"
 #include "sync_algo.h"
 #include "config_mgr.h"
 #include "proto_ntp.h"
@@ -47,10 +49,10 @@
 #define MIN_SO_TIMEOUT 100000		/* 100 ms */
 
 // TODO: Ok, there are issues on how things should be implemented in here. A
-// clean way would be to have the functions ops stored in the client_data struct of
-// the clock_handle and initialised at startup ... I have been slack and also
-// because I don't know yet what the ops are :)
-// That will be compulsory when we (I?) add PPS and 1588 support
+// clean way would be to have the functions ops stored in the client_data struct
+// of the clock_handle and initialised at startup ... I have been slack and also
+// because I don't know yet what the ops are :) That will be compulsory when we
+// (I?) add PPS and 1588 support
 
 
 /*
@@ -68,9 +70,7 @@ pthread_cond_t alarm_cwait;
  * second.
  */
 int
-dummy_client()
-{
-	JDEBUG
+dummy_client() { JDEBUG
 
 	/* 500 ms */
 	usleep(500000);
@@ -119,7 +119,7 @@ assess_ptimer(timer_t timer, float period)
 
 	err = timer_gettime(timer, &itimer_ts);
 	if ( err < 0 )
-		return err;
+		return (err);
 
 	timer_next = itimer_ts.it_value.tv_sec +
 		(float)itimer_ts.it_value.tv_nsec / 1e9;
@@ -138,7 +138,8 @@ static long double last_xmt = 0.0;
 
 
 int
-create_ntp_request(struct radclock *clock_handle, struct ntp_pkt *pkt, struct timeval *xmt)
+create_ntp_request(struct radclock_handle *handle, struct ntp_pkt *pkt,
+		struct timeval *xmt)
 {
 	struct timeval reftime;
 	long double time;
@@ -147,22 +148,24 @@ create_ntp_request(struct radclock *clock_handle, struct ntp_pkt *pkt, struct ti
 
 	JDEBUG
 
-	pkt->li_vn_mode		= PKT_LI_VN_MODE(LEAP_NOTINSYNC, NTP_VERSION, MODE_CLIENT);
+	pkt->li_vn_mode = PKT_LI_VN_MODE(LEAP_NOTINSYNC, NTP_VERSION,
+			MODE_CLIENT);
 	pkt->stratum		= STRATUM_UNSPEC;
-	pkt->stratum		= SERVER_DATA(clock_handle)->stratum + 1;
+	pkt->stratum		= SERVER_DATA(handle)->stratum + 1;
 	pkt->ppoll			= NTP_MINPOLL;
 	pkt->precision		= -6;		/* Like ntpdate */
 	pkt->rootdelay		= htonl(FP_SECOND);
 	pkt->rootdispersion	= htonl(FP_SECOND);
-	pkt->refid			= htonl(SERVER_DATA(clock_handle)->refid);
+	pkt->refid			= htonl(SERVER_DATA(handle)->refid);
 
 	/* Reference time
-	 * The NTP timestamp format (a bit tricky): 
+	 * The NTP timestamp format (a bit tricky):
 	 * - NTP timestamps start on 1 Jan 1900
-	 * - the frac part uses higher end bits as negative power of two (expressed in sec)
+	 * - the frac part uses higher end bits as negative power of two
+	 *   (expressed in sec)
 	 */
-	vcount = RAD_DATA(clock_handle)->last_changed;
-	counter_to_time(clock_handle, &vcount, &time);
+	vcount = RAD_DATA(handle)->last_changed;
+	counter_to_time(&handle->rad_data, &vcount, &time);
 	timeld_to_timeval(&time, &reftime);
 	pkt->reftime.l_int = htonl(reftime.tv_sec + JAN_1970);
 	pkt->reftime.l_fra = htonl(reftime.tv_usec * 4294967296.0 / 1e6);
@@ -173,15 +176,15 @@ create_ntp_request(struct radclock *clock_handle, struct ntp_pkt *pkt, struct ti
 	pkt->rec.l_int		= 0;
 	pkt->rec.l_fra		= 0;
 
-	/* Transmit time */ 
+	/* Transmit time */
 
-	err = radclock_get_vcounter(clock_handle, &vcount);
+	err = radclock_get_vcounter(handle->clock, &vcount);
 	if (err < 0)
 		return (1);
-	counter_to_time(clock_handle, &vcount, &time);
+	counter_to_time(&handle->rad_data, &vcount, &time);
 
 	if (time == last_xmt) {
-		verbose (LOG_ERR, "xmt and last_xmt are the same !! vcount= %llu", 
+		verbose (LOG_ERR, "xmt and last_xmt are the same !! vcount= %llu",
 				(long long unsigned) vcount);
 		return (1);
 	}
@@ -215,7 +218,7 @@ unmatched_ntp_pair(struct ntp_pkt *spkt, struct ntp_pkt *rpkt)
 
 
 int
-ntp_client(struct radclock * clock)
+ntp_client(struct radclock_handle *handle)
 {
 	/* Timer and polling grid data */
 	float adjusted_period;
@@ -235,7 +238,7 @@ ntp_client(struct radclock * clock)
 
 	JDEBUG
 
-	peer = clock->active_peer;
+	peer = handle->active_peer;
 	starve_ratio = 1.0;
 	attempt = 3;
 	socklen = sizeof(struct sockaddr_in);
@@ -248,8 +251,8 @@ ntp_client(struct radclock * clock)
 	 * grid. A bit of a luxury to benefit from the POSIX timer in here but it
 	 * makes the code cleaner ... so why not :)
 	 */
-	if (clock->server_data->burst > 0) {
-		clock->server_data->burst -= 1;
+	if (handle->server_data->burst > 0) {
+		handle->server_data->burst -= 1;
 		adjusted_period = BURST_DELAY;
 	} else {
 		/* The logic to change the rate of polling due to starvation is
@@ -257,15 +260,15 @@ ntp_client(struct radclock * clock)
 		 */
 
 		// TODO implement logic for starvation ratio for sleep defined by the sync algo
-		adjusted_period = clock->conf->poll_period / starve_ratio;
+		adjusted_period = handle->conf->poll_period / starve_ratio;
 	}
 
 	/* Limit the number of attempts to be sure attempt * SO_TIMEOUT never
 	 * exceeds the poll period or we end up in unnecessary complex situation. Of
 	 * course it doesn't help us in case RTT > RAD_MINPOLL.
 	 */
-	getsockopt(CLIENT_DATA(clock)->socket, SOL_SOCKET, SO_RCVTIMEO,
-			(void *)(&tv), &tvlen); 
+	getsockopt(CLIENT_DATA(handle)->socket, SOL_SOCKET, SO_RCVTIMEO,
+			(void *)(&tv), &tvlen);
 	timeout = tv.tv_sec + 1e-6 * tv.tv_usec;
 	if (attempt > adjusted_period / timeout) {
 		attempt = MAX(1, (int) adjusted_period / timeout);
@@ -290,13 +293,13 @@ ntp_client(struct radclock * clock)
 	 */
 	while (attempt > 0) {
 		/* Create and send an NTP packet */
-		ret = create_ntp_request(clock, &spkt, &tv);
+		ret = create_ntp_request(handle, &spkt, &tv);
 		if (ret)
 			continue;
 
-		ret = sendto(CLIENT_DATA(clock)->socket,
+		ret = sendto(CLIENT_DATA(handle)->socket,
 				(char *)&spkt, LEN_PKT_NOMAC /* No auth */, 0,
-				(struct sockaddr *) &(CLIENT_DATA(clock)->s_to),
+				(struct sockaddr *) &(CLIENT_DATA(handle)->s_to),
 				socklen);
 
 		if (ret < 0) {
@@ -305,7 +308,7 @@ ntp_client(struct radclock * clock)
 		}
 
 		verbose(VERB_DEBUG, "Sent NTP request to %s at %lu.%lu with id %llu",
-				inet_ntoa(CLIENT_DATA(clock)->s_to.sin_addr),
+				inet_ntoa(CLIENT_DATA(handle)->s_to.sin_addr),
 				tv.tv_sec, tv.tv_usec,
 				((uint64_t) ntohl(spkt.xmt.l_int)) << 32 |
 				(uint64_t) ntohl(spkt.xmt.l_fra));
@@ -313,9 +316,9 @@ ntp_client(struct radclock * clock)
 		/* This will block then timeout if nothing received
 		 * (see init of the socket)
 		 */
-		ret = recvfrom(CLIENT_DATA(clock)->socket,
+		ret = recvfrom(CLIENT_DATA(handle)->socket,
 				&rpkt, sizeof(struct ntp_pkt), 0,
-				(struct sockaddr*)&CLIENT_DATA(clock)->s_from,
+				(struct sockaddr*)&CLIENT_DATA(handle)->s_from,
 				&socklen);
 
 		/* If we got something, check it is a valid pair. If it is the case,
@@ -323,13 +326,13 @@ ntp_client(struct radclock * clock)
 		 */
 		if (ret > 0) {
 			verbose(VERB_DEBUG, "Received NTP reply from %s with id %llu",
-				inet_ntoa(CLIENT_DATA(clock)->s_from.sin_addr),
+				inet_ntoa(CLIENT_DATA(handle)->s_from.sin_addr),
 				((uint64_t) ntohl(rpkt.xmt.l_int)) << 32 |
 				(uint64_t) ntohl(rpkt.xmt.l_fra));
 
 			if (unmatched_ntp_pair(&spkt, &rpkt))
 				verbose(LOG_WARNING, "NTP client got a non matching pair. "
-						"Increase socket timeout?"); 
+						"Increase socket timeout?");
 				break;
 		}
 		else
@@ -344,7 +347,7 @@ ntp_client(struct radclock * clock)
 	 * to cover ugly cases. Make sure we never go below the minimum socket
 	 * timeout value, and bound upper values.
 	 */
-	timeout = peer->RTThat * RAD_DATA(clock)->phat + 5e-3;
+	timeout = peer->RTThat * RAD_DATA(handle)->phat + 5e-3;
 	if (timeout * 1e6 < MIN_SO_TIMEOUT)
 		timeout = MIN_SO_TIMEOUT * 1e-6;
 	if (timeout > adjusted_period / 3)
@@ -352,8 +355,8 @@ ntp_client(struct radclock * clock)
 
 	tv.tv_sec = (time_t)timeout;
 	tv.tv_usec = (useconds_t)(1e6 * timeout - (time_t)timeout);
-	setsockopt(CLIENT_DATA(clock)->socket, SOL_SOCKET, SO_RCVTIMEO,
-			(void *)(&tv), tvlen); 
+	setsockopt(CLIENT_DATA(handle)->socket, SOL_SOCKET, SO_RCVTIMEO,
+			(void *)(&tv), tvlen);
 	verbose(VERB_DEBUG, "Adjusting NTP client socket timeout to %.3f [ms]",
 			1e3 * timeout);
 
@@ -363,34 +366,33 @@ ntp_client(struct radclock * clock)
 
 
 int
-trigger_work(struct radclock *clock_handle)
+trigger_work(struct radclock_handle *handle)
 {
 	vcounter_t vcount;
 	int err;
 
 	JDEBUG
 
-	if (VM_SLAVE(clock_handle)) {
-		err = RAD_VM(clock_handle)->pull_data(clock_handle);
+	if (VM_SLAVE(handle)) {
+		err = RAD_VM(handle)->pull_data(handle);
 	} else {
-		switch (clock_handle->conf->synchro_type) {
-			case SYNCTYPE_SPY:
-			case SYNCTYPE_PIGGY:
-			case SYNCTYPE_PPS:
-			case SYNCTYPE_1588:
-				dummy_client();
-				break;
+		switch (handle->conf->synchro_type) {
+		case SYNCTYPE_SPY:
+		case SYNCTYPE_PIGGY:
+		case SYNCTYPE_PPS:
+		case SYNCTYPE_1588:
+			dummy_client();
+			break;
 
-			case SYNCTYPE_NTP:
-				ntp_client(clock_handle);
-				break;
+		case SYNCTYPE_NTP:
+			ntp_client(handle);
+			break;
 
-			default:
-				verbose(LOG_ERR, "Trigger for this sync type is not implemented");
-				break;
+		default:
+			verbose(LOG_ERR, "Trigger for this sync type is not implemented");
+			break;
 		}
 	}
-
 
 	/*
 	 * Here we have a notion of time elapsed that is not driven by packet input,
@@ -399,29 +401,28 @@ trigger_work(struct radclock *clock_handle)
 	 * TODO Need to move from STARVING to UNSYNC and clear that either
 	 * here or in the sync algo
 	 */
-	err = radclock_get_vcounter(clock_handle, &vcount);
+	err = radclock_get_vcounter(handle->clock, &vcount);
 	if (err < 0)
 		return (err);
 
-	if ((vcount - RAD_DATA(clock_handle)->last_changed)*RAD_DATA(clock_handle)->phat >
+	if ((vcount - RAD_DATA(handle)->last_changed) * RAD_DATA(handle)->phat >
 			OUT_SKM / 2) {
 		/* Data is quite old */
-		if (!HAS_STATUS(clock_handle, STARAD_STARVING)) {
-			verbose(LOG_WARNING, "Clock is starving. No valid input for a long time!!");
-			ADD_STATUS(clock_handle, STARAD_STARVING);
+		if (!HAS_STATUS(handle, STARAD_STARVING)) {
+			verbose(LOG_WARNING, "Clock is starving. No valid input for a long "
+					"time!!");
+			ADD_STATUS(handle, STARAD_STARVING);
 		}
 	} else
 		/* We are happy with the data */
-		DEL_STATUS(clock_handle, STARAD_STARVING);
+		DEL_STATUS(handle, STARAD_STARVING);
 
 	return (0);
 }
 
 
-
-
 int
-ntp_init(struct radclock* clock)
+ntp_init(struct radclock_handle *handle)
 {
 	/* Socket data */
 	struct hostent *he;
@@ -432,22 +433,22 @@ ntp_init(struct radclock* clock)
 	sigset_t alarm_mask;
 
 	/* Do we have what it takes? */
-	if (strlen(clock->conf->time_server) == 0) {
+	if (strlen(handle->conf->time_server) == 0) {
 		verbose(LOG_ERR, "No NTP server specified, I cannot not be a client!");
 		return (1);
 	}
 
 	/* Build server infos */
-	CLIENT_DATA(clock)->s_to.sin_family = PF_INET;
-	CLIENT_DATA(clock)->s_to.sin_port = ntohs(clock->conf->ntp_upstream_port);
-	if((he=gethostbyname(clock->conf->time_server)) == NULL) {
+	CLIENT_DATA(handle)->s_to.sin_family = PF_INET;
+	CLIENT_DATA(handle)->s_to.sin_port = ntohs(handle->conf->ntp_upstream_port);
+	if((he=gethostbyname(handle->conf->time_server)) == NULL) {
 		herror("gethostbyname");
 		return (1);
 	}
-	CLIENT_DATA(clock)->s_to.sin_addr.s_addr = *(in_addr_t *)he->h_addr_list[0];
+	CLIENT_DATA(handle)->s_to.sin_addr.s_addr = *(in_addr_t *)he->h_addr_list[0];
 
 	/* Create the socket */
-	if ((CLIENT_DATA(clock)->socket = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+	if ((CLIENT_DATA(handle)->socket = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
 		perror("socket");
 		return (1);
 	}
@@ -459,7 +460,7 @@ ntp_init(struct radclock* clock)
 	 */
 	so_timeout.tv_sec = 0;
 	so_timeout.tv_usec = MIN_SO_TIMEOUT;
-	setsockopt(CLIENT_DATA(clock)->socket, SOL_SOCKET,
+	setsockopt(CLIENT_DATA(handle)->socket, SOL_SOCKET,
 			SO_RCVTIMEO, (void *)(&so_timeout), sizeof(struct timeval));
 
 	/* Initialise the signal data */
@@ -480,7 +481,7 @@ ntp_init(struct radclock* clock)
 		return (1);
 	}
 	if (set_ptimer(ntpclient_timerid, 0.5 /* !0 */,
-				(float) clock->conf->poll_period) < 0) {
+				(float) handle->conf->poll_period) < 0) {
 		verbose(LOG_ERR, "ntp_init: POSIX timer cannot be set");
 		return (1);
 	}
@@ -490,22 +491,22 @@ ntp_init(struct radclock* clock)
 
 
 int
-trigger_init(struct radclock *clock_handle)
+trigger_init(struct radclock_handle *handle)
 {
 	int err;
 
 	JDEBUG
 
 	err = 0;
-	if (!VM_SLAVE(clock_handle)) {
-		switch (clock_handle->conf->synchro_type) {
+	if (!VM_SLAVE(handle)) {
+		switch (handle->conf->synchro_type) {
 		case SYNCTYPE_SPY:
 		case SYNCTYPE_PIGGY:
 			/* Nothing to do */
 			break;
 
 		case SYNCTYPE_NTP:
-			err = ntp_init(clock_handle);
+			err = ntp_init(handle);
 			break;
 
 		case SYNCTYPE_1588:

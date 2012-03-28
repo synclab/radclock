@@ -40,16 +40,19 @@
 
 #include "radclock.h"
 #include "radclock-private.h"
+#include "radclock_daemon.h"
 #include "ffclock.h"
 #include "fixedpoint.h"
 #include "misc.h"
+#include "sync_history.h"		// To be able to access boottime 'C' from sync output. TODO add C into radclock_data structure?
 #include "sync_algo.h"		// To be able to access boottime 'C' from sync output. TODO add C into radclock_data structure?
 #include "verbose.h"
 #include "jdebug.h"
 
 
 
-int init_kernel_support(struct radclock *handle)
+int
+init_kernel_support(struct radclock *clock)
 {
 	/* Kernel version 0 and 1 variables */
 	int fd = -1;
@@ -61,16 +64,14 @@ int init_kernel_support(struct radclock *handle)
 	int err;
 	struct module_stat stat;
 */
-	switch (handle->kernel_version)
-	{
+	switch (clock->kernel_version) {
 
 	case 0:
 	case 1:
 		/* This is super ugly, we open a second BPF to write the clock data,
 		 * generic or fixed point. That's the very old way
 		 */
-		for (devnum=0; devnum < 255; devnum++)
-		{
+		for (devnum=0; devnum < 255; devnum++) {
 			sprintf(fname, "/dev/bpf%d", devnum);
 			fd = open(fname, O_RDONLY);
 			if (fd != -1) {
@@ -78,12 +79,11 @@ int init_kernel_support(struct radclock *handle)
 				break;
 			}
 		}
-		if ( devnum == 254 )
-		{
+		if (devnum == 254) {
 			verbose(LOG_ERR, "Cannot open a bpf descriptor");
 			return -1;
 		}
-		PRIV_DATA(handle)->dev_fd = fd;
+		PRIV_DATA(clock)->dev_fd = fd;
 		break;
 
 	/* ffclock_setestimate syscall offered by kernel through libc */
@@ -91,12 +91,10 @@ int init_kernel_support(struct radclock *handle)
 	case 3:
 		break;
 
-
 	default:
 		verbose(LOG_ERR, "Unknown kernel version");
 		return -1;
 	}
-
 
 	verbose(LOG_NOTICE, "Feed-Forward Kernel initialised");
 	return 0;
@@ -193,16 +191,16 @@ int has_vm_vcounter(struct radclock *handle)
  * TODO: remove when backward compatibility for kernel versions < 2 is dropped.
  */
 inline int 
-set_kernel_fixedpoint(struct radclock *handle, struct radclock_fixedpoint *fpdata)
+set_kernel_fixedpoint(struct radclock *clock, struct radclock_fixedpoint *fpdata)
 {
 	JDEBUG
 	int err;
-	switch (handle->kernel_version)
+	switch (clock->kernel_version)
 	{
 
 	case 0:
 	case 1:
-		err = ioctl(PRIV_DATA(handle)->dev_fd, BIOCSRADCLOCKFIXED, (caddr_t)fpdata);
+		err = ioctl(PRIV_DATA(clock)->dev_fd, BIOCSRADCLOCKFIXED, (caddr_t)fpdata);
 		if ( err < 0 ) 
 		{
 			verbose(LOG_ERR, "Setting fixedpoint data failed");
@@ -236,7 +234,8 @@ set_kernel_fixedpoint(struct radclock *handle, struct radclock_fixedpoint *fpdat
  */
 #ifdef HAVE_SYS_TIMEFFC_H
 int
-set_kernel_ffclock(struct radclock *clock)
+set_kernel_ffclock(struct radclock *clock, struct radclock_data *rad_data,
+		struct radclock_error *rad_err)
 {
 	JDEBUG
 
@@ -257,7 +256,7 @@ set_kernel_ffclock(struct radclock *clock)
 	/*
 	 * Build the data structure to pass to the kernel
 	 */
-	vcount = RAD_DATA(clock)->last_changed;
+	vcount = rad_data->last_changed;
 
 	/* What I would like to do is: 
 	 * cest->time.frac = (time - (time_t) time) * (1LLU << 64);
@@ -267,12 +266,12 @@ set_kernel_ffclock(struct radclock *clock)
 	 */
 
 	/* Convert vcount to long double time and to bintime */
-	counter_to_time(clock, &vcount, &time);
+	counter_to_time(rad_data, &vcount, &time);
 	cest.update_time.sec = (time_t) time;
 	frac = (time - (time_t) time) * (1LLU << 63);
 	cest.update_time.frac = frac << 1;
 
-	period = ((long double) RAD_DATA(clock)->phat_local) * (1LLU << 63);
+	period = ((long double) rad_data->phat_local) * (1LLU << 63);
 	cest.period = period << 1;
 
 	cest.update_ffcount = vcount;
@@ -281,9 +280,9 @@ set_kernel_ffclock(struct radclock *clock)
 	/*  TODO XXX: this should be made an average value of some kind !! and not the
 	 * 'instantaneous' one
 	 */
-	cest.errb_abs = (uint32_t) RAD_ERROR(clock)->error_bound_avg * 1e9;
-	cest.errb_rate = (uint32_t) RAD_DATA(clock)->phat_local_err * 1e9;
-	cest.status = RAD_DATA(clock)->status;
+	cest.errb_abs = (uint32_t) rad_err->error_bound_avg * 1e9;
+	cest.errb_rate = (uint32_t) rad_data->phat_local_err * 1e9;
+	cest.status = rad_data->status;
 
 	/* Next leapsec in counter units, and side infos */
 	cest.leapsec = 0;

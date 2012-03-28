@@ -178,7 +178,6 @@ int extract_vcount_stamp(
 		vcounter_t *vcount);
 
 
-int init_virtual_machine_mode(struct radclock *clock_handle);
 
 int radclock_init_vcounter_syscall(struct radclock *handle);
 int radclock_init_vcounter(struct radclock *handle);

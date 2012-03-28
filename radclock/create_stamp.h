@@ -99,8 +99,8 @@ typedef struct radpcap_packet_t {
 /*
  * So far still pcap based
  */
-int get_network_stamp(struct radclock *handle, void * userdata,
-		int (*get_packet)(struct radclock *, void *, radpcap_packet_t **),
+int get_network_stamp(struct radclock_handle *handle, void * userdata,
+		int (*get_packet)(struct radclock_handle *, void *, radpcap_packet_t **),
 		struct stamp_t *stamp, struct timeref_stats *stats);
 
 int get_vcount(radpcap_packet_t *packet, vcounter_t *vcount);

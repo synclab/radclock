@@ -28,13 +28,13 @@
 
 
 
-int open_output_stamp(struct radclock *clock_handle) ;
-void close_output_stamp(struct radclock *clock_handle) ;
+int open_output_stamp(struct radclock_handle *handle) ;
+void close_output_stamp(struct radclock_handle *handle) ;
 
-int open_output_matlab(struct radclock *clock_handle) ;
-void close_output_matlab(struct radclock *clock_handle) ;
+int open_output_matlab(struct radclock_handle *handle) ;
+void close_output_matlab(struct radclock_handle *handle) ;
 
 void
-print_out_files(struct radclock *clock_handle, struct stamp_t *stamp);
+print_out_files(struct radclock_handle *handle, struct stamp_t *stamp);
 
 #endif

@@ -32,6 +32,9 @@
 #include "../config.h"
 #include "radclock.h"
 #include "radclock-private.h"
+
+#include "radclock_daemon.h"
+#include "sync_history.h"
 #include "sync_algo.h"
 #include "config_mgr.h"
 #include "verbose.h"
@@ -47,13 +50,14 @@ extern struct stampsource_def filepcap_source;
 extern struct stampsource_def spy_source;
 
 
-int is_live_source(struct radclock *clock_handle)
+int
+is_live_source(struct radclock_handle *handle)
 {
 	int input_type = 0;
 	
-	if (strlen(clock_handle->conf->sync_in_ascii) > 0) 		input_type++;
-	if (strlen(clock_handle->conf->sync_in_pcap) > 0) 		input_type++; 
-//	if (strlen(clock_handle->conf->network_device) > 0) 	input_type++; 
+	if (strlen(handle->conf->sync_in_ascii) > 0) 		input_type++;
+	if (strlen(handle->conf->sync_in_pcap) > 0) 		input_type++; 
+//	if (strlen(handle->conf->network_device) > 0) 	input_type++; 
 
 	if (input_type > 1) {
 		verbose (LOG_ERR, "Error: Conflict detected, two distinct inputs,"
@@ -67,7 +71,7 @@ int is_live_source(struct radclock *clock_handle)
 	else
 		return 0;
 /*
-	if (strlen(clock_handle->conf->network_device) > 0)
+	if (strlen(handle->conf->network_device) > 0)
 		return 1;
 	else
 		return 0;
@@ -80,7 +84,8 @@ int is_live_source(struct radclock *clock_handle)
  * Try to create a source from the given config
  * @return a source or NULL if there was an error creating it
  */
-struct stampsource *create_source(struct radclock *clock_handle)
+struct stampsource *
+create_source(struct radclock_handle *handle)
 {
 	struct stampsource *src = (struct stampsource *) malloc(sizeof(struct stampsource));
 	JDEBUG_MEMORY(JDBG_MALLOC, src);
@@ -88,56 +93,54 @@ struct stampsource *create_source(struct radclock *clock_handle)
 	if (!src)
 		goto err_out;
 
-	switch ( clock_handle->run_mode )
-	{
-		case RADCLOCK_SYNC_DEAD:
-			verbose(LOG_NOTICE, "Creating dead input source");
-			/* is_live_source has checked there is only one dead input */
-			if (strlen(clock_handle->conf->sync_in_ascii) > 0)
-			{
-				INPUT_OPS(src) = &ascii_source;
-				clock_handle->conf->server_ipc = BOOL_OFF;  
-				clock_handle->conf->server_ntp = BOOL_OFF;  
-			}
+	switch (handle->run_mode) {
 
-			if (strlen(clock_handle->conf->sync_in_pcap) > 0)
-			{
-				INPUT_OPS(src) = &filepcap_source;
-				clock_handle->conf->server_ipc = BOOL_OFF;  
-				clock_handle->conf->server_ntp = BOOL_OFF;  
-			}
+	case RADCLOCK_SYNC_DEAD:
+		verbose(LOG_NOTICE, "Creating dead input source");
+		/* is_live_source has checked there is only one dead input */
+		if (strlen(handle->conf->sync_in_ascii) > 0) {
+			INPUT_OPS(src) = &ascii_source;
+			handle->conf->server_ipc = BOOL_OFF;  
+			handle->conf->server_ntp = BOOL_OFF;  
+		}
 
-			break;
+		if (strlen(handle->conf->sync_in_pcap) > 0) {
+			INPUT_OPS(src) = &filepcap_source;
+			handle->conf->server_ipc = BOOL_OFF;  
+			handle->conf->server_ntp = BOOL_OFF;  
+		}
 
-		case RADCLOCK_SYNC_LIVE:
-			verbose(LOG_NOTICE, "Creating live input source");
-			switch (clock_handle->conf->synchro_type)
-			{
-				case SYNCTYPE_SPY:
-					INPUT_OPS(src) = &spy_source;
-					break;
+		break;
 
-				case SYNCTYPE_NTP:
-				case SYNCTYPE_PIGGY:
-					INPUT_OPS(src) = &livepcap_source;
-					break;
+	case RADCLOCK_SYNC_LIVE:
+		verbose(LOG_NOTICE, "Creating live input source");
+		switch (handle->conf->synchro_type)
+		{
+			case SYNCTYPE_SPY:
+				INPUT_OPS(src) = &spy_source;
+				break;
 
-				case SYNCTYPE_PPS:
-				case SYNCTYPE_1588:
-				default:
-					verbose(LOG_ERR, "Source for this sync' type does not exist.");
-					return NULL;
-			}
-			break;
+			case SYNCTYPE_NTP:
+			case SYNCTYPE_PIGGY:
+				INPUT_OPS(src) = &livepcap_source;
+				break;
 
-		case RADCLOCK_SYNC_NOTSET:
-		default:
-			verbose(LOG_ERR, "Run mode not set when creating input source");
-			return NULL;
+			case SYNCTYPE_PPS:
+			case SYNCTYPE_1588:
+			default:
+				verbose(LOG_ERR, "Source for this sync' type does not exist.");
+				return NULL;
+		}
+		break;
+
+	case RADCLOCK_SYNC_NOTSET:
+	default:
+		verbose(LOG_ERR, "Run mode not set when creating input source");
+		return NULL;
 	}
 
 	/* Now that we've worked out the type of input source, init it */
-	if (INPUT_OPS(src)->init(clock_handle, src) == -1)
+	if (INPUT_OPS(src)->init(handle, src) == -1)
 		goto child_err;
 
 	/* Initialise ntp_stats, common to all sources */
@@ -158,24 +161,27 @@ err_out:
  * Retreive a stamp from the given handle into stamp
  * @return 0 on success a negitive value on error
  */
-int get_next_stamp(struct radclock *handle, struct stampsource *source,
+int
+get_next_stamp(struct radclock_handle *handle, struct stampsource *source,
 	struct stamp_t *stamp)
 {
 	return INPUT_OPS(source)->get_next_stamp(handle, source, stamp);
 }
 
-void source_breakloop(struct radclock *clock_handle, struct stampsource *source)
+void
+source_breakloop(struct radclock_handle *handle, struct stampsource *source)
 {
-	return INPUT_OPS(source)->source_breakloop(clock_handle, source);
+	return INPUT_OPS(source)->source_breakloop(handle, source);
 }
 
 
 /**
  * Destroy the given source handle
  */
-void destroy_source(struct radclock *clock_handle, struct stampsource *source)
+void
+destroy_source(struct radclock_handle *handle, struct stampsource *source)
 {
-	INPUT_OPS(source)->destroy(clock_handle, source);
+	INPUT_OPS(source)->destroy(handle, source);
 	JDEBUG_MEMORY(JDBG_FREE, source);
 	free(source);
 }
@@ -183,16 +189,18 @@ void destroy_source(struct radclock *clock_handle, struct stampsource *source)
 /**
  * Change the BPF filter on the given source handle
  */
-int update_filter_source(struct radclock *clock_handle, struct stampsource *source)
+int
+update_filter_source(struct radclock_handle *handle, struct stampsource *source)
 {
-	return INPUT_OPS(source)->update_filter(clock_handle, source);
+	return INPUT_OPS(source)->update_filter(handle, source);
 }
 
 /**
  * Change the raw output 
  */
-int update_dumpout_source(struct radclock *clock_handle, struct stampsource *source)
+int
+update_dumpout_source(struct radclock_handle *handle, struct stampsource *source)
 {
-	return INPUT_OPS(source)->update_dumpout(clock_handle, source);
+	return INPUT_OPS(source)->update_dumpout(handle, source);
 }
 

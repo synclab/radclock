@@ -24,32 +24,29 @@
 
 #include "radclock.h"
 #include "radclock-private.h"
+#include "radclock_daemon.h"
 #include "misc.h"
 #include "logger.h"
 #include "jdebug.h"
 
 
 int
-counter_to_time(struct radclock *clock, vcounter_t *vcount, long double *time)
+counter_to_time(struct radclock_data *rad_data, vcounter_t *vcount, long double *time)
 {
 	JDEBUG
 
-	double phat;
 	vcounter_t last;
 
 	do {
 		/* Quality ingredients */
-		last  = RAD_DATA(clock)->last_changed;
-		phat  = RAD_DATA(clock)->phat;
+		last  = rad_data->last_changed;
 
-		*time = (long double) *vcount * (long double) phat 
-			+ RAD_DATA(clock)->ca;
+		*time = *vcount * (long double)rad_data->phat + rad_data->ca;
 
-		*time += (long double)(*vcount - last) *
-			(long double)(RAD_DATA(clock)->phat_local -
-			RAD_DATA(clock)->phat);
+		*time += (*vcount - last) * (long double)rad_data->phat_local -
+			rad_data->phat;
 
-	} while (last != RAD_DATA(clock)->last_changed);
+	} while (last != rad_data->last_changed);
 
 	return (0);
 }

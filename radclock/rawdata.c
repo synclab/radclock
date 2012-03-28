@@ -2,17 +2,17 @@
  * Copyright (C) 2006-2011 Julien Ridoux <julien@synclab.org>
  *
  * This file is part of the radclock program.
- * 
+ *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
@@ -31,18 +31,20 @@
 #include <assert.h>
 
 #include "../config.h"
+#include "radclock.h"
+#include "radclock-private.h"
+#include "radclock_daemon.h"
+#include "sync_history.h"
 #include "sync_algo.h"
 #include "config_mgr.h"
 #include "create_stamp.h"
-#include "radclock.h"
-#include "radclock-private.h"
 #include "verbose.h"
 #include "rawdata.h"
 #include "jdebug.h"
 
 
 /* Needed for the spy capture ... cannot pass the handle to the signal catcher */
-extern struct radclock *clock_handle;
+extern struct radclock_handle *clock_handle;
 
 timer_t spy_timerid;
 
@@ -50,52 +52,56 @@ timer_t spy_timerid;
 /*
  * Insert a newly created raw_data_bundle structure (packet or PPS signal...)
  * into the clock_handle raw data linked list.
- * We always insert at the HEAD. Beware, this is made lock free, we rely on the 
+ * We always insert at the HEAD. Beware, this is made lock free, we rely on the
  * buffer consumer not to do stupid stuff !!
  * IMPORTANT: we do assume libpcap gives us packets in chronological order
  */
-inline void insert_rdb_in_list(struct radclock *clock_handle, struct raw_data_bundle *rdb)
+inline void
+insert_rdb_in_list(struct radclock_handle *handle, struct raw_data_bundle *rdb)
 {
 	JDEBUG
 
 	// XXX Should get rid of the lock, the chain list is supposed to be lock
 	// free ... well, theoretically. It seems that free_and_cherry_pick is
 	// actuall messing with this new rdb if hammering with NTP control packets
-	pthread_mutex_lock(&clock_handle->rdb_mutex);
+	pthread_mutex_lock(&handle->rdb_mutex);
 
 	JDEBUG_STR("INSERT: rdb at %p, ->next at %p, end at %p, start at %p",
-	   	rdb, rdb->next,
-		clock_handle->rdb_end, clock_handle->rdb_start);
+		rdb, rdb->next, handle->rdb_end, clock_handle->rdb_start);
 
-	if ( clock_handle->rdb_start != NULL)
-	clock_handle->rdb_start->next = rdb;
+	if (handle->rdb_start != NULL)
+		handle->rdb_start->next = rdb;
 
-	clock_handle->rdb_start = rdb;
+	handle->rdb_start = rdb;
 
-	if ( clock_handle->rdb_end == NULL )
-		clock_handle->rdb_end = rdb;
+	if (handle->rdb_end == NULL)
+		handle->rdb_end = rdb;
 
-	pthread_mutex_unlock(&clock_handle->rdb_mutex);
+	pthread_mutex_unlock(&handle->rdb_mutex);
 }
 
 
 
 
 
-/* 
+/*
  * Really, I have tried to make this as fast as possible
  * but if you have a better implementation, go for it.
  */
-void fill_rawdata_ntp(u_char *c_handle, const struct pcap_pkthdr *pcap_hdr, const u_char *packet_data)
+void
+fill_rawdata_ntp(u_char *c_handle, const struct pcap_pkthdr *pcap_hdr,
+		const u_char *packet_data)
 {
-	JDEBUG
-
-	struct radclock *clock = (struct radclock *) c_handle;
+	struct radclock_handle *handle;
 	struct raw_data_bundle *rdb;
 	int err;
 
+	JDEBUG
+
+	handle = (struct radclock_handle *) c_handle;
+
 	/* Initialise raw data bundle */
-	rdb = (struct raw_data_bundle *) malloc (sizeof(struct raw_data_bundle));
+	rdb = (struct raw_data_bundle *) malloc(sizeof(struct raw_data_bundle));
 	JDEBUG_MEMORY(JDBG_MALLOC, rdb);
 	assert(rdb);
 
@@ -106,39 +112,40 @@ void fill_rawdata_ntp(u_char *c_handle, const struct pcap_pkthdr *pcap_hdr, cons
 	/* Copy data of interest into the raw data bundle */
 	RD_NTP(rdb)->vcount = 0;
 
-	err = extract_vcount_stamp(clock, clock->pcap_handle, pcap_hdr,
-		packet_data, &(RD_NTP(rdb)->vcount));
+	err = extract_vcount_stamp(handle->clock, handle->clock->pcap_handle,
+			pcap_hdr, packet_data, &(RD_NTP(rdb)->vcount));
 
-	memcpy( &(RD_NTP(rdb)->pcap_hdr), pcap_hdr, sizeof(struct pcap_pkthdr));
-	memcpy( RD_NTP(rdb)->buf, packet_data, pcap_hdr->caplen * sizeof(char) );
+	memcpy(&(RD_NTP(rdb)->pcap_hdr), pcap_hdr, sizeof(struct pcap_pkthdr));
+	memcpy(RD_NTP(rdb)->buf, packet_data, pcap_hdr->caplen * sizeof(char));
 
 	rdb->next = NULL;
 	rdb->read = 0;		/* Of course not read yet */
 	rdb->type = RD_NTP_PACKET;
 
 	/* Insert the new bundle in the linked list */
-	insert_rdb_in_list(clock, rdb);
+	insert_rdb_in_list(handle, rdb);
 }
 
 
 /*
  * Get timestamps from the sysclock when the POSIX timer quicks in.
  */
-void fill_rawdata_spy(int sig) 
+void
+fill_rawdata_spy(int sig)
 {
-	JDEBUG
-
 	struct raw_data_bundle *rdb;
+
+	JDEBUG
 
 	/* Initialise raw data bundle */
 	rdb = (struct raw_data_bundle *) malloc (sizeof(struct raw_data_bundle));
 	JDEBUG_MEMORY(JDBG_MALLOC, rdb);
 
 	/* What time is it mister stratum-1? */
-	radclock_get_vcounter(clock_handle, &(RD_SPY(rdb)->Ta));
+	radclock_get_vcounter(clock_handle->clock, &(RD_SPY(rdb)->Ta));
 	gettimeofday( &(RD_SPY(rdb)->Tb), NULL);
 	gettimeofday( &(RD_SPY(rdb)->Te), NULL);
-	radclock_get_vcounter(clock_handle, &(RD_SPY(rdb)->Tf));
+	radclock_get_vcounter(clock_handle->clock, &(RD_SPY(rdb)->Tf));
 
 	rdb->next = NULL;
 	rdb->read = 0;	/* Of course not read yet */
@@ -154,66 +161,66 @@ void fill_rawdata_spy(int sig)
  * Init a POSIX timer to capture data periodically and check if need
  * to return
  */
-int spy_loop(struct radclock *clock_handle)
+int
+spy_loop(struct radclock_handle *handle)
 {
-	JDEBUG
-
 	struct itimerspec itimer_ts;
 
 	/* Signal catching */
 	struct sigaction sig_struct;
 	sigset_t alarm_mask;
 
+	JDEBUG
+
 	/* Initialise the signal data */
 	sigemptyset(&alarm_mask);
 	sigaddset(&alarm_mask, SIGALRM);
-	sig_struct.sa_handler 	= fill_rawdata_spy; /* Not so dummy handler */
-	sig_struct.sa_mask 		= alarm_mask;
-	sig_struct.sa_flags 	= 0;
+	sig_struct.sa_handler = fill_rawdata_spy; /* Not so dummy handler */
+	sig_struct.sa_mask = alarm_mask;
+	sig_struct.sa_flags = 0;
 	sigaction(SIGALRM,  &sig_struct, NULL);
 
-	if ( timer_create (CLOCK_REALTIME, NULL, &spy_timerid) < 0 )
-	{
+	if (timer_create (CLOCK_REALTIME, NULL, &spy_timerid) < 0) {
 		verbose(LOG_ERR, "spy_loop: creation of POSIX timer failed: %s", strerror(errno));
-		return -1;
+		return (-1);
 	}
 
 	itimer_ts.it_value.tv_sec = 0;
 	itimer_ts.it_value.tv_nsec = 5e8;
-	itimer_ts.it_interval.tv_sec = (int) clock_handle->conf->poll_period;
+	itimer_ts.it_interval.tv_sec = (int) handle->conf->poll_period;
 	itimer_ts.it_interval.tv_nsec = 0;
 
-	if ( timer_settime(spy_timerid, 0 /*!TIMER_ABSTIME*/, &itimer_ts, NULL) < 0 )
-	{
+	if (timer_settime(spy_timerid, 0 /*!TIMER_ABSTIME*/, &itimer_ts, NULL) < 0) {
 		verbose(LOG_ERR, "spy_loop: POSIX timer cannot be set: %s", strerror(errno));
-		return -1;
+		return (-1);
 	}
 
-	while ( (clock_handle->unix_signal != SIGHUP) && (clock_handle->unix_signal != SIGTERM) )
-	{
+	while ((handle->unix_signal != SIGHUP) && (handle->unix_signal != SIGTERM)) {
 		/* Check every second if need to quit */
 		usleep(1000000);
 	}
 	
 	verbose(LOG_NOTICE, "Out of spy loop");
-	return 0;
+	return (0);
 }
 
 
 
 
-int capture_raw_data( struct radclock *clock_handle)
+int
+capture_raw_data(struct radclock_handle *handle)
 {
+	int err;
+
 	JDEBUG
 
-	int err = 0;
-	switch( clock_handle->run_mode ) 
-	{
+	err = 0;
+	switch(handle->run_mode) {
+
 	case RADCLOCK_SYNC_LIVE:
-		switch ( clock_handle->conf->synchro_type )
-		{
+		switch (handle->conf->synchro_type) {
 		case SYNCTYPE_SPY:
-			err = spy_loop(clock_handle);
+			err = spy_loop(handle);
 			break;
 
 		case SYNCTYPE_PIGGY:
@@ -225,35 +232,35 @@ int capture_raw_data( struct radclock *clock_handle)
 			 * relevant information and inserting raw data bundles in the
 			 * linked list known by the clock handle.
 			 */
-			err = pcap_loop(clock_handle->pcap_handle, -1 /*packet*/,
-					fill_rawdata_ntp, (u_char *) clock_handle);
+			err = pcap_loop(handle->clock->pcap_handle, -1 /*packet*/,
+					fill_rawdata_ntp, (u_char *) handle);
 			break;
-		
+
 		case SYNCTYPE_PPS:
 		case SYNCTYPE_1588:
 			verbose(LOG_ERR, "IMPLEMENT ME!!");
 			err = -1;
 			break;
-		
+
 		default:
 			break;
 		}
-		break;	
+		break;
 
 	/* Since we are the radclock, we should know which mode we run in !! */	
 	case RADCLOCK_SYNC_DEAD:
 	case RADCLOCK_SYNC_NOTSET:
 	default:
 		verbose(LOG_ERR, "Trying to capture data with wrong running mode");
-		return -1;
+		return (-1);
 	}
 
 	/* Error can be -1 (read error) or -2 (explicit loop break) */
-	if ( err < 0 )
-		return err;
+	if (err < 0)
+		return (err);
 
 	/* Pass here if running in spy_loop for example */
-	return 0; 
+	return (0);
 }
 
 
@@ -261,39 +268,39 @@ int capture_raw_data( struct radclock *clock_handle)
 /* This function will free the raw_data that has already been read and deliver
  * the next raw data element to read. Remember that the access to the raw data
  * buffer is lock free (e.g., pcap_loop() is adding element to it) !!
- * IMPORTANT: Forbidden to screw up in here, there is no safety net 
+ * IMPORTANT: Forbidden to screw up in here, there is no safety net
  */
-struct raw_data_bundle* free_and_cherrypick(struct radclock *clock_handle) 
+struct raw_data_bundle *
+free_and_cherrypick(struct radclock_handle *handle)
 {
+	struct raw_data_bundle *rdb, *rdb_tofree;
+
 	JDEBUG
 
-	struct raw_data_bundle * rdb = NULL;
-	struct raw_data_bundle * rdb_tofree = NULL;
-
 	/* Position at the end of the buffer */
+	rdb_tofree = NULL;
 	rdb = clock_handle->rdb_end;
 
 	/* Is the buffer empty ? */
 	if (rdb == NULL)
-		return rdb;
+		return (rdb);
 
-	/* Free data that has been read previously. We make sure we never remove the
+	/*
+	 * Free data that has been read previously. We make sure we never remove the
 	 * first element of the list. So that pcap_loop() does not get confused
 	 */
-	while ( (rdb != clock_handle->rdb_start) )
-	{
+	while (rdb != handle->rdb_start) {
 		if (rdb->read == 0)
 			break;
-		else
-		{
+		else {
 			/* Record who is the buddy to kill */
 			rdb_tofree = rdb;
 			rdb = rdb->next;
 			
 			/* Position new end of the raw data buffer and nuke */
 			// XXX again, should get rid of the locking
-			pthread_mutex_lock(&clock_handle->rdb_mutex);
-			clock_handle->rdb_end = rdb;
+			pthread_mutex_lock(&handle->rdb_mutex);
+			handle->rdb_end = rdb;
 			rdb_tofree->next = NULL;
 
 			if (rdb_tofree->type == RD_NTP_PACKET )
@@ -304,11 +311,11 @@ struct raw_data_bundle* free_and_cherrypick(struct radclock *clock_handle)
 			}
 			JDEBUG_STR( "FREE: rdb at %p, ->next at %p, end at %p, start at %p",
 				rdb_tofree, rdb_tofree->next,
-				clock_handle->rdb_end, clock_handle->rdb_start);
+				handle->rdb_end, handle->rdb_start);
 			JDEBUG_MEMORY(JDBG_FREE, rdb_tofree);
 			free(rdb_tofree);
 			rdb_tofree = NULL;
-			pthread_mutex_unlock(&clock_handle->rdb_mutex);
+			pthread_mutex_unlock(&handle->rdb_mutex);
 		}
 	}
 	/* Remember we never delete the first element of the raw data buffer. So we
@@ -319,33 +326,33 @@ struct raw_data_bundle* free_and_cherrypick(struct radclock *clock_handle)
 	 * wrote that ...
 	 */
 	if (rdb->read == 1)
-		return NULL;
+		return (NULL);
 
-	return rdb;
+	return (rdb);
 }
 
 
 
 
-int deliver_rawdata_spy(struct radclock *clock_handle, struct stamp_t *stamp)
+int
+deliver_rawdata_spy(struct radclock_handle *handle, struct stamp_t *stamp)
 {
-	JDEBUG
-
 	struct raw_data_bundle *rdb;
+
+	JDEBUG
 
 	/* Do some clean up if needed and gives the current raw data bundle
 	 * to process.
-	 */  
-	rdb = free_and_cherrypick(clock_handle);
+	 */
+	rdb = free_and_cherrypick(handle);
 
 	/* Check we have something to do */
 	if (rdb == NULL)
-		return -1;
+		return (-1);
 
-	if (rdb->type != RD_SPY_STAMP)
-	{
+	if (rdb->type != RD_SPY_STAMP) {
 		verbose(LOG_ERR, "!! Asked to deliver SPY stamps from rawdata but parsing other type !!");
-		return -1;
+		return (-1);
 	}
 
 	BST(stamp)->Ta = RD_SPY(rdb)->Ta;
@@ -358,33 +365,35 @@ int deliver_rawdata_spy(struct radclock *clock_handle, struct stamp_t *stamp)
 	/* Mark this raw data element read */
 	rdb->read = 1;
 
-	return 0;
+	return (0);
 }
 
 
 
 
 // XXX TODO XXX this is a bit messy. some parts are specific to the source, maybe that should be in the corresponding file?
-// XXX XXX Quite complicated with multiple sources, the chain list management is not re-entrant with multiple sources!! 
-int deliver_rawdata_ntp( struct radclock *clock_handle, struct radpcap_packet_t *pkt, vcounter_t *vcount)
+// XXX XXX Quite complicated with multiple sources, the chain list management is not re-entrant with multiple sources!!
+int
+deliver_rawdata_ntp(struct radclock_handle *handle, struct radpcap_packet_t *pkt,
+		vcounter_t *vcount)
 {
-	JDEBUG
-
 	struct raw_data_bundle *rdb;
+
+	JDEBUG
 
 	/* Do some clean up if needed and gives the current raw data bundle
 	 * to process.
-	 */  
-	rdb = free_and_cherrypick(clock_handle);
+	 */
+	rdb = free_and_cherrypick(handle);
 
 	/* Check we have something to do */
 	if (rdb == NULL)
-		return -1;
+		return (-1);
 
-	if (rdb->type != RD_NTP_PACKET)
-	{
-		verbose(LOG_ERR, "!! Asked to deliver NTP packet from rawdata but parsing other type !!");
-		return -1;
+	if (rdb->type != RD_NTP_PACKET) {
+		verbose(LOG_ERR, "!! Asked to deliver NTP packet from rawdata but "
+				"parsing other type !!");
+		return (-1);
 	}
 
 	/* Copy pcap header and packet payload back-to-back.
@@ -392,20 +401,21 @@ int deliver_rawdata_ntp( struct radclock *clock_handle, struct radpcap_packet_t 
 	 * should be safe to copy the captured payload.
 	 */
 	memcpy(pkt->buffer, &(RD_NTP(rdb)->pcap_hdr), sizeof(struct pcap_pkthdr));
-	memcpy(pkt->buffer + sizeof(struct pcap_pkthdr), RD_NTP(rdb)->buf, RD_NTP(rdb)->pcap_hdr.caplen);
+	memcpy(pkt->buffer + sizeof(struct pcap_pkthdr), RD_NTP(rdb)->buf,
+			RD_NTP(rdb)->pcap_hdr.caplen);
 
 	/* Position the pointers of the radpcap_packet structure */
 	pkt->header = pkt->buffer;
 	pkt->payload = pkt->buffer + sizeof(struct pcap_pkthdr);
 	pkt->size = RD_NTP(rdb)->pcap_hdr.caplen + sizeof(struct pcap_pkthdr);
-	pkt->type = pcap_datalink(clock_handle->pcap_handle);
+	pkt->type = pcap_datalink(handle->clock->pcap_handle);
 
 	/* Fill the vcount */
-	*vcount = RD_NTP(rdb)->vcount; 
+	*vcount = RD_NTP(rdb)->vcount;
 
 	/* Mark this raw data element read */
 	rdb->read = 1;
 
-	return 0; 
+	return (0);
 }
 

@@ -40,8 +40,10 @@
 #include "../config.h"
 #include "radclock.h"
 #include "radclock-private.h"
+#include "radclock_daemon.h"
 #include "verbose.h"
 #include "proto_ntp.h"
+#include "sync_history.h"        /* Because need  struct bidir_stamp defn */
 #include "sync_algo.h"        /* Because need  struct bidir_stamp defn */
 #include "ntohll.h"
 #include "create_stamp.h"
@@ -858,8 +860,8 @@ get_stamp_from_queue(struct stamp_queue *q, struct stamp_t *stamp)
  * UDP socket path.
  */
 int
-get_network_stamp(struct radclock *clock, void *userdata,
-	int (*get_packet)(struct radclock *, void *, radpcap_packet_t **),
+get_network_stamp(struct radclock_handle *handle, void *userdata,
+	int (*get_packet)(struct radclock_handle *, void *, radpcap_packet_t **),
 	struct stamp_t *stamp, struct timeref_stats *stats)
 {
 	struct bidir_peer *peer;
@@ -873,7 +875,7 @@ get_network_stamp(struct radclock *clock, void *userdata,
 	JDEBUG
 
 	// TODO manage peeers better
-	peer = clock->active_peer;
+	peer = handle->active_peer;
 
 	attempt_wait = 500;					/* Loosely calibrated for LAN RTT */
 	err = 0;
@@ -887,7 +889,7 @@ get_network_stamp(struct radclock *clock, void *userdata,
 		 * -1: run from tracefile and read error
 		 * -1: read live and raw data buffer is empty
 		 */
-		err = get_packet(clock, userdata, &packet);
+		err = get_packet(handle, userdata, &packet);
 
 		if (err == -2)
 			return (-1);
@@ -973,7 +975,7 @@ get_network_stamp(struct radclock *clock, void *userdata,
 	/* Store the server refid will pass on to our potential NTP clients */
 	// TODO do we have to keep this in both structures ?
 	// TODO: the SERVER_DATA one should not be the refid but the peer's IP
-	SERVER_DATA(clock)->refid = stamp->refid;
+	SERVER_DATA(handle)->refid = stamp->refid;
 	peer->refid = stamp->refid;
 	peer->ttl = stamp->ttl;
 	peer->stratum = stamp->stratum;
@@ -982,9 +984,9 @@ get_network_stamp(struct radclock *clock, void *userdata,
 	/* Record NTP protocol specific values but only if not crazy */
 	if ((stamp->stratum > STRATUM_REFCLOCK) && (stamp->stratum < STRATUM_UNSPEC) &&
 			(stamp->leapsec != LEAP_NOTINSYNC)) {
-		SERVER_DATA(clock)->stratum = stamp->stratum;
-		SERVER_DATA(clock)->rootdelay = stamp->rootdelay;
-		SERVER_DATA(clock)->rootdispersion = stamp->rootdispersion;
+		SERVER_DATA(handle)->stratum = stamp->stratum;
+		SERVER_DATA(handle)->rootdelay = stamp->rootdelay;
+		SERVER_DATA(handle)->rootdispersion = stamp->rootdispersion;
 		verbose(VERB_DEBUG, "Received pkt stratum= %u, rootdelay= %.9f, "
 				"roodispersion= %.9f", stamp->stratum, stamp->rootdelay,
 				stamp->rootdispersion);

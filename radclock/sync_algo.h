@@ -43,11 +43,6 @@
  */
 
 
-#include <sys/types.h>
-
-#include "radclock.h"
-#include "sync_history.h"
-
 
 /*
  * These don't exist in the standard math library
@@ -56,7 +51,7 @@
 #define MAX(a,b) (((a)>(b))?(a):(b))
 
 
-#define OUTPUT(clock, x) ((struct bidir_output*)clock->algo_output)->x
+#define OUTPUT(handle, x) ((struct bidir_output*)handle->algo_output)->x
 
 /*
  * Internal algo parameters and default values
@@ -317,7 +312,7 @@ struct bidir_peer {
  * Functions declarations
  */
 
-int process_bidir_stamp(struct radclock *clock_handle, struct bidir_peer *peer,
+int process_bidir_stamp(struct radclock_handle *handle, struct bidir_peer *peer,
 		struct bidir_stamp *input_stamp, int qual_warning);
 
 void init_peer_stamp_queue(struct bidir_peer *peer);

@@ -2,17 +2,17 @@
  * Copyright (C) 2006-2011 Julien Ridoux <julien@synclab.org>
  *
  * This file is part of the radclock program.
- * 
+ *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
@@ -29,6 +29,8 @@
 #include "../config.h"
 #include "radclock.h"
 #include "radclock-private.h"
+#include "radclock_daemon.h"
+#include "sync_history.h"
 #include "sync_algo.h"
 #include "proto_ntp.h"
 #include "fixedpoint.h"
@@ -38,15 +40,11 @@
 
 
 
-/**
- * Code for working out integer approximations
- */
-
-
 /* Counts number of bits */
-static inline uint8_t bitcountll(long long unsigned val)
+static inline uint8_t
+bitcountll(long long unsigned val)
 {
-	return (uint8_t) ceil(log(val)/log(2));
+	return ((uint8_t) ceil(log(val)/log(2)));
 }
 
 
@@ -55,11 +53,12 @@ static inline uint8_t bitcountll(long long unsigned val)
  * current time so that we can shift by the remaining number of bits.
  * We a bit generous and add 1 bit to cover the case we are close
  * to the event when a new bit is flipped.
- * The time_shift is computed from a bitcountll(vcounter_t) base. 
+ * The time_shift is computed from a bitcountll(vcounter_t) base.
  */
-inline uint8_t calculate_time_shift(long double time)
+inline uint8_t
+calculate_time_shift(long double time)
 {
-	return ( (sizeof(vcounter_t) * 8) - (bitcountll((long long unsigned)time) + 1));
+	return ((sizeof(vcounter_t) * 8) - (bitcountll((long long unsigned)time) + 1));
 }
 
 
@@ -69,38 +68,39 @@ inline uint8_t calculate_time_shift(long double time)
  * It does not mean the counter diff will never overflow, if we don't update
  * often enough, then things get screwed.
  */
-inline uint8_t calculate_countdiff_maxbits(double phat, float delay)
+inline uint8_t
+calculate_countdiff_maxbits(double phat, float delay)
 {
-	return ( bitcountll( delay / phat ) );
+	return (bitcountll( delay / phat ));
 }
 
 
 /* Number of bits to shift phat with, deduced from the number of bits allocated
  * to the countdiff, and the actual value of phat
  */
-inline uint8_t calculate_phat_shift(double phat, uint8_t countdiff_maxbit)
+inline uint8_t
+calculate_phat_shift(double phat, uint8_t countdiff_maxbit)
 {
 	uint8_t phat_int_bits;
 	phat_int_bits = (sizeof(vcounter_t) * 8) - countdiff_maxbit - 1;
-	return ( bitcountll( (1LL << phat_int_bits) * (1/phat) ) );
+	return (bitcountll((1LL << phat_int_bits) * (1/phat)));
 }
 
 
 /*
  * XXX Deprecated
  * Old way of pushing clock updates to the kernel.
- * TODO: comment out but keep for history record 
+ * TODO: comment out but keep for history record
  */
-int calculate_fixedpoint_data(vcounter_t vcounter_ref,
-		long double time_ref,
-		double phat,
-		struct radclock_fixedpoint *fpdata)
+int
+calculate_fixedpoint_data(vcounter_t vcounter_ref, long double time_ref,
+		double phat, struct radclock_fixedpoint *fpdata)
 {
 	uint8_t time_shift;
 	uint8_t phat_shift;
 	uint8_t countdiff_maxbits;
 	long double time_int;
-	long double phat_int; 
+	long double phat_int;
 
 	/* Time shift */
 	time_shift = calculate_time_shift(time_ref);
@@ -130,7 +130,7 @@ verbose(LOG_ERR, "initffclock: phat_int= %llu, time_int= %llu\n",
 			(long long unsigned) fpdata->time_int);
 */
 
-	return 0;
+	return (0);
 }
 
 
@@ -138,42 +138,36 @@ verbose(LOG_ERR, "initffclock: phat_int= %llu, time_int= %llu\n",
 /*
  * XXX Deprecated
  * Old way of pushing clock updates to the kernel.
- * TODO: comment out but keep for history record 
+ * TODO: comment out but keep for history record
  */
-int update_kernel_fixed(struct radclock *handle)
+int update_kernel_fixed(struct radclock_handle *handle)
 {
-	JDEBUG
-
 	struct radclock_fixedpoint fpdata;
 	vcounter_t vcount;
 	long double time;
 	int err;
 
+	JDEBUG
+
 	/* If we are starting (or restarting), the last estimate in the kernel
 	 * may be better than ours after the very first stamp. Let's make sure we do
 	 * not push something too stupid
 	 */
-	if ( OUTPUT(handle, n_stamps) < NTP_BURST )
-		return 0;
+	if (OUTPUT(handle, n_stamps) < NTP_BURST)
+		return (0);
 
 	memset(&fpdata,0,sizeof(fpdata));
 
-	err = radclock_get_vcounter(handle, &vcount);
-	if ( err < 0 ) {
+	err = radclock_get_vcounter(handle->clock, &vcount);
+	if (err < 0) {
 		verbose(LOG_ERR, "radclock_get_vcounter failed, fixedpoint not updated");
-		return -1;
+		return (-1);
 	}
 
-	counter_to_time(handle, &vcount, &time);
-	
-	calculate_fixedpoint_data(
-		vcount,
-		time,
-		RAD_DATA(handle)->phat,
-		&fpdata);
+	counter_to_time(&handle->rad_data, &vcount, &time);
 
-	return set_kernel_fixedpoint(handle, &fpdata);
+	calculate_fixedpoint_data(vcount, time, RAD_DATA(handle)->phat, &fpdata);
+
+	return (set_kernel_fixedpoint(handle->clock, &fpdata));
 }
-
-
 
