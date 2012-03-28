@@ -33,13 +33,6 @@
  */
 #define OUT_SKM	1024
 
-#define	RAD_MINPOLL	1		/* min poll interval (s) */
-#define	RAD_MAXPOLL	1024	/* max poll interval (s) */
-
-
-// TODO : should provide methods for modify this? 
-typedef enum { RADCLOCK_SYNC_NOTSET, RADCLOCK_SYNC_DEAD, RADCLOCK_SYNC_LIVE } radclock_runmode_t;
-typedef enum { RADCLOCK_UNIDIR, RADCLOCK_BIDIR} radclock_syncalgo_mode_t;
 
 
 /* Data related to the clock maintain out of the kernel but
@@ -53,30 +46,6 @@ struct radclock_impl_bsd
 struct radclock_impl_linux {
 	int radclock_gnl_id;
 };
-
-
-/* (NTP) Protocol related stuff on the client side */
-struct radclock_client_data {
-	int socket;
-	struct sockaddr_in s_to;
-	struct sockaddr_in s_from;
-};
-
-
-/**
- * NTP protocol specifics for being a server
- */
-// TODO this could be renamed in a more generic network layer data structure in
-// the future ...
-struct radclock_ntpserver_data {
-	int burst;
-	uint32_t refid;
-	unsigned int stratum;
-	double serverdelay; 	/* RTThat to the server we sync to */
-	double rootdelay;		/* Cumulative RTThat from top of stratum hierarchy */
-	double rootdispersion;	/* Cumulative clock error from top of stratum hierarchy */
-};
-
 
 
 /**
@@ -126,59 +95,23 @@ struct radclock_shm {
 #define SHM_ERROR(x)	((struct radclock_error *)((void *)x + x->error_off))
 
 
-/*
- * Virtual machine environment data
- * Mode run in, push and pull struct radclock_data
- */
-struct radclock_vm
-{
-	int (*pull_data) (struct radclock *clock_handle);
-	int (*push_data) (struct radclock *clock_handle);
-	void *store_handle;
-	int sock;
-	struct sockaddr_in server_addr;
-};
-
-
-
-struct radclock 
-{
-	/* Clock data, the real stuff */
-	struct radclock_data rad_data;
-
-	/* Clock error estimates */
-	struct radclock_error rad_error;
-
-	/* Virtual Machine management */
-	struct radclock_vm rad_vm;
+struct radclock {
 
 	/* System specific stuff */
 	union {
 		struct radclock_impl_bsd 	bsd_data;
 		struct radclock_impl_linux 	linux_data;
 	};
-	int kernel_version;
 
-	/* UNIX signals */
-	unsigned int unix_signal;
-
-	/* Common data for the daemon */
-	int is_daemon;
-	radclock_local_period_t	local_period_mode;
-	radclock_runmode_t 		run_mode;
-
-	/* Protocol related stuff on the client side (NTP, 1588, ...) */
-	struct radclock_client_data *client_data;
-	
-	/* Protol related stuff (NTP, 1588, ...) */
-	struct radclock_ntpserver_data *server_data;
-	
 	/* IPC shared memory */
 	int ipc_shm_id;
 	void *ipc_shm;
 
 	/* Description of current counter */
 	char hw_counter[32];
+	int kernel_version;
+
+	radclock_local_period_t	local_period_mode;
 
 	/* Pcap handler for the RADclock only */
 	pcap_t *pcap_handle;
@@ -188,49 +121,9 @@ struct radclock
 	int syscall_set_ffclock;	/* FreeBSD specific, so far */
 	int syscall_get_vcounter;
 
-	/* Output file descriptors */
-	FILE* stampout_fd;
-	FILE* matout_fd;
-
-	/* Threads */
-	pthread_t threads[8];		/* TODO: quite ugly implementation ... */
-	int	pthread_flag_stop;
-	pthread_mutex_t globaldata_mutex;
-	int wakeup_data_ready;
-	pthread_mutex_t wakeup_mutex;
-	pthread_cond_t wakeup_cond;
-	pthread_mutex_t rdb_mutex;	// XXX arbiter between insert_rdb_in_list and free_and_cherry_pick
-   								// XXX Should not need a lock, but there is
-								// XXX quite some messing around if hammering
-								// XXX NTP control packets	
-
-	/* Raw data capture buffer */
-	struct raw_data_bundle *rdb_start;
-	struct raw_data_bundle *rdb_end;
-
-	/* Configuration */
-	struct radclock_config *conf;
-
-	/* Algo output */
-	radclock_syncalgo_mode_t syncalgo_mode;
-	void *algo_output; 	/* Defined as void* since not part of the library */
-
-	/* Stamp source */
-	void *stamp_source; /* Defined as void* since not part of the library */
-
-	/* Synchronisation Peers */
-	void *active_peer; 	/* Peers are of different nature (bidir, oneway) will cast */
-	
 	/* Read Feed-Forward counter */
 	int (*get_vcounter) (struct radclock *handle, vcounter_t *vcount);
 };
-
-
-#define CLIENT_DATA(x) (x->client_data)
-#define SERVER_DATA(x) (x->server_data)
-#define RAD_DATA(x) (&(x->rad_data))
-#define RAD_ERROR(x) (&(x->rad_error))
-#define RAD_VM(x) (&(x->rad_vm))
 
 #define PRIV_USERDATA(x) (&(x->user_data))
 #ifdef linux
@@ -238,10 +131,6 @@ struct radclock
 #else
 # define PRIV_DATA(x) (&(x->bsd_data))
 #endif
-
-#define ADD_STATUS(x,y) (RAD_DATA(x)->status = RAD_DATA(x)->status | y ) 
-#define DEL_STATUS(x,y) (RAD_DATA(x)->status = RAD_DATA(x)->status & ~y ) 
-#define HAS_STATUS(x,y) ((RAD_DATA(x)->status & y ) == y ) 
 
 
 /*
@@ -263,11 +152,7 @@ int found_ffwd_kernel_version(void);
  * @param  handle The private handle for accessing global data
  * @return 0 on success, non-zero on failure
  */
-int get_kernel_ffclock(struct radclock *handle);
-
-
-/* TODO add comments */
-int raddata_quality(vcounter_t now, vcounter_t last, vcounter_t valid, double phat);
+int get_kernel_ffclock(struct radclock *clock, struct radclock_data *rad_data);
 
 
 /**

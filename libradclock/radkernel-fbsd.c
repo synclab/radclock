@@ -353,7 +353,8 @@ radclock_init_vcounter(struct radclock *handle)
 }
 
 #ifdef HAVE_SYS_TIMEFFC_H
-int get_kernel_ffclock(struct radclock *handle)
+int
+get_kernel_ffclock(struct radclock *clock, struct radclock_data *rad_data)
 {
 	/*
 	 * This is the kernel definition of clock estimates. May be different from
@@ -367,8 +368,11 @@ int get_kernel_ffclock(struct radclock *handle)
 	 * This feature exists since kernel version 2. If kernel too old, don't do
 	 * anything and return success
 	 */
-	if (handle->kernel_version < 2)
-		return 0;
+// XXX FIXME comment above is not quite true, should integrate previous kernel
+// clock access into this function !!
+	if (clock->kernel_version < 2)
+// FIXME: is error code correct? Should it be +1?
+		return (-1);
 
 	/* FreeBSD system call */
 	err = ffclock_getestimate(&cest);
@@ -376,7 +380,7 @@ int get_kernel_ffclock(struct radclock *handle)
 // TODO Clean up verbose logging
 		logger(RADLOG_ERR, "Clock estimate init from kernel failed");
 		fprintf(stdout, "Clock estimate init from kernel failed");
-		return err;
+		return (err);
 	}
 
 	/* Sanity check to avoid introducing crazy data */
@@ -385,7 +389,6 @@ int get_kernel_ffclock(struct radclock *handle)
 		fprintf(stdout, "Clock estimate from kernel look bogus - ignored");
 		return (0);
 	}
-	
 
 	/* 
 	 * Cannot push 64 times in a LLU at once. Push twice 32 instead. In this
@@ -393,30 +396,29 @@ int get_kernel_ffclock(struct radclock *handle)
 	 * look heavy digits or resolution. See set_kernel_ffclock() in radclock
 	 * code.
 	 */
-	RAD_DATA(handle)->ca = (long double) cest.update_time.sec;
+	rad_data->ca = (long double) cest.update_time.sec;
 	tmp = ((long double) cest.update_time.frac) / (1LL << 32);
-	RAD_DATA(handle)->ca += tmp / (1LL << 32);
+	rad_data->ca += tmp / (1LL << 32);
 	
 	tmp = (long double) cest.period / (1LLU << 32);
-	RAD_DATA(handle)->phat_local = (double) (tmp / (1LLU << 32));
-	RAD_DATA(handle)->phat = RAD_DATA(handle)->phat_local;
+	rad_data->phat_local = (double) (tmp / (1LLU << 32));
+	rad_data->phat = rad_data->phat_local;
 
-	RAD_DATA(handle)->status = (unsigned int) cest.status;
-	RAD_DATA(handle)->last_changed = (vcounter_t) cest.update_ffcount;
-	RAD_ERROR(handle)->error_bound_avg = (double) (cest.errb_abs / 1e9);
+	rad_data->status = (unsigned int) cest.status;
+	rad_data->last_changed = (vcounter_t) cest.update_ffcount;
 
 	fprintf(stdout, "period=%llu  phat = %.10lg, C = %7.4Lf\n",
-	(unsigned long long) cest.period,
-	RAD_DATA(handle)->phat,
-	RAD_DATA(handle)->ca);
+		(unsigned long long) cest.period, rad_data->phat,
+		rad_data->ca);
 	fprintf(stdout, "Retrieved clock estimate init from kernel\n");
 			
-	return 0;
+	return (0);
 }
 #else
-int get_kernel_ffclock(struct radclock *handle)
+int
+get_kernel_ffclock(struct radclock *clock, struct radclock_data *rad_data)
 {
-	return 0;
+	return (0);
 }
 #endif
 
