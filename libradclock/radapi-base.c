@@ -147,19 +147,20 @@ init_shm_reader(struct radclock *clock)
 	clock->ipc_shm = shmat(clock->ipc_shm_id, NULL, SHM_RDONLY);
 	if (clock->ipc_shm == (void *) -1) {
 		logger(RADLOG_ERR, "shmat: %s", strerror(errno));
+		clock->ipc_shm = NULL;
 		return (1);
 	}
 
-	return 0;
+	return (0);
 }
 
 
 
 /*
- * Initialise what is common to radclock and other apps that have a clock handle
+ * Initialise what is common to radclock and other apps that have a clock
  */
 int
-radclock_init(struct radclock *clock_handle) 
+radclock_init(struct radclock *clock) 
 {
 	/* Few branching to depending we are: 
 	 * - (1) a client process, 
@@ -168,98 +169,43 @@ radclock_init(struct radclock *clock_handle)
 	 */
 	int err;
 
-	if (clock_handle == NULL) {
+	if (clock == NULL) {
 		logger(RADLOG_ERR, "The clock handle is NULL and can't be initialised");
 		return -1;
 	}
 
 	/* Make sure we have detected the version of the kernel we are running on */
-	clock_handle->kernel_version = found_ffwd_kernel_version();
-	
-	/*
-	 * Attempt to retrieve some slightly better clock estimates from the kernel.
-	 * If successful, this overwrites the naive default set by radclock_create.
-	 * This is common to the radclock sync algo and any 3rd party application.
-	 * This feature has been introduced in kernel version 2.
-	 */
-	err = 0;
-	if (clock_handle->kernel_version >= 2)
-		err = get_kernel_ffclock(clock_handle);
-	if (err < 0) {
-		logger(RADLOG_ERR, "Did not get initial ffclock data from kernel");
-		return -1;
-	}
+	clock->kernel_version = found_ffwd_kernel_version();
 
-	err = radclock_init_vcounter_syscall(clock_handle);
+	err = radclock_init_vcounter_syscall(clock);
 	if ( err < 0 )
 		return -1;
 
-	err = radclock_init_vcounter(clock_handle);
+	err = radclock_init_vcounter(clock);
 	if ( err < 0 )
-		return -1;
+		return (-1);
 
-	/*
-	 * Libradclock only
-	 */
-	if (clock_handle->run_mode == RADCLOCK_SYNC_NOTSET) {
-			err = init_shm_reader(clock_handle);
-			if (err)
-				return (-1);
-	}	
+	/* SHM on library side */
+	err = init_shm_reader(clock);
+	if (err)
+		return (-1);
 
-	return 0;
+	return (0);
 }
 
 
 void
-radclock_destroy(struct radclock *handle) 
+radclock_destroy(struct radclock *clock) 
 {
 
 	/* Detach IPC shared memory */
-	shmdt(handle->ipc_shm);
+	shmdt(clock->ipc_shm);
 
 	/* Free the clock and set to NULL, useful for partner software */
-	free(handle);
-	handle = NULL;
+	free(clock);
+	clock = NULL;
 }
 
-
-
-/*
- * Inspect data to get an idea about the quality.
- * TODO: error codes should be fixed
- * TODO: other stuff to take into account in composing quality estimate? Needed
- * or clock status and clock error take care of it?
- * TODO: massive problem with thread synchronisation ...
- */
-int
-raddata_quality(vcounter_t now, vcounter_t last, vcounter_t valid, double phat)
-{
-	/* 
-	 * Something really bad is happening:
-	 * - counter is going backward (should never happen)
-	 * - virtual machine read H/W counter then migrated, things are out of whack
-	 * - ...?
-	 */
-// XXX FIXME XXX THIS IS WRONG
-// can read counter, then data updated, then compare ... BOOM!
-	if (now < last)
-		return 3;
-
-	/*
-	 * Several scenarios again:
-	 * - the data is really old, clock status should say the same
-	 * - virtual machine migrated, but cannot be sure. Mark data as very bad.
-	 */
-	if (phat * (now - valid) > OUT_SKM)
-		return 3;
-
-	/* The data is old, but still in SKM_SCALE */
-	if (now > valid)
-		return 2;
-
-	return 0;
-}
 
 
 int
