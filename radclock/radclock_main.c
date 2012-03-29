@@ -101,7 +101,8 @@ static int init_raddata_shm_writer(struct radclock *clock);
 /*** Guide to input parameters of radclock ***/
 static void usage(void) {
 	fprintf(stderr, "usage: radclock [options] \n"
-		"\t-x do not serve radclock time/data (IOCTL / Netlink socket to kernel, IPC to processes)\n"
+		"\t-x do not serve radclock time/data (IOCTL / Netlink socket to kernel, "
+			"IPC to processes)\n"
 		"\t-d run as a daemon\n"
 		"\t-c <filename> path to alternative configuration file\n"
 		"\t-l <filename> path to alternative log file\n"
@@ -435,7 +436,7 @@ daemonize(const char* lockfile, int *daemon_pid_fd)
 
 
 static struct radclock_handle *
-create_handle(void)
+create_handle(struct radclock_config *conf, int is_daemon)
 {
 	struct radclock_handle *handle;
 
@@ -446,6 +447,32 @@ create_handle(void)
 
 	handle->clock = radclock_create();
 
+	handle->is_daemon = is_daemon;
+	handle->conf= conf;
+
+	handle->run_mode = RADCLOCK_SYNC_NOTSET;
+
+	/* Output files */
+	handle->stampout_fd = NULL;
+	handle->matout_fd = NULL;
+
+	/*
+	 * Thread related stuff
+	 * Initialize and set thread detached attribute explicitely
+	 */
+	handle->pthread_flag_stop = 0;
+	handle->wakeup_data_ready = 0;
+	pthread_mutex_init(&(handle->globaldata_mutex), NULL);
+	pthread_mutex_init(&(handle->wakeup_mutex), NULL);
+	pthread_cond_init(&(handle->wakeup_cond), NULL);
+	pthread_mutex_init(&(handle->rdb_mutex), NULL);
+
+	/* Raw data buffer */
+	handle->rdb_start = NULL;
+	handle->rdb_end = NULL;
+
+	handle->syncalgo_mode = RADCLOCK_BIDIR;
+	handle->stamp_source = NULL;
 
 	/* Default values for the RADclock global data */
 	RAD_DATA(handle)->phat 			= 1e-9;
@@ -463,42 +490,34 @@ create_handle(void)
 	RAD_ERROR(handle)->error_bound_avg 	= 0;
 	RAD_ERROR(handle)->error_bound_std 	= 0;
 	RAD_ERROR(handle)->min_RTT 			= 0;
-	
+
+	/* NTP client data */
+	handle->client_data = (struct radclock_client_data *)
+		malloc(sizeof(struct radclock_client_data));
+	JDEBUG_MEMORY(JDBG_MALLOC, handle->client_data);
+	memset(handle->client_data, 0, sizeof(struct radclock_client_data));
+
+	/* NTP server data */
+	handle->server_data = (struct radclock_ntpserver_data *)
+		malloc(sizeof(struct radclock_ntpserver_data));
+	JDEBUG_MEMORY(JDBG_MALLOC, handle->server_data);
+	memset(handle->server_data, 0, sizeof(struct radclock_ntpserver_data));
+
+	/* Set 8 burst packets at startup for the NTP client (just like ntpd) */
+	SERVER_DATA(handle)->burst = NTP_BURST;
+
+	/* Initialise with unspect stratum */
+	SERVER_DATA(handle)->stratum = STRATUM_UNSPEC;
+
+
+	/* Sync algo output data */
+	handle->algo_output = (void*) malloc(sizeof(struct bidir_output));
+	JDEBUG_MEMORY(JDBG_MALLOC, handle->algo_output);
+	memset(handle->algo_output, 0, sizeof(struct bidir_output));
+
 	/* Virtual machine stuff */
 	RAD_VM(handle)->push_data = NULL;
 	RAD_VM(handle)->pull_data = NULL;
-
-	handle->is_daemon 			= 0;
-	handle->run_mode 			= RADCLOCK_SYNC_NOTSET;
-
-	/* Network Protocol related stuff */
-	handle->client_data 	= NULL;
-	handle->server_data 	= NULL;
-
-	handle->stampout_fd 	= NULL;
-	handle->matout_fd 	= NULL;
-
-	/*
-	 * Thread related stuff
-	 * Initialize and set thread detached attribute explicitely
-	 */
-	handle->pthread_flag_stop = 0;
-	handle->wakeup_data_ready = 0;
-	pthread_mutex_init(&(handle->globaldata_mutex), NULL);
-	pthread_mutex_init(&(handle->wakeup_mutex), NULL);
-	pthread_cond_init(&(handle->wakeup_cond), NULL);
-	pthread_mutex_init(&(handle->rdb_mutex), NULL);
-
-	/* Raw data buffer */
-	handle->rdb_start 	= NULL;
-	handle->rdb_end 		= NULL;
-
-	handle->conf 	= NULL;
-
-	handle->syncalgo_mode 	= RADCLOCK_BIDIR;
-	handle->algo_output 	= NULL;
-
-	handle->stamp_source = NULL;
 
 	return (handle);
 }
@@ -604,7 +623,7 @@ init_raddata_shm_writer(struct radclock *clock)
 
 
 static int
-clock_data_init(struct radclock *clock, struct radclock_data *rad_data)
+clock_init_live(struct radclock *clock, struct radclock_data *rad_data)
 {
 	int err;
 
@@ -612,6 +631,13 @@ clock_data_init(struct radclock *clock, struct radclock_data *rad_data)
 
 	/* Make sure we have detected the version of the kernel we are running on */
 	clock->kernel_version = found_ffwd_kernel_version();
+
+	/* Make sure we are doing the right thing */
+	if (clock->kernel_version < 0) {
+		verbose(LOG_ERR, "The RADclock does not run live without Feed-Forward "
+				"kernel support");
+		return (1);
+	}
 
 	/*
 	 * Attempt to retrieve some slightly better clock estimates from the kernel.
@@ -626,16 +652,21 @@ clock_data_init(struct radclock *clock, struct radclock_data *rad_data)
 
 	if (err < 0) {
 		logger(RADLOG_ERR, "Did not get initial ffclock data from kernel");
-		return (-1);
+		return (1);
 	}
 
 	err = radclock_init_vcounter_syscall(clock);
 	if (err < 0)
-		return (-1);
+		return (1);
 
 	err = radclock_init_vcounter(clock);
 	if (err < 0)
-		return (-1);
+		return (1);
+
+	// TODO this could be revamped into one single function
+	err = init_kernel_support(clock);
+	if (err < 0)
+		return (1);
 
 	return (0);
 }
@@ -646,7 +677,7 @@ clock_data_init(struct radclock *clock, struct radclock_data *rad_data)
  * radclock process specific init of the clock_handle
  */
 static int
-radclock_init_specific (struct radclock_handle *handle)
+init_handle(struct radclock_handle *handle)
 {
 	/* Input source */
 	struct stampsource *stamp_source;
@@ -659,28 +690,24 @@ radclock_init_specific (struct radclock_handle *handle)
 	set_logger(logger_verbose_bridge);
 
 	if (handle->run_mode == RADCLOCK_SYNC_LIVE) {
-		err = init_kernel_support(handle->clock);
-		if (err < 0)
-			return (1);
-	}
 
-	if (init_virtual_machine_mode(handle))
-		return (1);
-
-	/* Initial status words */
-	// TODO there should be more of them set in here, some are for live and dead
-	// runs, but not all!
-	if (handle->run_mode == RADCLOCK_SYNC_LIVE) {
-		ADD_STATUS(handle, STARAD_STARVING);
-	}
-	
-	/*
-	 * Initialise IPC shared memory segment
-	 */
-	if (handle->conf->server_ipc == BOOL_ON) {
-		err = init_raddata_shm_writer(handle->clock);
+		err = init_virtual_machine_mode(handle);
 		if (err)
 			return (1);
+
+		/* Initial status words */
+		// TODO there should be more of them set in here, some are for live and
+		// dead runs, but not all!
+		ADD_STATUS(handle, STARAD_STARVING);
+	
+		/*
+		 * Initialise IPC shared memory segment
+		 */
+		if (handle->conf->server_ipc == BOOL_ON) {
+			err = init_raddata_shm_writer(handle->clock);
+			if (err)
+				return (1);
+		}
 	}
 
 	/* Open input file from which to read TS data */
@@ -701,15 +728,157 @@ radclock_init_specific (struct radclock_handle *handle)
 }
 
 
+int
+start_live(struct radclock_handle *handle)
+{
+	/* Threads */
+	void* thread_status;
+
+	int have_fixed_point_thread = 0;
+	int err;
+
+	JDEBUG
+
+	/*
+	 * Handle first time run. If no time_server specified while we produce
+	 * packets, we would be a nasty CPU hog. Better avoid creating problems and
+	 * exit with an error message
+	 */
+	if ((handle->conf->synchro_type == SYNCTYPE_NTP) ||
+			(handle->conf->synchro_type == SYNCTYPE_1588)) {
+		if (strlen(handle->conf->time_server) == 0) {
+			verbose(LOG_ERR, "No time server specified on command line "
+					"or configuration file, attempting suicide.");
+			return (1);
+		}
+	}
+
+	/*
+	 * This thread triggers the processing of data. It could be a dummy sleeping
+	 * loop, an NTP client, a 1588 slave  ...
+	 */
+	err = start_thread_TRIGGER(handle);
+	if (err < 0)
+		return (1);
+
+	/*
+	 * This thread is in charge of processing the raw data collected, magically
+	 * transform the data into stamps and give them to the sync algo for
+	 * processing.
+	 */
+	if (handle->unix_signal == SIGHUP) {
+		/*
+		 * This is not start, but HUP, the algo thread is still running
+		 * Simply clear the flag and bypass
+		 */
+		handle->unix_signal = 0;
+	}
+	else if(!VM_SLAVE(handle)) {
+		err = start_thread_DATA_PROC(handle);
+		if (err < 0)
+			return (1);
+	}
+
+	/* Are we running an NTP server for network clients ? */
+	switch (handle->conf->server_ntp) {
+	case BOOL_ON:
+		err = start_thread_NTP_SERV(handle);
+		if (err < 0)
+			return (1);
+		break;
+	case BOOL_OFF:
+	default:
+		/* do nothing */
+		break;
+	}
+
+	/*
+	 * To be able to provide the RADCLOCK timestamping mode, we need to refresh
+	 * the fixed point data in the kernel.  That's this guy's job.
+	 * XXX Update: with kernel version 2, the overflow problem is taking care of
+	 * by the kernel. The fixedpoint thread is deprecated and should be removed
+	 * in the future
+	 */
+	if ((handle->run_mode == RADCLOCK_SYNC_LIVE) &&
+			(handle->clock->kernel_version < 2)) {
+		err = start_thread_FIXEDPOINT(handle);
+		if (err < 0)
+			return (1);
+		have_fixed_point_thread = 1;
+	}
+	else
+		have_fixed_point_thread = 0;
+
+	/*
+	 * That's our main capture loop, it does not return until the end of
+	 * input or if we explicitely break it
+	 * XXX TODO XXX: a unique source is assumed !!
+	 */
+	err = capture_raw_data(handle);
+
+	if (err == -1) {
+		/* Yes, we abuse this a bit ... */
+		handle->unix_signal = SIGTERM;
+		verbose(LOG_NOTICE, "Reached end of input");
+	}
+	if (err == -2) {
+		verbose(LOG_NOTICE, "Breaking current capture loop for rehash");
+	}
+
+	/*
+	 * pcap_break_loop() has been called or end of input. In both cases kill the
+	 * threads. If we rehash, they will be restarted anyway.
+	 */
+	verbose(LOG_NOTICE, "Send killing signal to threads. Wait for stop message.");
+	handle->pthread_flag_stop = PTH_STOP_ALL;
+
+	/* Do not stop sync algo thread if we HUP */
+	if (handle->unix_signal == SIGHUP)
+		handle->pthread_flag_stop &= ~PTH_DATA_PROC_STOP;
+
+	if (handle->conf->server_ntp == BOOL_ON) {
+		pthread_join(handle->threads[PTH_NTP_SERV], &thread_status);
+		verbose(LOG_NOTICE, "NTP server thread is dead.");
+	}
+
+	pthread_join(handle->threads[PTH_TRIGGER], &thread_status);
+	verbose(LOG_NOTICE, "Trigger thread is dead.");
+
+	if (have_fixed_point_thread) {
+		pthread_join(handle->threads[PTH_FIXEDPOINT], &thread_status);
+		verbose(LOG_NOTICE, "Kernel fixedpoint thread is dead.");
+	}
+	
+	/* Join on TERM since algo has been told to die */
+	if (handle->unix_signal != SIGHUP) {
+		pthread_join(handle->threads[PTH_DATA_PROC], &thread_status);
+		verbose(LOG_NOTICE, "Data processing thread is dead.");
+		/* Reinitialise flags */
+		handle->pthread_flag_stop = 0;
+		verbose(LOG_NOTICE, "Threads are dead.");
+		/* We received a SIGTERM, we exit the loop. */
+		return (1);
+	}
+	else {
+		handle->pthread_flag_stop = 0;
+	}
+
+	return (0);
+}
+
+
 
 
 /*-------------------------------------------------------------------------*/
 /********************************* main ************************************/
 /*-------------------------------------------------------------------------*/
 
-int main(int argc, char *argv[])
+int
+main(int argc, char *argv[])
 {
 	struct radclock_handle *handle;
+	struct radclock_config *conf;
+	int is_daemon = 0;
 
 	/* File and command line reading */
 	int ch;
@@ -720,15 +889,11 @@ int main(int argc, char *argv[])
 	/* PID lock file for daemon */
 	int daemon_pid_fd 		= 0;
 
-	/* Threads */
-	void* thread_status;
-
 	/* Initialize PID lockfile to a default value */
 	const char *pid_lockfile = DAEMON_LOCK_FILE;
 
 	/* Misc */
 	int err;
-	int have_fixed_point_thread = 0;
 
 	/* turn off buffering to allow results to be seen immediately if JDEBUG*/
 	#ifdef WITH_JDEBUG
@@ -746,10 +911,12 @@ int main(int argc, char *argv[])
 	sigset_t block_mask;
 	sigfillset (&block_mask);
 	struct sigaction sig_struct;
-	sig_struct.sa_handler 	= signal_handler;
-	sig_struct.sa_mask 		= block_mask;
-	sig_struct.sa_flags 	= 0;
-	
+
+
+	sig_struct.sa_handler = signal_handler;
+	sig_struct.sa_mask = block_mask;
+	sig_struct.sa_flags = 0;
+
 	sigaction(SIGHUP,  &sig_struct, NULL); /* hangup signal (1) */
 	sigaction(SIGTERM, &sig_struct, NULL); /* software termination signal (15) */
 	sigaction(SIGUSR1, &sig_struct, NULL); /* user signal 1 (30) */
@@ -757,51 +924,18 @@ int main(int argc, char *argv[])
 
 
 	/* Initialise verbose data to defaults */
- 	verbose_data.handle = NULL;
- 	verbose_data.is_daemon = 0;
- 	verbose_data.verbose_level = 0;
- 	verbose_data.fd = NULL;
+	verbose_data.handle = NULL;
+	verbose_data.is_daemon = 0;
+	verbose_data.verbose_level = 0;
+	verbose_data.fd = NULL;
 	strcpy(verbose_data.logfile, "");
 	pthread_mutex_init(&(verbose_data.vmutex), NULL);
 
 
-	/* Create the global data handle */
-	clock_handle = create_handle();
-	if (!clock_handle) {
-		verbose(LOG_ERR, "Could not create clock handle");
-		return (-1);
-	}
-	handle = clock_handle;
-
-	/* Quite a few structure of the clock handler are not used by the clients of
-	 * the radclock daemon and are then not initialised before.
-	 * Here we allocate memory for them. Maybe all of this should be put in a
-	 * daemon specific function.
-	 */
-	handle->conf = (struct radclock_config *) malloc(sizeof(struct radclock_config));
-	JDEBUG_MEMORY(JDBG_MALLOC, handle->conf);
-
-	handle->client_data = (struct radclock_client_data *) malloc(sizeof(struct radclock_client_data));
-	JDEBUG_MEMORY(JDBG_MALLOC, handle->client_data);
-
-	handle->server_data = (struct radclock_ntpserver_data *) malloc(sizeof(struct radclock_ntpserver_data));
-	JDEBUG_MEMORY(JDBG_MALLOC, handle->server_data);
-
-	handle->algo_output = (void*) malloc(sizeof(struct bidir_output));
-	JDEBUG_MEMORY(JDBG_MALLOC, handle->algo_output);
-
-	memset(handle->conf, 0, sizeof(struct radclock_config));
-	memset(handle->client_data, 0, sizeof(struct radclock_client_data));
-	memset(handle->server_data, 0, sizeof(struct radclock_ntpserver_data));
-	memset(handle->algo_output, 0, sizeof(struct bidir_output));
-
-	/* Set 8 burst packets at startup for the NTP client (just like ntpd) */
-	handle->server_data->burst = NTP_BURST;
-
-	/* Initialise with unspect stratum */
-	SERVER_DATA(handle)->stratum = STRATUM_UNSPEC;
-
-	/*** Management of configuration options *****/
+	/* Management of configuration options */
+	conf = (struct radclock_config *) malloc(sizeof(struct radclock_config));
+	JDEBUG_MEMORY(JDBG_MALLOC, conf);
+	memset(conf, 0, sizeof(struct radclock_config));
 
 	/*
 	 * The command line arguments are given the priority and override possible
@@ -813,7 +947,7 @@ int main(int argc, char *argv[])
 	 */
 
 	/* Initialize the physical parameters, and other config parameters. */
-	config_init(handle->conf);
+	config_init(conf);
 
 	/* Init the mask we use to signal configuration updates */
 	param_mask = UPDMASK_NOUPD;
@@ -823,16 +957,16 @@ int main(int argc, char *argv[])
 		switch (ch) {
 		case 'x':
 			SET_UPDATE(param_mask, UPDMASK_SERVER_IPC);
-			handle->conf->server_ipc = BOOL_OFF;
+			conf->server_ipc = BOOL_OFF;
 			break;
 		case 'c':
-			strcpy(handle->conf->conffile, optarg);
+			strcpy(conf->conffile, optarg);
 			break;
 		case 'd':
-			handle->is_daemon = 1;
+			is_daemon = 1;
 			break;
 		case 'l':
-			strcpy(handle->conf->logfile, optarg);
+			strcpy(conf->logfile, optarg);
 			break;
 		case 'n':
 			if (strlen(optarg) > MAXLINE) {
@@ -840,21 +974,21 @@ int main(int argc, char *argv[])
 				exit (1);
 			}
 			SET_UPDATE(param_mask, UPDMASK_HOSTNAME);
-			strcpy(handle->conf->hostname, optarg);
+			strcpy(conf->hostname, optarg);
 			break;
 		case 'p':
 			SET_UPDATE(param_mask, UPDMASK_POLLPERIOD);
 			if ( atoi(optarg) < RAD_MINPOLL ) {
-				handle->conf->poll_period = RAD_MINPOLL;
+				conf->poll_period = RAD_MINPOLL;
 				fprintf(stdout, "Warning: Poll period too small, set to %d\n",
-					handle->conf->poll_period);
+					conf->poll_period);
 			}
 			else
-				handle->conf->poll_period = atoi(optarg);
-			if ( handle->conf->poll_period > RAD_MAXPOLL ) {
-				handle->conf->poll_period = RAD_MAXPOLL;
+				conf->poll_period = atoi(optarg);
+			if ( conf->poll_period > RAD_MAXPOLL ) {
+				conf->poll_period = RAD_MAXPOLL;
 				fprintf(stdout, "Warning: Poll period too big, set to %d\n",
-						handle->conf->poll_period);
+						conf->poll_period);
 			}
 			break;
 		case 't':
@@ -863,7 +997,7 @@ int main(int argc, char *argv[])
 				exit (1);
 			}
 			SET_UPDATE(param_mask, UPDMASK_TIME_SERVER);
-			strcpy(handle->conf->time_server, optarg);
+			strcpy(conf->time_server, optarg);
 			break;
 		case 'i':
 			if (strlen(optarg) > MAXLINE) {
@@ -871,7 +1005,7 @@ int main(int argc, char *argv[])
 				exit (1);
 			}
 			SET_UPDATE(param_mask, UPDMASK_NETWORKDEV);
-			strcpy(handle->conf->network_device, optarg);
+			strcpy(conf->network_device, optarg);
 			break;
 		case 'r':
 			if (strlen(optarg) > MAXLINE) {
@@ -879,7 +1013,7 @@ int main(int argc, char *argv[])
 				exit (1);
 			}
 			SET_UPDATE(param_mask, UPDMASK_SYNC_IN_PCAP);
-			strcpy(handle->conf->sync_in_pcap, optarg);
+			strcpy(conf->sync_in_pcap, optarg);
 			break;
 		case 'w':
 			if (strlen(optarg) > MAXLINE) {
@@ -887,7 +1021,7 @@ int main(int argc, char *argv[])
 				exit (1);
 			}
 			SET_UPDATE(param_mask, UPDMASK_SYNC_OUT_PCAP);
-			strcpy(handle->conf->sync_out_pcap, optarg);
+			strcpy(conf->sync_out_pcap, optarg);
 			break;
 		case 's':
 			if (strlen(optarg) > MAXLINE) {
@@ -895,7 +1029,7 @@ int main(int argc, char *argv[])
 				exit (1);
 			}
 			SET_UPDATE(param_mask, UPDMASK_SYNC_IN_ASCII);
-			strcpy(handle->conf->sync_in_ascii, optarg);
+			strcpy(conf->sync_in_ascii, optarg);
 			break;
 		case 'a':
 			if (strlen(optarg) > MAXLINE) {
@@ -903,7 +1037,7 @@ int main(int argc, char *argv[])
 				exit (1);
 			}
 			SET_UPDATE(param_mask, UPDMASK_SYNC_OUT_ASCII);
-			strcpy(handle->conf->sync_out_ascii, optarg);
+			strcpy(conf->sync_out_ascii, optarg);
 			break;
 		case 'o':
 			if (strlen(optarg) > MAXLINE) {
@@ -911,7 +1045,7 @@ int main(int argc, char *argv[])
 				exit (1);
 			}
 			SET_UPDATE(param_mask, UPDMASK_CLOCK_OUT_ASCII);
-			strcpy(handle->conf->clock_out_ascii, optarg);
+			strcpy(conf->clock_out_ascii, optarg);
 			break;
 		case 'P':
 			if (strlen(optarg) > MAXLINE) {
@@ -923,15 +1057,15 @@ int main(int argc, char *argv[])
 			break;
 		case 'v':
 			SET_UPDATE(param_mask, UPDMASK_VERBOSE);
-			handle->conf->verbose_level++;
+			conf->verbose_level++;
 			break;
 		case 'U':
 			SET_UPDATE(param_mask, UPD_NTP_UPSTREAM_PORT);
-			handle->conf->ntp_upstream_port = atoi(optarg);
+			conf->ntp_upstream_port = atoi(optarg);
 			break;
 		case 'D':
 			SET_UPDATE(param_mask, UPD_NTP_DOWNSTREAM_PORT);
-			handle->conf->ntp_downstream_port = atoi(optarg);
+			conf->ntp_downstream_port = atoi(optarg);
 			break;
 		case 'V':
 			fprintf(stdout, "%s version %s\n", PACKAGE_NAME, PACKAGE_VERSION);
@@ -945,9 +1079,19 @@ int main(int argc, char *argv[])
 	argv += optind;
 
 	/* Little hack to deal with parsing of long options in the command line */
-	if (handle->conf->verbose_level > 0)
+	if (conf->verbose_level > 0)
 		SET_UPDATE(param_mask, UPDMASK_VERBOSE);
-	
+
+
+	/* Create the radclock handle */
+	clock_handle = create_handle(conf, is_daemon);
+	if (!clock_handle) {
+		verbose(LOG_ERR, "Could not create clock handle");
+		return (-1);
+	}
+	handle = clock_handle;
+
+
 	/*
 	 * Have not parsed the config file yet, so will have to do it again since it
 	 * may not be the right settings. Handles config parse messages in the right
@@ -1013,12 +1157,13 @@ int main(int argc, char *argv[])
 	
 	/* Diagnosis output for the configuration used */
 	config_print(LOG_NOTICE, handle->conf);
-	
+
 	/* Reinit the mask that counts updated values */
 	param_mask = UPDMASK_NOUPD;
 
 
-	// TODO extract extra checks from is_live_source and make an input fix function instead, would be clearer
+	// TODO extract extra checks from is_live_source and make an input fix 
+	// function instead, would be clearer
 	// TODO the conf->network_device business is way too messy
 
 
@@ -1034,21 +1179,16 @@ int main(int argc, char *argv[])
 
 	/* Init clock handle and private data */
 	if (handle->run_mode == RADCLOCK_SYNC_LIVE) {
-		if (clock_data_init(handle->clock, &handle->rad_data)) {
+		err = clock_init_live(handle->clock, &handle->rad_data);
+		if (err) {
 			verbose(LOG_ERR, "Could not initialise the RADclock");
-			return (1);
-		}
-
-		/* Make sure we are doing the right thing */
-		if (handle->clock->kernel_version < 0) {
-			verbose(LOG_ERR, "The RADclock does not run live without "
-						"Feed-Forward kernel support");
 			return (1);
 		}
 	}
 
 	/* Init radclock specific stuff */
-	if (radclock_init_specific(handle)) {
+	err = init_handle(handle);
+	if (err) {
 		verbose(LOG_ERR, "Radclock process specific init failed.");
 		return (1);
 	}
@@ -1078,143 +1218,20 @@ int main(int argc, char *argv[])
 
 		destroy_peer_stamp_queue(&peer);
 	}
+
+	/*
+	 * We loop in here in case we are rehashed. Threads are (re-)created every
+	 * time we loop in
+	 */
 	else {
-		/*
-		 * We loop in here in case we are rehashed. Threads are (re-)created
-		 * every time we loop in
-		*/
-		while (1) {
-			/*
-			 * Handle first time run. If no time_server specified while we
-			 * produce packets, we would be a nasty CPU hog. Better avoid
-			 * creating problems and exit with an error message
-			 */
-			if ((handle->conf->synchro_type == SYNCTYPE_NTP) ||
-					(handle->conf->synchro_type == SYNCTYPE_1588)) {
-				if (strlen(handle->conf->time_server) == 0) {
-					verbose(LOG_ERR, "No time server specified on command line or configuration file, attempting suicide.");
-					break;
-				}
-			}
-
-			/*
-			 * This thread triggers the processing of data. It could be a dummy
-			 * sleeping loop, an NTP client, a 1588 slave  ...
-			 */
-			err = start_thread_TRIGGER(handle);
-			if (err < 0)
-				return (1);
-			
-			/*
-			 * This thread is in charge of processing the raw data collected,
-			 * magically transform the data into stamps and give them to the
-			 * sync algo for processing.
-			 */
-			if (handle->unix_signal == SIGHUP) {
-				/*
-				 * This is not start, but HUP, the algo thread is still running
-				 * Simply clear the flag and bypass
-				 */
-				handle->unix_signal = 0;
-			}
-			else if(!VM_SLAVE(handle)) {
-				err = start_thread_DATA_PROC(handle);
-				if (err < 0)
-					return (1);
-			}
-			
-			/* Are we running an NTP server for network clients ? */
-			switch (handle->conf->server_ntp) {
-				case BOOL_ON:
-					err = start_thread_NTP_SERV(handle);
-					if (err < 0) 	return (1);
-					break;
-				case BOOL_OFF:
-				default:
-					/* do nothing */
-					break;
-			}
-
-			/*
-			 * To be able to provide the RADCLOCK timestamping mode, we need to
-			 * refresh the fixed point data in the kernel.  That's this guy's
-			 * job.
-			 * XXX Update: with kernel version 2, the overflow problem is
-			 * taking care of by the kernel. The fixedpoint thread is deprecated
-			 * and should be removed in the future
-			 */
-			if ((handle->run_mode == RADCLOCK_SYNC_LIVE) &&
-					(handle->clock->kernel_version < 2)) {
-				err = start_thread_FIXEDPOINT(handle);
-				if (err < 0)
-					return (1);
-				have_fixed_point_thread = 1;
-			}
-
-			/*
-			 * That's our main capture loop, it does not return until the end of
-			 * input or if we explicitely break it
-			 * XXX TODO XXX: a unique source is assumed !!
-			 */
-			err = capture_raw_data(handle);
-
-			if (err == -1) {
-				/* Yes, we abuse this a bit ... */
-				handle->unix_signal = SIGTERM;
-				verbose(LOG_NOTICE, "Reached end of input");
-			}
-			if (err == -2) {
-				verbose(LOG_NOTICE, "Breaking current capture loop for rehash");
-			}
-
-			/*
-			 * pcap_break_loop() has been called or end of input. In both cases
-			 * kill the threads. If we rehash, they will be restarted anyway.
-			 */
-			verbose(LOG_NOTICE, "Send killing signal to threads. "
-					"Wait for stop message.");
-
-			handle->pthread_flag_stop = PTH_STOP_ALL;
-
-			/* Do not stop sync algo thread if we HUP */
-			if (handle->unix_signal == SIGHUP)
-				handle->pthread_flag_stop &= ~PTH_DATA_PROC_STOP;
-
-			if (handle->conf->server_ntp == BOOL_ON) {
-				pthread_join(handle->threads[PTH_NTP_SERV], &thread_status);
-				verbose(LOG_NOTICE, "NTP server thread is dead.");
-			}
-
-			pthread_join(handle->threads[PTH_TRIGGER], &thread_status);
-			verbose(LOG_NOTICE, "Trigger thread is dead.");
-
-			if ( have_fixed_point_thread )
-			{
-				pthread_join(handle->threads[PTH_FIXEDPOINT], &thread_status);
-				verbose(LOG_NOTICE, "Kernel fixedpoint thread is dead.");
-			}
-			
-			/* Join on TERM since algo has been told to die */
-			if (handle->unix_signal != SIGHUP)
-			{
-				pthread_join(handle->threads[PTH_DATA_PROC], &thread_status);
-				verbose(LOG_NOTICE, "Data processing thread is dead.");
-				/* Reinitialise flags */
-				handle->pthread_flag_stop = 0;
-				verbose(LOG_NOTICE, "Threads are dead.");
-				/* We received a SIGTERM, we exit the loop. */
-				break;
-			}
-			else
-			{
-				handle->pthread_flag_stop = 0;
-				if ( rehash_daemon(handle, param_mask) )
+		while (err == 0) {
+			err = start_live(handle);
+			if (err == 0) {
+				if (rehash_daemon(handle, param_mask))
 					verbose(LOG_ERR, "SIGHUP - Failed to rehash daemon !!.");
 			}
-
 		}
-		/* End of thread while loop */
-	} /* End of run live case */
+	}
 
 
 	// TODO: look into making the stats a separate structure. Could be much
