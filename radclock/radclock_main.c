@@ -40,6 +40,7 @@
 #include <fcntl.h>
 #include <getopt.h>
 #include <math.h>
+#include <pthread.h>
 #include <sched.h>
 #include <signal.h>
 #include <stddef.h>		// offsetof

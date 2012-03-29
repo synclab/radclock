@@ -23,6 +23,16 @@
 #define _RADCLOCK_DAEMON_H
 
 
+#ifdef VC_FMT
+#undef VC_FMT
+#endif
+#if defined (__LP64__) || defined (__ILP64__)
+#define VC_FMT "lu"
+#else
+#define VC_FMT "llu"
+#endif
+
+
 
 // TODO : should provide methods for modify this? 
 typedef enum { RADCLOCK_SYNC_NOTSET, RADCLOCK_SYNC_DEAD, RADCLOCK_SYNC_LIVE } radclock_runmode_t;

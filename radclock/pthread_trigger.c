@@ -19,18 +19,20 @@
  * 02110-1301, USA.
  */
 
-
-#include <unistd.h>
-#include <syslog.h>
-#include <string.h>
-#include <netdb.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <netinet/in.h>
+
 #include <arpa/inet.h>
-#include <time.h>
-#include <signal.h>
+#include <netinet/in.h>
+
 #include <errno.h>
+#include <netdb.h>
+#include <pthread.h>
+#include <signal.h>
+#include <string.h>
+#include <syslog.h>
+#include <unistd.h>
+#include <time.h>
 
 #include "../config.h"
 #include "radclock.h"
@@ -406,7 +408,7 @@ trigger_work(struct radclock_handle *handle)
 		return (err);
 
 	if ((vcount - RAD_DATA(handle)->last_changed) * RAD_DATA(handle)->phat >
-			OUT_SKM / 2) {
+			handle->conf->phyparam.SKM_SCALE / 2) {
 		/* Data is quite old */
 		if (!HAS_STATUS(handle, STARAD_STARVING)) {
 			verbose(LOG_WARNING, "Clock is starving. No valid input for a long "

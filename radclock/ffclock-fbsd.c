@@ -2,17 +2,17 @@
  * Copyright (C) 2006-2011 Julien Ridoux <julien@synclab.org>
  *
  * This file is part of the radclock program.
- * 
+ *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
@@ -30,7 +30,8 @@
 #include <sys/syscall.h>
 #include <sys/time.h>
 #ifdef HAVE_SYS_TIMEFFC_H
-#include <sys/timeffc.h>	// All this should go in the library, set/get ffclock estimates
+#include <sys/timeffc.h>	// All this should go in the library,
+							//set/get ffclock estimates
 #endif
 #include <syslog.h>
 #include <unistd.h>
@@ -40,12 +41,14 @@
 
 #include "radclock.h"
 #include "radclock-private.h"
-#include "radclock_daemon.h"
+//#include "radclock_daemon.h"
 #include "ffclock.h"
 #include "fixedpoint.h"
 #include "misc.h"
-#include "sync_history.h"		// To be able to access boottime 'C' from sync output. TODO add C into radclock_data structure?
-#include "sync_algo.h"		// To be able to access boottime 'C' from sync output. TODO add C into radclock_data structure?
+#include "sync_history.h"		// To be able to access boottime 'C'from sync
+								// output. TODO add C into radclock_data structure?
+#include "sync_algo.h"			// To be able to access boottime 'C' from sync output.
+								// TODO add C into radclock_data structure?
 #include "verbose.h"
 #include "jdebug.h"
 
@@ -81,7 +84,7 @@ init_kernel_support(struct radclock *clock)
 		}
 		if (devnum == 254) {
 			verbose(LOG_ERR, "Cannot open a bpf descriptor");
-			return -1;
+			return (-1);
 		}
 		PRIV_DATA(clock)->dev_fd = fd;
 		break;
@@ -93,15 +96,16 @@ init_kernel_support(struct radclock *clock)
 
 	default:
 		verbose(LOG_ERR, "Unknown kernel version");
-		return -1;
+		return (-1);
 	}
 
 	verbose(LOG_NOTICE, "Feed-Forward Kernel initialised");
-	return 0;
+	return (0);
 }
 
 
-/* Need to check that the passthrough mode is enabled and that the counter can
+/*
+ * Need to check that the passthrough mode is enabled and that the counter can
  * do the job. The latter is a bit "hard coded"
  */
 int has_vm_vcounter(struct radclock *handle)
@@ -116,40 +120,44 @@ int has_vm_vcounter(struct radclock *handle)
 	case 3:
 	case 2:
 		size_ctl = sizeof(passthrough_counter);
-		ret = sysctlbyname("kern.sysclock.ffclock.ffcounter_bypass", &passthrough_counter, &size_ctl, NULL, 0);
+		ret = sysctlbyname("kern.sysclock.ffclock.ffcounter_bypass",
+				&passthrough_counter, &size_ctl, NULL, 0);
 		if (ret == -1) {
-			verbose(LOG_ERR, "Cannot find kern.sysclock.ffclock.ffcounter_bypass in sysctl");
-			return 0;
+			verbose(LOG_ERR, "Cannot find kern.sysclock.ffclock.ffcounter_bypass "
+					"in sysctl");
+			return (0);
 		}
 		break;
 
 	case 1:
 		size_ctl = sizeof(passthrough_counter);
-		ret = sysctlbyname("kern.timecounter.passthrough", &passthrough_counter, &size_ctl, NULL, 0);
+		ret = sysctlbyname("kern.timecounter.passthrough", &passthrough_counter,
+				&size_ctl, NULL, 0);
 		if (ret == -1) {
 			verbose(LOG_ERR, "Cannot find kern.timecounter.passthrough in sysctl");
-			return 0;
+			return (0);
 		}
 		break;
 
 	case 0:
 	default:
-		return 0;
+		return (0);
 	}
 
-	if ( passthrough_counter == 0)
-	{
-		verbose(LOG_ERR, "Timecounter not in pass-through mode. Cannot init virtual machine mode");
-		return 0;
+	if (passthrough_counter == 0) {
+		verbose(LOG_ERR, "Timecounter not in pass-through mode. Cannot init "
+				"virtual machine mode");
+		return (0);
 	}
 	verbose(LOG_NOTICE, "Found timecounter in pass-through mode");
 
 	size_ctl = sizeof(timecounter);
-	ret = sysctlbyname("kern.timecounter.hardware", &timecounter[0], &size_ctl, NULL, 0);
+	ret = sysctlbyname("kern.timecounter.hardware", &timecounter[0],
+			&size_ctl, NULL, 0);
 	if (ret == -1)
 	{
 		verbose(LOG_ERR, "Cannot find kern.timecounter.hardware in sysctl");
-		return 0;
+		return (0);
 	}
 
 	if ( (strcmp(timecounter, "TSC") != 0) && (strcmp(timecounter, "ixen") != 0) )
@@ -158,7 +166,7 @@ int has_vm_vcounter(struct radclock *handle)
 	else
 		verbose(LOG_WARNING, "Timecounter is %s", timecounter);
 
-	return 1;
+	return (1);
 }
 
 
@@ -166,22 +174,24 @@ int has_vm_vcounter(struct radclock *handle)
  * Old kernel patches for feed-forward support versions 0 and 1.
  * Used to add more IOCTL to the BPF device. The actual IOCTL number depends on
  * the OS version, detected in configure script.
- */ 
-/* for setting global clock data */ 
-//#ifndef BIOCSRADCLOCKDATA 
+ */
+/* for setting global clock data */
+//#ifndef BIOCSRADCLOCKDATA
 //#define BIOCSRADCLOCKDATA	_IOW('B', FREEBSD_RADCLOCK_IOCTL, struct radclock_data)
 //#endif
 
 /* for getting global clock data */
-//#ifndef BIOCGRADCLOCKDATA 
-//#define BIOCGRADCLOCKDATA	_IOR('B', FREEBSD_RADCLOCK_IOCTL + 1, struct radclock_data)
+//#ifndef BIOCGRADCLOCKDATA
+//#define BIOCGRADCLOCKDATA	_IOR('B', FREEBSD_RADCLOCK_IOCTL + 1,
+//		struct radclock_data)
 //#endif
 
 /* XXX Deprecated
  * for setting fixedpoint clock data
- */ 
-#ifndef BIOCSRADCLOCKFIXED 
-#define BIOCSRADCLOCKFIXED	_IOW('B', FREEBSD_RADCLOCK_IOCTL + 4, struct radclock_fixedpoint)
+ */
+#ifndef BIOCSRADCLOCKFIXED
+#define BIOCSRADCLOCKFIXED	_IOW('B', FREEBSD_RADCLOCK_IOCTL + 4, \
+		struct radclock_fixedpoint)
 #endif
 
 
@@ -190,7 +200,7 @@ int has_vm_vcounter(struct radclock *handle)
  * Old way of pushing clock updates to the kernel.
  * TODO: remove when backward compatibility for kernel versions < 2 is dropped.
  */
-inline int 
+inline int
 set_kernel_fixedpoint(struct radclock *clock, struct radclock_fixedpoint *fpdata)
 {
 	JDEBUG
@@ -201,24 +211,24 @@ set_kernel_fixedpoint(struct radclock *clock, struct radclock_fixedpoint *fpdata
 	case 0:
 	case 1:
 		err = ioctl(PRIV_DATA(clock)->dev_fd, BIOCSRADCLOCKFIXED, (caddr_t)fpdata);
-		if ( err < 0 ) 
+		if ( err < 0 )
 		{
 			verbose(LOG_ERR, "Setting fixedpoint data failed");
-			return -1;
+			return (-1);
 		}
 		break;
 
 	case 2:	
 	case 3:	
 		verbose(LOG_ERR, "set_kernel_fixedpoint but kernel version 2 or higher!!");
-		return -1;
+		return (-1);
 
 	default:
 		verbose(LOG_ERR, "Unknown kernel version");
-		return -1;
+		return (-1);
 	}
 
-	return 0;
+	return (0);
 }
 
 
@@ -230,7 +240,7 @@ set_kernel_fixedpoint(struct radclock *clock, struct radclock_fixedpoint *fpdata
  * clock estimates and that the last_changed stamp is updated on each call to
  * process_bidir stamp.
  * With this, no need to read the current time, rely on last_changed only.
- * XXX: is the comment above accurate and true? 
+ * XXX: is the comment above accurate and true?
  */
 #ifdef HAVE_SYS_TIMEFFC_H
 int
@@ -249,7 +259,7 @@ set_kernel_ffclock(struct radclock *clock, struct radclock_data *rad_data,
 	if (clock->kernel_version < 2)
 	{
 		verbose(LOG_ERR, "set_kernel_ffclock with unfit kernel!");
-		return -1;
+		return (-1);
 	}
 
 
@@ -258,7 +268,7 @@ set_kernel_ffclock(struct radclock *clock, struct radclock_data *rad_data,
 	 */
 	vcount = rad_data->last_changed;
 
-	/* What I would like to do is: 
+	/* What I would like to do is:
 	 * cest->time.frac = (time - (time_t) time) * (1LLU << 64);
 	 * but cannot push '1' by 64 bits, does not fit in LLU. So push 63 bits,
 	 * multiply for best resolution and loose resolution of 1/2^64.
@@ -302,21 +312,21 @@ set_kernel_ffclock(struct radclock *clock, struct radclock_data *rad_data,
 		break;
 	default:
 		verbose(LOG_ERR, "Unknown kernel version");
-		return -1;
+		return (-1);
 	}
 
 	if ( err < 0 ) {
 		verbose(LOG_ERR, "error on syscall set_ffclock: %s", strerror(errno));
-		return -1;
+		return (-1);
 	}
 
-	return 0;
+	return (0);
 }
 #else
 int
 set_kernel_ffclock(struct radclock *clock)
 {
-	return 0;
+	return (0);
 }
 #endif
 

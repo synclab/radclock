@@ -2,17 +2,17 @@
  * Copyright (C) 2006-2011 Julien Ridoux <julien@synclab.org>
  *
  * This file is part of the radclock program.
- * 
+ *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
@@ -49,7 +49,7 @@
 
 #include "radclock.h"
 #include "radclock-private.h"
-#include "radclock_daemon.h"
+//#include "radclock_daemon.h"
 #include "ffclock.h"
 #include "fixedpoint.h"
 #include "verbose.h"
@@ -87,7 +87,7 @@ enum {
 
 
 /* Redefinition from netlink-kernel.h but has moved into
- * into netlink.h stable version of the library 
+ * into netlink.h stable version of the library
  */
 #ifndef NETLINK_GENERIC
 #define NETLINK_GENERIC 16
@@ -115,7 +115,8 @@ static int resolve_family(const char *family_name)
 	int ret = 0;
 	int recv_len;
 
-	struct nl_msg *msg = nlmsg_build_simple(GENL_ID_CTRL, NLM_F_REQUEST | NLM_F_ACK);
+	struct nl_msg *msg = nlmsg_build_simple(GENL_ID_CTRL,
+			NLM_F_REQUEST | NLM_F_ACK);
 	if (!msg) {
 		verbose(LOG_ERR, "Error allocating message");
 		goto errout;
@@ -187,13 +188,15 @@ destroy_errout:
 msg_errout:
 	nlmsg_free(msg);
 errout:
-	return ret;
+	return (ret);
 }
 
 
 
 
-static int radclock_gnl_receive(int radclock_gnl_id, const struct sockaddr_nl *who, struct nlmsghdr *n, void *into)
+static int
+radclock_gnl_receive(int radclock_gnl_id, const struct sockaddr_nl *who,
+		struct nlmsghdr *n, void *into)
 {
 	int ret;
 	struct nlattr * attrs[RADCLOCK_ATTR_MAX +1];
@@ -202,16 +205,16 @@ static int radclock_gnl_receive(int radclock_gnl_id, const struct sockaddr_nl *w
 
 	if (n->nlmsg_type != radclock_gnl_id) {
 		verbose(LOG_WARNING, "message id was not from global data");
-		return 0;
+		return (0);
 	}
 	if (ghdr->cmd != RADCLOCK_CMD_GETATTR) {
 		verbose(LOG_WARNING, "message cmd was not a set attr");
-		return 0;
+		return (0);
 	}
 	len -=NLMSG_LENGTH(GENL_HDRLEN);
 	if (len < 0) {
 		verbose(LOG_WARNING, "Message was not long enough to be a generic netlink");
-		return -1;
+		return (-1);
 	}
 
 	ret = nlmsg_parse(n,GENL_HDRLEN,attrs,RADCLOCK_ATTR_MAX,radclock_attr_policy);
@@ -219,15 +222,16 @@ static int radclock_gnl_receive(int radclock_gnl_id, const struct sockaddr_nl *w
 	if (attrs[RADCLOCK_ATTR_DATA]) {
 		struct nl_data* data_attr = nla_get_data(attrs[RADCLOCK_ATTR_DATA]);
 		if (data_attr) {
-			struct radclock_data *data =  (struct radclock_data *) nl_data_get(data_attr);
+			struct radclock_data *data;
+			data = (struct radclock_data *) nl_data_get(data_attr);
 			memcpy(into, data, sizeof(struct radclock_data));
 			nl_data_free(data_attr);
-			return 0;
+			return (0);
 		}else {
 			verbose(LOG_ERR, "Could not allocate data attribute");
 		}
 	}
-	return -1;
+	return (-1);
 }
 
 
@@ -247,7 +251,8 @@ static int radclock_gnl_get_attr(int radclock_gnl_id, void *into)
 		.reserved =0,
 	};
 
-	struct nl_msg *msg = nlmsg_build_simple(radclock_gnl_id, NLM_F_REQUEST | NLM_F_ACK);
+	struct nl_msg *msg;
+	msg = nlmsg_build_simple(radclock_gnl_id, NLM_F_REQUEST | NLM_F_ACK);
 
 	if (!msg) {
 		verbose(LOG_ERR, "Error allocating message");
@@ -312,12 +317,13 @@ destroy_errout:
 msg_errout:
 	nlmsg_free(msg);
 errout:
-	return ret;
+	return (ret);
 }
 
 
 
-static int radclock_gnl_set_attr(int radclock_gnl_id, int id, void *from)
+static int
+radclock_gnl_set_attr(int radclock_gnl_id, int id, void *from)
 {
 	struct nl_handle *nlhandle;
 	int ret = -1;
@@ -328,7 +334,9 @@ static int radclock_gnl_set_attr(int radclock_gnl_id, int id, void *from)
 		.reserved =0,
 	};
 
-	struct nl_msg *msg = nlmsg_build_simple(radclock_gnl_id, NLM_F_REQUEST | NLM_F_ACK);
+	struct nl_msg *msg;
+	msg = nlmsg_build_simple(radclock_gnl_id, NLM_F_REQUEST | NLM_F_ACK);
+
 	if (!msg) {
 		verbose(LOG_ERR, "Error allocating message");
 		goto errout;
@@ -347,30 +355,26 @@ static int radclock_gnl_set_attr(int radclock_gnl_id, int id, void *from)
 		goto destroy_errout;
 	}
 
-	if (id == RADCLOCK_ATTR_DATA)
-	{
-		if (nla_put(msg, RADCLOCK_ATTR_DATA, sizeof(struct radclock_data), from))
-		{
+	if (id == RADCLOCK_ATTR_DATA) {
+		if (nla_put(msg, RADCLOCK_ATTR_DATA, sizeof(struct radclock_data), from)) {
 			verbose(LOG_ERR, "Couldn't set attr");
 			goto close_errout;
 		}
 	}
-	else if (id == RADCLOCK_ATTR_FIXEDPOINT)
-	{
-		if (nla_put(msg, RADCLOCK_ATTR_FIXEDPOINT, sizeof(struct radclock_fixedpoint), from))
-		{
+	else if (id == RADCLOCK_ATTR_FIXEDPOINT) {
+		if (nla_put(msg, RADCLOCK_ATTR_FIXEDPOINT,
+				sizeof(struct radclock_fixedpoint), from)) {
 			verbose(LOG_ERR, "Couldn't set attr");
 			goto close_errout;
 		}
 	}
-	if (nl_send_auto_complete(nlhandle, msg) < 0)
-	{
+	if (nl_send_auto_complete(nlhandle, msg) < 0) {
 		verbose(LOG_ERR, "Error sending to generic netlink socket");
 		goto close_errout;
 	}
 	nl_wait_for_ack(nlhandle);
 
-	ret =0;
+	ret = 0;
 close_errout:
 	nl_close(nlhandle);
 
@@ -379,27 +383,28 @@ destroy_errout:
 msg_errout:
 	nlmsg_free(msg);
 errout:
-	return ret;
+	return (ret);
 }
 
 
 
-int init_kernel_support(struct radclock *handle)
+int
+init_kernel_support(struct radclock *handle)
 {
 	PRIV_DATA(handle)->radclock_gnl_id = resolve_family(RADCLOCK_NAME);
-	if (PRIV_DATA(handle)->radclock_gnl_id  == 0)
-	{
+
+	if (PRIV_DATA(handle)->radclock_gnl_id  == 0) {
 		//PANIC
 		verbose(LOG_ERR, "Cannot lookup linux global data netlink ID");
-		return -ENOENT;
+		return (-ENOENT);
 	}
-	else 
-	{
-		verbose(LOG_NOTICE, "Global data generic netlink id is %d", PRIV_DATA(handle)->radclock_gnl_id);
+	else {
+		verbose(LOG_NOTICE, "Global data generic netlink id is %d",
+				PRIV_DATA(handle)->radclock_gnl_id);
 	}
 	verbose(LOG_NOTICE, "Feed-Forward Kernel initialised");
 
-	return 0;
+	return (0);
 }
 
 
@@ -408,17 +413,21 @@ int init_kernel_support(struct radclock *handle)
 /* Need to check that the passthrough mode is enabled and that the counter can
  * do the job. The latter is a bit "hard coded"
  */
-int has_vm_vcounter(struct radclock *handle)
+int
+has_vm_vcounter(struct radclock *handle)
 {
 	int passthrough_counter = 0;
 	char clocksource[32];
 	FILE *fd = NULL;
 
-	fd = fopen ("/sys/devices/system/clocksource/clocksource0/passthrough_clocksource", "r");
-	if (!fd)
-	{
+	char *pass;
+
+	pass = "/sys/devices/system/clocksource/clocksource0/passthrough_clocksource";
+
+	fd = fopen (pass, "r");
+	if (!fd) {
 		verbose(LOG_ERR, "Cannot open passthrough_clocksource from sysfs");
-		return 0;
+		return (0);
 	}
 	fscanf(fd, "%d", &passthrough_counter);
 	fclose(fd);
@@ -426,7 +435,7 @@ int has_vm_vcounter(struct radclock *handle)
 	if ( passthrough_counter == 0)
 	{
 		verbose(LOG_ERR, "Clocksource not in pass-through mode. Cannot init virtual machine mode");
-		return 0;
+		return (0);
 	}
 	verbose(LOG_NOTICE, "Found clocksource in pass-through mode");
 
@@ -435,7 +444,7 @@ int has_vm_vcounter(struct radclock *handle)
 	if (!fd)
 	{
 		verbose(LOG_WARNING, "Cannot open current_clocksource from sysfs");
-		return 1;
+		return (1);
 	}
 	fscanf(fd, "%s", &clocksource[0]);
 	fclose(fd);
@@ -446,7 +455,7 @@ int has_vm_vcounter(struct radclock *handle)
 	else
 		verbose(LOG_WARNING, "Clocksource is %s", clocksource);
 
-	return 1;
+	return (1);
 }
 
 
@@ -472,14 +481,14 @@ inline int set_kernel_fixedpoint(struct radclock *handle, struct radclock_fixedp
 
 	case 2:	
 		verbose(LOG_ERR, "set_kernel_fixedpoint but kernel version 2!!");
-		return -1;
+		return (-1);
 
 	default:
 		verbose(LOG_ERR, "Unknown kernel version");
-		return -1;
+		return (-1);
 	}
 
-	return err;
+	return (err);
 }
 
 
@@ -513,7 +522,7 @@ set_kernel_ffclock(struct radclock *clock, struct radclock_data *rad_data,
 //	if (radclock_vcount_to_abstime_fp(clock, &vcount, &time))
 //		verbose(LOG_ERR, "Error calculating time");
 //
-//	/* What I would like to do is: 
+//	/* What I would like to do is:
 //	 * fdata->time.frac = (time - (time_t) time) * (1LLU << 64);
 //	 * but cannot push '1' by 64 bits, does not fit in LLU. So push 63 bits,
 //	 * multiply for best resolution and loose resolution of 1/2^64.
@@ -538,7 +547,7 @@ set_kernel_ffclock(struct radclock *clock, struct radclock_data *rad_data,
 //	err = radclock_gnl_set_attr(PRIV_DATA(clock)->radclock_gnl_id, RADCLOCK_ATTR_DATA,  &fdata);
 //	if ( err < 0 ) {
 //		verbose(LOG_ERR, "error on syscall set_ffclock: %s", strerror(errno));
-//		return -1;
+//		return (-1);
 //	}
 //
 	return (0);

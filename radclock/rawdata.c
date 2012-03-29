@@ -21,14 +21,15 @@
 
 #include <arpa/inet.h>
 
-#include <unistd.h>
+#include <assert.h>
+#include <errno.h>
+#include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
 #include <syslog.h>
 #include <signal.h>
 #include <time.h>
-#include <errno.h>
-#include <assert.h>
+#include <unistd.h>
 
 #include "../config.h"
 #include "radclock.h"
