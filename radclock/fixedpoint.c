@@ -29,6 +29,9 @@
 #include "../config.h"
 #include "radclock.h"
 #include "radclock-private.h"
+#include "kclock.h"
+
+
 #include "radclock_daemon.h"
 #include "sync_history.h"
 #include "sync_algo.h"

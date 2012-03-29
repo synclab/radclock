@@ -140,14 +140,6 @@ int found_ffwd_kernel_version(void);
 
 
 /**
- * Retrieves clock estimates from the kernel 
- * @param  handle The private handle for accessing global data
- * @return 0 on success, non-zero on failure
- */
-int get_kernel_ffclock(struct radclock *clock, struct radclock_data *rad_data);
-
-
-/**
  * System specific call for getting the capture mode on the pcap capture device.
  */
 int descriptor_get_tsmode(struct radclock *clock, pcap_t *p_handle, int *kmode);
@@ -169,12 +161,29 @@ int extract_vcount_stamp(
 		const unsigned char *packet,
 		vcounter_t *vcount);
 
-
-
 int radclock_init_vcounter_syscall(struct radclock *clock);
 int radclock_init_vcounter(struct radclock *clock);
 int radclock_get_vcounter_syscall(struct radclock *clock, vcounter_t *vcount);
 int radclock_get_vcounter_rdtsc(struct radclock *clock, vcounter_t *vcount);
+
+int has_vm_vcounter(struct radclock *clock);
+int init_kernel_clock(struct radclock *clock_handle);
+
+
+
+static inline void 
+counter_to_time(struct radclock_data *rad_data, vcounter_t *vcount, long double *time)
+{
+	vcounter_t last;
+
+	do {
+		/* Quality ingredients */
+		last  = rad_data->last_changed;
+		*time = *vcount * (long double)rad_data->phat + rad_data->ca;
+		*time += (*vcount - last) * (long double)rad_data->phat_local -
+			rad_data->phat;
+	} while (last != rad_data->last_changed);
+}
 
 
 #endif

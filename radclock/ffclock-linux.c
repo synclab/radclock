@@ -389,7 +389,7 @@ errout:
 
 
 int
-init_kernel_support(struct radclock *handle)
+init_kernel_clock(struct radclock *handle)
 {
 	PRIV_DATA(handle)->radclock_gnl_id = resolve_family(RADCLOCK_NAME);
 

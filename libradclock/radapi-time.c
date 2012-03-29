@@ -27,6 +27,7 @@
 
 #include "radclock.h"
 #include "radclock-private.h"
+#include "kclock.h"
 #include "logger.h"
 
 
@@ -129,11 +130,13 @@ static inline int
 ffcounter_to_abstime_kernel(struct radclock *clock, vcounter_t vcount,
 		long double *time)
 {
+	struct ffclock_estimate cest;
 	struct radclock_data rad_data;
 
 // TODO FIXME error code is out of whack
-	if (get_kernel_ffclock(clock, &rad_data) < 0)
+	if (get_kernel_ffclock(clock, &cest) < 0)
 		return (1);
+	fill_clock_data(&cest, &rad_data);
 
 	*time = vcount * rad_data.phat + rad_data.ca;
 
@@ -184,6 +187,7 @@ static inline int
 ffcounter_to_difftime_kernel(struct radclock *clock, vcounter_t from_vcount,
 		vcounter_t till_vcount, long double *time)
 {
+	struct ffclock_estimate cest;
 	struct radclock_data rad_data;
 	vcounter_t now;
 
@@ -193,8 +197,9 @@ ffcounter_to_difftime_kernel(struct radclock *clock, vcounter_t from_vcount,
 
 
 // TODO FIXME error code is out of whack
-	if (get_kernel_ffclock(clock, &rad_data) < 0)
+	if (get_kernel_ffclock(clock, &cest) < 0)
 		return (1);
+	fill_clock_data(&cest, &rad_data);
 
 	*time = (till_vcount - from_vcount) * (long double)rad_data.phat_local;
 

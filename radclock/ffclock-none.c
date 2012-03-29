@@ -42,7 +42,7 @@ has_vm_vcounter(struct radclock *clock)
 }
 
 int
-init_kernel_support(struct radclock *clock)
+init_kernel_clock(struct radclock *clock)
 {
 	return (-ENOENT);
 }

@@ -626,6 +626,7 @@ init_raddata_shm_writer(struct radclock *clock)
 static int
 clock_init_live(struct radclock *clock, struct radclock_data *rad_data)
 {
+	struct ffclock_estimate cest;
 	int err;
 
 	JDEBUG
@@ -649,12 +650,13 @@ clock_init_live(struct radclock *clock, struct radclock_data *rad_data)
 // TODO is that really specific to kernel version >2 and which arch?
 	err = 0;
 	if (clock->kernel_version >= 2)
-		err = get_kernel_ffclock(clock, rad_data);
+		err = get_kernel_ffclock(clock, &cest);
 
 	if (err < 0) {
-		logger(RADLOG_ERR, "Did not get initial ffclock data from kernel");
+		verbose(LOG_ERR, "Did not get initial ffclock data from kernel");
 		return (1);
 	}
+	fill_clock_data(&cest, rad_data);
 
 	err = radclock_init_vcounter_syscall(clock);
 	if (err < 0)
@@ -665,9 +667,10 @@ clock_init_live(struct radclock *clock, struct radclock_data *rad_data)
 		return (1);
 
 	// TODO this could be revamped into one single function
-	err = init_kernel_support(clock);
+	err = init_kernel_clock(clock);
 	if (err < 0)
 		return (1);
+	verbose(LOG_NOTICE, "Kernel clock support initialised");
 
 	return (0);
 }

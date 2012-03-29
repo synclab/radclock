@@ -481,7 +481,6 @@ insane_bidir_stamp(struct stamp_t *stamp, struct stamp_t *laststamp)
 
 
 
-
 /**
  * XXX TODO: so far we suppose bidir paradigm only and a single source at a time!!
  */
@@ -491,6 +490,7 @@ process_rawdata(struct radclock_handle *handle, struct bidir_peer *peer)
 	/* Bi-directionnal stamp passed to the algo for processing */
 	struct stamp_t stamp;
 	static struct stamp_t laststamp;
+	struct ffclock_estimate cest;
 
 	/* Error control logging */
 	long double currtime 	= 0;
@@ -622,8 +622,8 @@ process_rawdata(struct radclock_handle *handle, struct bidir_peer *peer)
 				return (0);
 			}
 #endif
-
-			set_kernel_ffclock(handle->clock, &handle->rad_data, &handle->rad_error);
+			fill_ffclock_estimate(&handle->rad_data, &handle->rad_error, &cest);
+			set_kernel_ffclock(handle->clock, &cest);
 			verbose(VERB_DEBUG, "Feed-forward kernel clock has been set.");
 		}
 

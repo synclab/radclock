@@ -30,24 +30,3 @@
 #include "jdebug.h"
 
 
-int
-counter_to_time(struct radclock_data *rad_data, vcounter_t *vcount, long double *time)
-{
-	JDEBUG
-
-	vcounter_t last;
-
-	do {
-		/* Quality ingredients */
-		last  = rad_data->last_changed;
-
-		*time = *vcount * (long double)rad_data->phat + rad_data->ca;
-
-		*time += (*vcount - last) * (long double)rad_data->phat_local -
-			rad_data->phat;
-
-	} while (last != rad_data->last_changed);
-
-	return (0);
-}
-

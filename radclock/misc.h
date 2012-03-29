@@ -25,7 +25,6 @@
 #define _MISC_H
 
 
-int counter_to_time(struct radclock_data *rad_data, vcounter_t *vcount, long double *time);
 
 static inline void
 timeld_to_timeval(long double *time, struct timeval *tv)

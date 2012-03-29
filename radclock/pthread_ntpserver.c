@@ -60,9 +60,7 @@ build_timestamp_tval(struct radclock_handle *handle,
 	long double time;
 
 	counter_to_time(&handle->rad_data, &vcount, &time);
-
-	tv->tv_sec  = (uint32_t)time;
-	tv->tv_usec = (uint32_t)(1000000 * (time - tv->tv_sec) + 0.5);
+	timeld_to_timeval(&time, tv);
 }
 
 

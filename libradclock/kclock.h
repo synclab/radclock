@@ -20,8 +20,8 @@
  */
 
 
-#ifndef _FFCLOCK_H
-#define _FFCLOCK_H
+#ifndef _KCLOCK_H
+#define _KCLOCK_H
 
 #include "../config.h"
 
@@ -38,8 +38,7 @@ struct bintime {
 };
 #endif
 
-#if defined (__FreeBSD__)
-#ifdef HAVE_SYS_TIMEFFC_H
+#if defined (__FreeBSD__) && defined (HAVE_SYS_TIMEFFC_H)
 #include <sys/timeffc.h>
 #else
 struct ffclock_estimate
@@ -63,7 +62,45 @@ struct ffclock_estimate
     uint32_t error_bound_avg;
 };
 #endif
-#endif
+
+int get_kernel_ffclock(struct radclock *clock, struct ffclock_estimate *cest);
+int set_kernel_ffclock(struct radclock *clock, struct ffclock_estimate *cest);
+
+void fill_ffclock_estimate(struct radclock_data *rad_data,
+		struct radclock_error *rad_err, struct ffclock_estimate *cest);
+void fill_clock_data(struct ffclock_estimate *cest, struct radclock_data *rad_data);
+
+/*
+ * XXX Deprecated
+ * Old kernel data structure
+ * TODO: remove when backward compatibility for kernel versions < 2 is dropped.
+ */
+struct radclock_fixedpoint
+{
+	/** phat as an int shifted phat_shift to the left */
+	uint64_t phat_int;
+
+	/** the time reference to add a delta vcounter to as an int (<< TIME_SHIFT) */
+	uint64_t time_int;
+
+	/** the vcounter value corresponding to the time reference */
+	vcounter_t vcounter_ref;
+
+	/** the shift amount for phat_int */
+	uint8_t phat_shift;
+
+	/** the shift amount for ca_int */
+	uint8_t time_shift;
+
+	/** maximum bit for vcounter difference without overflow */
+	uint8_t countdiff_maxbits;
+};
+
+/*
+ * XXX Deprecated
+ * Set fixedpoint data in the kernel for computing timestamps there 
+ */
+int set_kernel_fixedpoint(struct radclock *clock, struct radclock_fixedpoint *fp);
 
 
-#endif 	/* _FFCLOCK_H */
+#endif 	/* _KCLOCK_H */

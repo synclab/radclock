@@ -127,6 +127,75 @@ found_ffwd_kernel_version (void)
 }
 
 
+
+/*
+ * Need to check that the passthrough mode is enabled and that the counter can
+ * do the job. The latter is a bit "hard coded"
+ */
+int
+has_vm_vcounter(struct radclock *clock)
+{
+	int ret;
+	int passthrough_counter = 0;
+	char timecounter[32];
+	size_t size_ctl;
+
+	switch (clock->kernel_version) {
+// FIXME : sysctl is there but no xen backend in official kernel yet
+	case 3:
+	case 2:
+		size_ctl = sizeof(passthrough_counter);
+		ret = sysctlbyname("kern.sysclock.ffclock.ffcounter_bypass",
+				&passthrough_counter, &size_ctl, NULL, 0);
+		if (ret == -1) {
+			logger(RADLOG_ERR, "Cannot find kern.sysclock.ffclock.ffcounter_bypass "
+					"in sysctl");
+			return (0);
+		}
+		break;
+
+	case 1:
+		size_ctl = sizeof(passthrough_counter);
+		ret = sysctlbyname("kern.timecounter.passthrough", &passthrough_counter,
+				&size_ctl, NULL, 0);
+		if (ret == -1) {
+			logger(RADLOG_ERR, "Cannot find kern.timecounter.passthrough in sysctl");
+			return (0);
+		}
+		break;
+
+	case 0:
+	default:
+		return (0);
+	}
+
+	if (passthrough_counter == 0) {
+		logger(RADLOG_ERR, "Timecounter not in pass-through mode. Cannot init "
+				"virtual machine mode");
+		return (0);
+	}
+	logger(RADLOG_NOTICE, "Found timecounter in pass-through mode");
+
+	size_ctl = sizeof(timecounter);
+	ret = sysctlbyname("kern.timecounter.hardware", &timecounter[0],
+			&size_ctl, NULL, 0);
+	if (ret == -1) {
+		logger(LOG_ERR, "Cannot find kern.timecounter.hardware in sysctl");
+		return (0);
+	}
+
+	if ((strcmp(timecounter, "TSC") != 0) && (strcmp(timecounter, "ixen") != 0))
+		logger(RADLOG_WARNING, "Timecounter is neither TSC nor ixen. "
+				"There must be something wrong!!");
+	else
+		logger(RADLOG_WARNING, "Timecounter is %s", timecounter);
+
+	return (1);
+}
+
+
+
+
 # ifdef HAVE_RDTSC
 #  ifdef HAVE_MACHINE_CPUFUNC_H
 #   include <machine/cpufunc.h>

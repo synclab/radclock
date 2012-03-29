@@ -38,33 +38,79 @@
 #include <net/bpf.h>
 #include <pcap.h>
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>		// useful?
-#include <syslog.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <string.h>
 #include <stddef.h>	// offesetof macro
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <syslog.h>
+#include <unistd.h>		// useful?
 
 #include "radclock.h"
 #include "radclock-private.h"
+#include "kclock.h"
 #include "logger.h"
 
+
+int
+init_kernel_clock(struct radclock *clock)
+{
+	/* Kernel version 0 and 1 variables */
+	int fd = -1;
+	int devnum;
+	char fname[30];
+
+	/* Kernel version 2 variables */
+/*
+	int err;
+	struct module_stat stat;
+*/
+	switch (clock->kernel_version) {
+
+	case 0:
+	case 1:
+		/* This is super ugly, we open a second BPF to write the clock data,
+		 * generic or fixed point. That's the very old way
+		 */
+		for (devnum=0; devnum < 255; devnum++) {
+			sprintf(fname, "/dev/bpf%d", devnum);
+			fd = open(fname, O_RDONLY);
+			if (fd != -1) {
+				break;
+			}
+		}
+		if (devnum == 254) {
+			logger(RADLOG_ERR, "Cannot open a bpf descriptor");
+			return (-1);
+		}
+		PRIV_DATA(clock)->dev_fd = fd;
+		break;
+
+	/* ffclock_setestimate syscall offered by kernel through libc */
+	case 2:
+	case 3:
+		break;
+
+	default:
+		logger(RADLOG_ERR, "Unknown kernel version");
+		return (-1);
+	}
+
+	return (0);
+}
 
 
 
 #ifdef HAVE_SYS_TIMEFFC_H
 int
-get_kernel_ffclock(struct radclock *clock, struct radclock_data *rad_data)
+get_kernel_ffclock(struct radclock *clock, struct ffclock_estimate *cest)
 {
 	/*
 	 * This is the kernel definition of clock estimates. May be different from
 	 * the radclock_data structure
 	 */
-	struct ffclock_estimate cest;
 	int err;
-	long double tmp;
 
 	/*
 	 * This feature exists since kernel version 2. If kernel too old, don't do
@@ -77,7 +123,7 @@ get_kernel_ffclock(struct radclock *clock, struct radclock_data *rad_data)
 		return (-1);
 
 	/* FreeBSD system call */
-	err = ffclock_getestimate(&cest);
+	err = ffclock_getestimate(cest);
 	if (err < 0) {
 // TODO Clean up verbose logging
 		logger(RADLOG_ERR, "Clock estimate init from kernel failed");
@@ -86,43 +132,139 @@ get_kernel_ffclock(struct radclock *clock, struct radclock_data *rad_data)
 	}
 
 	/* Sanity check to avoid introducing crazy data */
-	if ((cest.update_time.sec == 0) || (cest.period == 0)) {
+	if ((cest->update_time.sec == 0) || (cest->period == 0)) {
 		logger(RADLOG_ERR, "Clock estimate from kernel look bogus - ignored");
 		fprintf(stdout, "Clock estimate from kernel look bogus - ignored");
 		return (0);
 	}
-
-	/*
-	 * Cannot push 64 times in a LLU at once. Push twice 32 instead. In this
-	 * direction (get and not set), it is ok to do it that way. We do risk to
-	 * look heavy digits or resolution. See set_kernel_ffclock() in radclock
-	 * code.
-	 */
-	rad_data->ca = (long double) cest.update_time.sec;
-	tmp = ((long double) cest.update_time.frac) / (1LL << 32);
-	rad_data->ca += tmp / (1LL << 32);
-	
-	tmp = (long double) cest.period / (1LLU << 32);
-	rad_data->phat_local = (double) (tmp / (1LLU << 32));
-	rad_data->phat = rad_data->phat_local;
-
-	rad_data->status = (unsigned int) cest.status;
-	rad_data->last_changed = (vcounter_t) cest.update_ffcount;
-
-	fprintf(stdout, "period=%llu  phat = %.10lg, C = %7.4Lf\n",
-		(unsigned long long) cest.period, rad_data->phat,
-		rad_data->ca);
-	fprintf(stdout, "Retrieved clock estimate init from kernel\n");
-			
+		
 	return (0);
 }
 #else
 int
-get_kernel_ffclock(struct radclock *clock, struct radclock_data *rad_data)
+get_kernel_ffclock(struct radclock *clock, struct ffclock_estimate *cest)
 {
 	return (0);
 }
 #endif
+
+
+
+
+/*
+ * Function is called every time a new stamp is processed.
+ * It assumes that the kernel supports update of the fixedpoint version of the
+ * clock estimates and that the last_changed stamp is updated on each call to
+ * process_bidir stamp.
+ * With this, no need to read the current time, rely on last_changed only.
+ * XXX: is the comment above accurate and true?
+ */
+#ifdef HAVE_SYS_TIMEFFC_H
+int
+set_kernel_ffclock(struct radclock *clock, struct ffclock_estimate *cest)
+{
+	int err;
+
+	if (clock->kernel_version < 2) {
+		logger(RADLOG_ERR, "set_kernel_ffclock with unfit kernel!");
+		return (-1);
+	}
+
+	/* Push */
+	switch (clock->kernel_version) {
+
+	case 0:
+	case 1:
+		err = syscall(clock->syscall_set_ffclock, cest);
+		break;
+	case 2:
+	case 3:
+		err = ffclock_setestimate(cest);
+		break;
+	default:
+		logger(RADLOG_ERR, "Unknown kernel version");
+		return (-1);
+	}
+
+	if (err < 0) {
+		logger(RADLOG_ERR, "error on syscall set_ffclock: %s", strerror(errno));
+		return (-1);
+	}
+
+	return (0);
+}
+#else
+int
+set_kernel_ffclock(struct radclock *clock, struct ffclock_estimate *cest)
+{
+	return (0);
+}
+#endif
+
+
+
+/* XXX Deprecated
+ * Old kernel patches for feed-forward support versions 0 and 1.
+ * Used to add more IOCTL to the BPF device. The actual IOCTL number depends on
+ * the OS version, detected in configure script.
+ */
+/* for setting global clock data */
+//#ifndef BIOCSRADCLOCKDATA
+//#define BIOCSRADCLOCKDATA	_IOW('B', FREEBSD_RADCLOCK_IOCTL, struct radclock_data)
+//#endif
+
+/* for getting global clock data */
+//#ifndef BIOCGRADCLOCKDATA
+//#define BIOCGRADCLOCKDATA	_IOR('B', FREEBSD_RADCLOCK_IOCTL + 1,
+//		struct radclock_data)
+//#endif
+
+/* XXX Deprecated
+ * for setting fixedpoint clock data
+ */
+#ifndef BIOCSRADCLOCKFIXED
+#define BIOCSRADCLOCKFIXED	_IOW('B', FREEBSD_RADCLOCK_IOCTL + 4, \
+		struct radclock_fixedpoint)
+#endif
+
+
+/*
+ * XXX Deprecated
+ * Old way of pushing clock updates to the kernel.
+ * TODO: remove when backward compatibility for kernel versions < 2 is dropped.
+ */
+int
+set_kernel_fixedpoint(struct radclock *clock, struct radclock_fixedpoint *fpdata)
+{
+	int err;
+
+	switch (clock->kernel_version) {
+
+	case 0:
+	case 1:
+		err = ioctl(PRIV_DATA(clock)->dev_fd, BIOCSRADCLOCKFIXED, fpdata);
+		if (err < 0) {
+			logger(RADLOG_ERR, "Setting fixedpoint data failed");
+			return (-1);
+		}
+		break;
+
+	case 2:
+	case 3:
+		logger(RADLOG_ERR, "set_kernel_fixedpoint but kernel version 2 or higher!!");
+		return (-1);
+
+	default:
+		logger(RADLOG_ERR, "Unknown kernel version");
+		return (-1);
+	}
+
+	return (0);
+}
+
+
+
+
 
 
 #endif
