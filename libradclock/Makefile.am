@@ -23,7 +23,35 @@ lib_LTLIBRARIES = libradclock.la
 include_HEADERS = radclock.h
 noinst_HEADERS = local-genetlink.h logger.h radclock-private.h
 
-libradclock_la_SOURCES = radapi-base.c radapi-getset.c radapi-time.c radapi-pcap.c logger.c radclock-read.c radkernel-linux.c radkernel-fbsd.c radkernel-none.c local-genetlink.h
+libradclock_la_SOURCES = \
+		radapi-base.c \
+		radapi-getset.c \
+		radapi-time.c \
+		radapi-pcap.c \
+		radclock-read.c \
+		logger.c \
+		local-genetlink.h
+
+if MAKE_RADKERNEL_FBSD
+libradclock_la_SOURCES += \
+		radkernel-fbsd.c \
+		kclock-fbsd.c \
+		pcap-fbsd.c
+else
+if MAKE_RADKERNEL_LINUX
+libradclock_la_SOURCES += \
+		radkernel-linux.c \
+		kclock-linux.c \
+		pcap-linux.c
+else
+if MAKE_RADKERNEL_NONE
+libradclock_la_SOURCES += \
+		radkernel-none.c \
+		kclock-note.c \
+		pcap-none.c
+endif
+endif
+endif
 
 libradclock_la_LIBADD = -lm
 libradclock_la_LDFLAGS = -release $(PACKAGE_VERSION)

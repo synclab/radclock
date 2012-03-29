@@ -20,57 +20,27 @@
  */
 
 
-
 #include "../config.h"
 #ifdef WITH_RADKERNEL_NONE
 
-#if defined(__APPLE__) 
-#include <machine/types.h>
-#elif defined(__FreeBSD__)
-#include <sys/types.h>
-#elif defined(linux)
-#include <asm/types.h>
-#endif
-
-#include <sys/socket.h>
-#include <unistd.h>
-#include <err.h>
-#include <stdio.h>
-#include <string.h>
-
-#include <errno.h>
-
-
-#include "radclock.h"
-#include "radclock-private.h"
-#include "logger.h"
-
-
-/*
- * No-op functions for systems without kernel support.
- * Useful for data replay. 
- */
-
 int
-found_ffwd_kernel_version(void) 
+descriptor_set_tsmode(struct radclock *clock, pcap_t *p_handle, int kmode)
 {
-	logger(RADLOG_WARNING, "Feed-Forward Kernel support not compiled.");
-	return -1;
+	return -ENOENT;
 }
 
 int
-radclock_init_vcounter_syscall(struct radclock *clock)
+descriptor_get_tsmode(struct radclock *clock, pcap_t *p_handle, int *kmode)
 {
-	handle->syscall_get_vcounter = 0;
-	handle->syscall_set_ffclock = 0;
-	return 0;
+	return -ENOENT;
 }
 
 int
-radclock_init_vcounter(struct radclock *clock)
+extract_vcount_stamp(struct radclock *clock, pcap_t *p_handle,
+		const struct pcap_pkthdr *header, const unsigned char *packet,
+		vcounter_t *vcount)
 {
-	handle->get_vcounter = NULL;
-	return 0;
+	return -ENOENT;
 }
 
 #endif

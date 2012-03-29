@@ -269,6 +269,9 @@ AM_CONDITIONAL(HAVE_FFKERNEL, test "x$tscexts" = "xyes")
 dnl ===========================================================================
 dnl Detect kernel channel
 dnl ===========================================================================
+AM_CONDITIONAL([MAKE_RADKERNEL_NONE], [test 1 = 0]) 
+AM_CONDITIONAL([MAKE_RADKERNEL_LINUX], [test 1 = 0]) 
+AM_CONDITIONAL([MAKE_RADKERNEL_FBSD], [test 1 = 0]) 
 case $target_os in
 
 	linux*)
@@ -293,14 +296,17 @@ case $target_os in
 			
 		if test "${netlink}" = "no"; then
 			AC_DEFINE([WITH_RADKERNEL_NONE],[1],[Define to 1 if NOT detected patched radclock kernel])
+			AM_CONDITIONAL([MAKE_RADKERNEL_NONE], [test 1 = 1]) 
 			kernel_channel="no"
 		else
 			kernel_channel="yes"
 			if test "$tscexts" = "yes"; then
 				LIBRADCLOCK_LIBS="${LIBRADCLOCK_LIBS} -lnl"
 				AC_DEFINE([WITH_RADKERNEL_LINUX], [1], [Define to 1 if detected patched radclock kernel])
+				AM_CONDITIONAL([MAKE_RADKERNEL_LINUX], [test 1 = 1]) 
 			else
 				AC_DEFINE([WITH_RADKERNEL_NONE],[1],[Define to 1 if NOT detected patched radclock kernel])
+				AM_CONDITIONAL([MAKE_RADKERNEL_NONE], [test 1 = 1]) 
 			fi
 
 		fi
@@ -312,9 +318,11 @@ case $target_os in
 
 	if test "$tscexts" = yes; then
 		AC_DEFINE([WITH_RADKERNEL_FBSD], [1], [Define to 1 if detected patched radclock kernel])
+		AM_CONDITIONAL([MAKE_RADKERNEL_FBSD], [test 1 = 1]) 
 		kernel_channel="yes"
 	else
 		AC_DEFINE([WITH_RADKERNEL_NONE], [1], [Define to 1 if NOT detected patched radclock kernel])
+		AM_CONDITIONAL([MAKE_RADKERNEL_NONE], [test 1 = 1]) 
 		kernel_channel="no"
 	fi
 	;;
@@ -322,6 +330,7 @@ case $target_os in
 	# Darwin* and other OS without kernel extensions
 	unknown*)
 		AC_DEFINE([WITH_RADKERNEL_NONE],[1],[Define to 1 if NOT detected patched radclock kernel])
+		AM_CONDITIONAL([MAKE_RADKERNEL_NONE], [test 1 = 1]) 
 		kernel_channel="no"
 	;;
 esac
