@@ -265,7 +265,7 @@ int radclock_init_vcounter(struct radclock *handle)
 
 // TODO the set_kernel_ffclock should be in the library too?
 int
-get_kernel_ffclock(struct radclock *clock)
+get_kernel_ffclock(struct radclock *clock, struct radclock_data *rad_data)
 {
 	logger(RADLOG_ERR, "Not yet getting ffclock data in the kernel");
 	if (clock->kernel_version < 2) {

@@ -49,6 +49,7 @@
 
 #include "radclock.h"
 #include "radclock-private.h"
+#include "radclock_daemon.h"
 #include "ffclock.h"
 #include "fixedpoint.h"
 #include "verbose.h"
@@ -484,7 +485,8 @@ inline int set_kernel_fixedpoint(struct radclock *handle, struct radclock_fixedp
 
 
 int
-set_kernel_ffclock(struct radclock *clock)
+set_kernel_ffclock(struct radclock *clock, struct radclock_data *rad_data,
+		struct radclock_error *rad_err)
 {
 //	JDEBUG
 //	int err;

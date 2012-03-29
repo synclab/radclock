@@ -74,7 +74,7 @@ radclock_init_vcounter(struct radclock *handle)
 }
 
 inline int
-get_kernel_ffclock(struct radclock *clock_handle)
+get_kernel_ffclock(struct radclock *clock, struct radclock_data *rad_data)
 {
 	return -ENOENT;
 }

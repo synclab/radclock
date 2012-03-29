@@ -28,16 +28,21 @@
 #include <stdint.h>
 #include <errno.h>
 
+#include "radclock.h"
+#include "radclock-private.h"
+#include "radclock_daemon.h"
 #include "ffclock.h"
 #include "fixedpoint.h"
 
 
-int has_vm_vcounter(struct radclock *handle)
+int
+has_vm_vcounter(struct radclock *clock)
 {
 	return -ENOENT;
 }
 
-int init_kernel_support(struct radclock *handle)
+int
+init_kernel_support(struct radclock *clock)
 {
 	return -ENOENT;
 }
@@ -48,12 +53,15 @@ int init_kernel_support(struct radclock *handle)
  * Old way of pushing clock updates to the kernel.
  * TODO: remove when backward compatibility for kernel versions < 2 is dropped.
  */
-inline int set_kernel_fixedpoint(struct radclock *handle, struct radclock_fixedpoint *fpdata)
+inline int
+set_kernel_fixedpoint(struct radclock *clock, struct radclock_fixedpoint *fpdata)
 {
 	return -ENOENT;
 }
 
-inline int set_kernel_ffclock(struct radclock *clock_handle)
+inline int
+set_kernel_ffclock(struct radclock *clock, struct radclock_data *rad_data,
+		struct radclock_error *rad_err)
 {
 	return -ENOENT;
 }
