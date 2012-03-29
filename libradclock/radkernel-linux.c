@@ -116,7 +116,7 @@ has_vm_vcounter(struct radclock *handle)
 
 	fd = fopen (pass, "r");
 	if (!fd) {
-		verbose(LOG_ERR, "Cannot open passthrough_clocksource from sysfs");
+		logger(RADLOG_ERR, "Cannot open passthrough_clocksource from sysfs");
 		return (0);
 	}
 	fscanf(fd, "%d", &passthrough_counter);
@@ -124,26 +124,26 @@ has_vm_vcounter(struct radclock *handle)
 
 	if ( passthrough_counter == 0)
 	{
-		verbose(LOG_ERR, "Clocksource not in pass-through mode. Cannot init virtual machine mode");
+		logger(RADLOG_ERR, "Clocksource not in pass-through mode. Cannot init virtual machine mode");
 		return (0);
 	}
-	verbose(LOG_NOTICE, "Found clocksource in pass-through mode");
+	logger(RADLOG_NOTICE, "Found clocksource in pass-through mode");
 
 
 	fd = fopen ("/sys/devices/system/clocksource/clocksource0/current_clocksource", "r");
 	if (!fd)
 	{
-		verbose(LOG_WARNING, "Cannot open current_clocksource from sysfs");
+		logger(RADLOG_WARNING, "Cannot open current_clocksource from sysfs");
 		return (1);
 	}
 	fscanf(fd, "%s", &clocksource[0]);
 	fclose(fd);
 
 	if ( (strcmp(clocksource, "tsc") != 0) && (strcmp(clocksource, "xen") != 0) )
-		verbose(LOG_WARNING, "Clocksource is neither tsc nor xen. "
+		logger(RADLOG_WARNING, "Clocksource is neither tsc nor xen. "
 				"There must be something wrong!!");
 	else
-		verbose(LOG_WARNING, "Clocksource is %s", clocksource);
+		logger(RADLOG_WARNING, "Clocksource is %s", clocksource);
 
 	return (1);
 }

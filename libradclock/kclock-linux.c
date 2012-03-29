@@ -28,6 +28,26 @@
 #include <sys/sysctl.h>
 #include <sys/socket.h>
 
+#include <netinet/in.h>
+
+#ifdef HAVE_LINUX_GENETLINK_H
+# include <linux/genetlink.h>
+#elif defined(WITH_LOCAL_GENETLINK_H)
+# include "local-genetlink.h"
+#else
+# error Need a linux/genetlink.h
+#endif
+
+#include <linux/rtnetlink.h>
+#include <linux/netlink.h>
+
+#include <netlink/netlink.h>
+#include <netlink/attr.h>
+#include <netlink/utils.h>
+#include <netlink/msg.h>
+
+#include <linux/types.h>
+
 #include <errno.h>
 #include <err.h>
 #include <string.h>
@@ -44,6 +64,18 @@
 #include "logger.h"
 
 
+#define RADCLOCK_NAME "radclock"
+
+/* Redefinition from netlink-kernel.h but has moved into
+ * into netlink.h stable version of the library
+ */
+#ifndef NETLINK_GENERIC
+#define NETLINK_GENERIC 16
+#endif
+
+
+static int resolve_family(const char *family_name);
+
 
 int
 init_kernel_clock(struct radclock *handle)
@@ -52,14 +84,14 @@ init_kernel_clock(struct radclock *handle)
 
 	if (PRIV_DATA(handle)->radclock_gnl_id  == 0) {
 		//PANIC
-		verbose(LOG_ERR, "Cannot lookup linux global data netlink ID");
+		logger(RADLOG_ERR, "Cannot lookup linux global data netlink ID");
 		return (-ENOENT);
 	}
 	else {
-		verbose(LOG_NOTICE, "Global data generic netlink id is %d",
+		logger(RADLOG_NOTICE, "Global data generic netlink id is %d",
 				PRIV_DATA(handle)->radclock_gnl_id);
 	}
-	verbose(LOG_NOTICE, "Feed-Forward Kernel initialised");
+	logger(RADLOG_NOTICE, "Feed-Forward Kernel initialised");
 
 	return (0);
 }
@@ -91,16 +123,6 @@ enum {
 
 #define RADCLOCK_CMD_MAX (__RADCLOCK_CMD_MAX - 1)
 
-#define RADCLOCK_NAME "radclock"
-
-
-/* Redefinition from netlink-kernel.h but has moved into
- * into netlink.h stable version of the library
- */
-#ifndef NETLINK_GENERIC
-#define NETLINK_GENERIC 16
-#endif
-
 
 /**
  * Resolve a generic netlink id from a family name
@@ -124,7 +146,7 @@ resolve_family(const char *family_name)
 	struct nl_msg *msg = nlmsg_build_simple(GENL_ID_CTRL,
 			NLM_F_REQUEST | NLM_F_ACK);
 	if (!msg) {
-		verbose(LOG_ERR, "Error allocating message");
+		logger(RADLOG_ERR, "Error allocating message");
 		goto errout;
 	}
 
@@ -137,14 +159,14 @@ resolve_family(const char *family_name)
 	nlhandle = nl_handle_alloc();
 
 	if (!nlhandle) {
-		verbose(LOG_ERR, "Cannot allocate handle\n");
+		logger(RADLOG_ERR, "Cannot allocate handle\n");
 		goto msg_errout;
 	}
 
 	//nl_disable_sequence_check(nlhandle);
 
 	if (nl_connect(nlhandle, NETLINK_GENERIC) < 0) {
-		verbose(LOG_ERR, "Cannot open generic netlink socket\n");
+		logger(RADLOG_ERR, "Cannot open generic netlink socket\n");
 		goto destroy_errout;
 	}
 
@@ -153,7 +175,7 @@ resolve_family(const char *family_name)
 	nla_put_string(msg, CTRL_ATTR_FAMILY_NAME, family_name);
 
 	if (nl_send_auto_complete(nlhandle, msg)< 0) {
-		verbose(LOG_ERR, "Error sending netlink message to kernel");
+		logger(RADLOG_ERR, "Error sending netlink message to kernel");
 		goto close_errout;
 	}
 
@@ -167,7 +189,7 @@ resolve_family(const char *family_name)
 #endif
 			);
 	if (recv_len <=0) {
-		verbose(LOG_ERR, "Error receiving from kernel: %s", strerror(-recv_len));
+		logger(RADLOG_ERR, "Error receiving from kernel: %s", strerror(-recv_len));
 		goto close_errout;
 	}
 
@@ -175,7 +197,7 @@ resolve_family(const char *family_name)
 	while (nlmsg_ok(reply_hdr, recv_len)) {
 		ret = nlmsg_parse(reply_hdr,GENL_HDRLEN,attrs,CTRL_ATTR_MAX,NULL);
 		if (ret <0) {
-			verbose(LOG_ERR, "Error parsing message");
+			logger(RADLOG_ERR, "Error parsing message");
 			goto close_errout;
 		}
 
@@ -208,16 +230,16 @@ radclock_gnl_receive(int radclock_gnl_id, const struct sockaddr_nl *who,
 	int len = n->nlmsg_len;
 
 	if (n->nlmsg_type != radclock_gnl_id) {
-		verbose(LOG_WARNING, "message id was not from global data");
+		logger(RADLOG_WARNING, "message id was not from global data");
 		return (0);
 	}
 	if (ghdr->cmd != RADCLOCK_CMD_GETATTR) {
-		verbose(LOG_WARNING, "message cmd was not a set attr");
+		logger(RADLOG_WARNING, "message cmd was not a set attr");
 		return (0);
 	}
 	len -=NLMSG_LENGTH(GENL_HDRLEN);
 	if (len < 0) {
-		verbose(LOG_WARNING, "Message was not long enough to be a generic netlink");
+		logger(RADLOG_WARNING, "Message was not long enough to be a generic netlink");
 		return (-1);
 	}
 
@@ -232,7 +254,7 @@ radclock_gnl_receive(int radclock_gnl_id, const struct sockaddr_nl *who,
 			nl_data_free(data_attr);
 			return (0);
 		}else {
-			verbose(LOG_ERR, "Could not allocate data attribute");
+			logger(RADLOG_ERR, "Could not allocate data attribute");
 		}
 	}
 	return (-1);
@@ -259,7 +281,7 @@ static int radclock_gnl_get_attr(int radclock_gnl_id, void *into)
 	msg = nlmsg_build_simple(radclock_gnl_id, NLM_F_REQUEST | NLM_F_ACK);
 
 	if (!msg) {
-		verbose(LOG_ERR, "Error allocating message");
+		logger(RADLOG_ERR, "Error allocating message");
 		goto errout;
 	}
 
@@ -269,17 +291,17 @@ static int radclock_gnl_get_attr(int radclock_gnl_id, void *into)
 	nlhandle = nl_handle_alloc();
 //	nl_disable_sequence_check(nlhandle);
 	if (!nlhandle) {
-		verbose(LOG_ERR, "Error allocating handle");
+		logger(RADLOG_ERR, "Error allocating handle");
 		goto msg_errout;
 	}
 
 	if (nl_connect(nlhandle, NETLINK_GENERIC) < 0) {
-		verbose(LOG_ERR, "Error connecting to generic netlink socket");
+		logger(RADLOG_ERR, "Error connecting to generic netlink socket");
 		goto destroy_errout;
 	}
-	if (nl_send_auto_complete(nlhandle, msg) < 0)
-	{
-		verbose(LOG_ERR, "Error sending to generic netlink socket");
+
+	if (nl_send_auto_complete(nlhandle, msg) < 0) {
+		logger(RADLOG_ERR, "Error sending to generic netlink socket");
 		goto close_errout;
 	}
 
@@ -297,7 +319,7 @@ static int radclock_gnl_get_attr(int radclock_gnl_id, void *into)
 		hdr = (struct nlmsghdr *) buf;
 		while (nlmsg_ok(hdr, recv_len)) {
 			if (radclock_gnl_receive(radclock_gnl_id, NULL, hdr, into) < 0) {
-				verbose(LOG_ERR, "Error receiving from generic netlink socket");
+				logger(RADLOG_ERR, "Error receiving from generic netlink socket");
 				//Free buff allocated by nl_recv
 				free(buf);
 				goto close_errout;
@@ -306,7 +328,7 @@ static int radclock_gnl_get_attr(int radclock_gnl_id, void *into)
 		}
 	}
 	else {
-		verbose(LOG_ERR, "Error receiving from generic netlink socket");
+		logger(RADLOG_ERR, "Error receiving from generic netlink socket");
 		goto close_errout;
 	}
 	//Free buff allocated by nl_recv
@@ -341,7 +363,7 @@ radclock_gnl_set_attr(int radclock_gnl_id, int id, void *from)
 	msg = nlmsg_build_simple(radclock_gnl_id, NLM_F_REQUEST | NLM_F_ACK);
 
 	if (!msg) {
-		verbose(LOG_ERR, "Error allocating message");
+		logger(RADLOG_ERR, "Error allocating message");
 		goto errout;
 	}
 
@@ -349,30 +371,30 @@ radclock_gnl_set_attr(int radclock_gnl_id, int id, void *from)
 
 	nlhandle = nl_handle_alloc();
 	if (!nlhandle) {
-		verbose(LOG_ERR, "Error allocating handle");
+		logger(RADLOG_ERR, "Error allocating handle");
 		goto msg_errout;
 	}
 
 	if (nl_connect(nlhandle, NETLINK_GENERIC) < 0) {
-		verbose(LOG_ERR, "Error connecting to generic netlink socket");
+		logger(RADLOG_ERR, "Error connecting to generic netlink socket");
 		goto destroy_errout;
 	}
 
 	if (id == RADCLOCK_ATTR_DATA) {
 		if (nla_put(msg, RADCLOCK_ATTR_DATA, sizeof(struct radclock_data), from)) {
-			verbose(LOG_ERR, "Couldn't set attr");
+			logger(RADLOG_ERR, "Couldn't set attr");
 			goto close_errout;
 		}
 	}
 	else if (id == RADCLOCK_ATTR_FIXEDPOINT) {
 		if (nla_put(msg, RADCLOCK_ATTR_FIXEDPOINT,
 				sizeof(struct radclock_fixedpoint), from)) {
-			verbose(LOG_ERR, "Couldn't set attr");
+			logger(RADLOG_ERR, "Couldn't set attr");
 			goto close_errout;
 		}
 	}
 	if (nl_send_auto_complete(nlhandle, msg) < 0) {
-		verbose(LOG_ERR, "Error sending to generic netlink socket");
+		logger(RADLOG_ERR, "Error sending to generic netlink socket");
 		goto close_errout;
 	}
 	nl_wait_for_ack(nlhandle);
@@ -392,7 +414,7 @@ errout:
 
 // TODO the set_kernel_ffclock should be in the library too?
 int
-get_kernel_ffclock(struct radclock *clock, struct radclock_data *rad_data)
+get_kernel_ffclock(struct radclock *clock, struct ffclock_estimate *cest)
 {
 	logger(RADLOG_ERR, "Not yet getting ffclock data in the kernel");
 	if (clock->kernel_version < 2) {
@@ -405,8 +427,7 @@ get_kernel_ffclock(struct radclock *clock, struct radclock_data *rad_data)
 
 
 int
-set_kernel_ffclock(struct radclock *clock, struct radclock_data *rad_data,
-		struct radclock_error *rad_err)
+set_kernel_ffclock(struct radclock *clock, struct ffclock_estimate *cest)
 {
 //	JDEBUG
 //	int err;
@@ -417,9 +438,9 @@ set_kernel_ffclock(struct radclock *clock, struct radclock_data *rad_data,
 //	uint64_t period_shortterm;
 //	uint64_t frac;
 //
-	verbose(LOG_ERR, "Not yet setting ffclock data in the kernel");
+	logger(RADLOG_ERR, "Not yet setting ffclock data in the kernel");
 	if (clock->kernel_version < 2) {
-		verbose(LOG_ERR, "set_kernel_ffclock with unfit kernel!");
+		logger(RADLOG_ERR, "set_kernel_ffclock with unfit kernel!");
 		return (-1);
 	}
 
@@ -431,7 +452,7 @@ set_kernel_ffclock(struct radclock *clock, struct radclock_data *rad_data,
 //
 //	/* Convert vcount to long double time and to bintime */
 //	if (radclock_vcount_to_abstime_fp(clock, &vcount, &time))
-//		verbose(LOG_ERR, "Error calculating time");
+//		logger(RADLOG_ERR, "Error calculating time");
 //
 //	/* What I would like to do is:
 //	 * fdata->time.frac = (time - (time_t) time) * (1LLU << 64);
@@ -457,7 +478,7 @@ set_kernel_ffclock(struct radclock *clock, struct radclock_data *rad_data,
 //	/* Push */
 //	err = radclock_gnl_set_attr(PRIV_DATA(clock)->radclock_gnl_id, RADCLOCK_ATTR_DATA,  &fdata);
 //	if ( err < 0 ) {
-//		verbose(LOG_ERR, "error on syscall set_ffclock: %s", strerror(errno));
+//		logger(RADLOG_ERR, "error on syscall set_ffclock: %s", strerror(errno));
 //		return (-1);
 //	}
 //
@@ -472,7 +493,6 @@ set_kernel_ffclock(struct radclock *clock, struct radclock_data *rad_data,
  */
 inline int set_kernel_fixedpoint(struct radclock *handle, struct radclock_fixedpoint *fpdata)
 {
-	JDEBUG
 	int err;
 
 	switch (handle->kernel_version)
@@ -483,11 +503,11 @@ inline int set_kernel_fixedpoint(struct radclock *handle, struct radclock_fixedp
 		break;
 
 	case 2:	
-		verbose(LOG_ERR, "set_kernel_fixedpoint but kernel version 2!!");
+		logger(RADLOG_ERR, "set_kernel_fixedpoint but kernel version 2!!");
 		return (-1);
 
 	default:
-		verbose(LOG_ERR, "Unknown kernel version");
+		logger(RADLOG_ERR, "Unknown kernel version");
 		return (-1);
 	}
 
