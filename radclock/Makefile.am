@@ -31,7 +31,6 @@ noinst_HEADERS = ntohll.h \
 		 verbose.h \
 		 rawdata.h \
 		 fixedpoint.h \
-		 ffclock.h \
 		 sync_history.h \
 		 jdebug.h
 
@@ -52,7 +51,6 @@ radclock_SOURCES = sync_bidir.c \
 		   pthread_ntpserver.c \
 		   pthread_rawdata.c \
 		   pthread_trigger.c \
-		   misc.c \
 		   radclock_main.c \
 		   stampinput.c \
 		   stampinput.h \

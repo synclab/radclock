@@ -54,9 +54,9 @@
 #include "../config.h"
 #include "radclock.h"
 #include "radclock-private.h"
+#include "kclock.h"
 
 #include "radclock_daemon.h"
-#include "ffclock.h"
 #include "logger.h"
 #include "verbose.h"
 #include "sync_history.h"

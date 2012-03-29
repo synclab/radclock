@@ -33,11 +33,12 @@
 #include "../config.h"
 #include "radclock.h"
 #include "radclock-private.h"
+#include "kclock.h"		// this one can go once fixedpoint thread is removed
+
 #include "radclock_daemon.h"
 #include "sync_history.h"
 #include "sync_algo.h"
 #include "config_mgr.h"
-#include "ffclock.h"		// this one can go once fixedpoint thread is removed
 #include "fixedpoint.h"		// this one can go once fixedpoint thread is removed
 #include "stampinput.h"
 #include "stampoutput.h"

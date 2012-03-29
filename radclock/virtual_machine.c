@@ -37,7 +37,6 @@
 #include "radclock-private.h"
 
 #include "radclock_daemon.h"
-#include "ffclock.h"
 #include "verbose.h"
 #include "sync_history.h"
 #include "sync_algo.h"
