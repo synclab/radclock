@@ -44,6 +44,11 @@ if ( ts < data->last_changed || ts - data->last_changed * data->phat > 10000 )
 }
 */
 
+/* Defines bound on SKM scale. A bit redundant with other defines but easy to
+ * fix if needed.
+ */
+#define OUT_SKM	1024
+
 
 
 /*

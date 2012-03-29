@@ -31,42 +31,40 @@
 /*
  * This header defines the RADclock API to create a RADclock, access time and
  * get internal clock parameters.
- *
  */
 
-
 /* RADclock status word */
-#define STARAD_UNSYNC 			0x00000001 /* RADclock not sync'ed (just started, server not reachable) */
-#define STARAD_WARMUP 			0x00000002 /* RADclock in warmup phase, error estimates unreliable */
-#define STARAD_KCLOCK 			0x00000004 /* RADclock kernel time is reliable */
-#define STARAD_SYSCLOCK 		0x00000008 /* The system clock is fairly accurate (if adjusted by the RADclock) */
-#define STARAD_STARVING 		0x00000010 /* RADclock is lacking quality input */
-#define STARAD_PERIOD_QUALITY 	0x00000020 /* The quality of the RADclock period estimate is poor */
-#define STARAD_PERIOD_SANITY 	0x00000040 /* Consecutive period sanity checks have been triggered */
-#define STARAD_OFFSET_QUALITY 	0x00000080 /* The quality of the RADclock offset estimate is poor */
-#define STARAD_OFFSET_SANITY 	0x00000100 /* Consecutive offset sanity checks have been triggered */
+#define STARAD_UNSYNC			0x0001	/* RADclock not sync'ed (just started,
+										 * server not reachable)
+										 */
+#define STARAD_WARMUP			0x0002	/* RADclock in warmup phase, error
+										 * estimates unreliable
+										 */
+#define STARAD_KCLOCK			0x0004	/* RADclock kernel time is reliable */
+#define STARAD_SYSCLOCK			0x0008	/* The system clock is fairly accurate
+										 *  (if adjusted by the RADclock)
+										 */
+#define STARAD_STARVING			0x0010	/* RADclock is lacking quality input */
+#define STARAD_PERIOD_QUALITY	0x0020	/* The quality of the RADclock period
+										 * estimate is poor
+										 */
+#define STARAD_PERIOD_SANITY	0x0040	/* Consecutive period sanity checks have
+										 * been triggered
+										 */
+#define STARAD_OFFSET_QUALITY	0x0080	/* The quality of the RADclock offset
+										 * estimate is poor
+										 */
+#define STARAD_OFFSET_SANITY	0x0100	/* Consecutive offset sanity checks
+										 * have been triggered
+										 */
 
 
-
-// TODO this definition should go away
-typedef unsigned long long tsc_t;
 typedef uint64_t vcounter_t;
 
-#ifdef VC_FMT
-#undef VC_FMT
-#endif
-#if defined (__LP64__) || defined (__ILP64__)
-#define VC_FMT "lu"
-#else
-#define VC_FMT "llu"
-#endif
-
-
-
-typedef enum { RADCLOCK_LOCAL_PERIOD_ON, RADCLOCK_LOCAL_PERIOD_OFF } radclock_local_period_t;
+typedef enum { RADCLOCK_LOCAL_PERIOD_ON, RADCLOCK_LOCAL_PERIOD_OFF }
+		radclock_local_period_t;
 
 struct radclock;
-
 
 
 /**

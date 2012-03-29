@@ -24,15 +24,7 @@
 #define _RADCLOCK_PRIVATE_H
 
 #include <netinet/in.h>
-#include <pthread.h>
 #include <pcap.h>
-
-
-/* Defines bound on SKM scale. A bit redundant with other defines but easy to
- * fix if needed.
- */
-#define OUT_SKM	1024
-
 
 
 /* Data related to the clock maintain out of the kernel but
@@ -122,7 +114,7 @@ struct radclock {
 	int syscall_get_vcounter;
 
 	/* Read Feed-Forward counter */
-	int (*get_vcounter) (struct radclock *handle, vcounter_t *vcount);
+	int (*get_vcounter) (struct radclock *clock, vcounter_t *vcount);
 };
 
 #define PRIV_USERDATA(x) (&(x->user_data))
@@ -158,13 +150,13 @@ int get_kernel_ffclock(struct radclock *clock, struct radclock_data *rad_data);
 /**
  * System specific call for getting the capture mode on the pcap capture device.
  */
-int descriptor_get_tsmode(struct radclock *handle, pcap_t *p_handle, int *kmode);
+int descriptor_get_tsmode(struct radclock *clock, pcap_t *p_handle, int *kmode);
 
 
 /**
  * System specific call for setting the capture mode on the pcap capture device.
  */
-int descriptor_set_tsmode(struct radclock *handle, pcap_t *p_handle, int kmode);
+int descriptor_set_tsmode(struct radclock *clock, pcap_t *p_handle, int kmode);
 
 
 /**
@@ -179,10 +171,10 @@ int extract_vcount_stamp(
 
 
 
-int radclock_init_vcounter_syscall(struct radclock *handle);
-int radclock_init_vcounter(struct radclock *handle);
-int radclock_get_vcounter_syscall(struct radclock *handle, vcounter_t *vcount);
-int radclock_get_vcounter_rdtsc(struct radclock *handle, vcounter_t *vcount);
+int radclock_init_vcounter_syscall(struct radclock *clock);
+int radclock_init_vcounter(struct radclock *clock);
+int radclock_get_vcounter_syscall(struct radclock *clock, vcounter_t *vcount);
+int radclock_get_vcounter_rdtsc(struct radclock *clock, vcounter_t *vcount);
 
 
 #endif
