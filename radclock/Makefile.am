@@ -41,8 +41,6 @@ bin_PROGRAMS = radclock
 radclock_SOURCES = sync_bidir.c \
 		   sync_history.c \
 		   fixedpoint.c \
-		   ffclock-linux.c \
-		   ffclock-none.c \
 		   create_stamp.c \
 		   verbose.c \
 		   config_mgr.c \

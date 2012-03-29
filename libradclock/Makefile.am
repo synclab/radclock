@@ -47,7 +47,7 @@ else
 if MAKE_RADKERNEL_NONE
 libradclock_la_SOURCES += \
 		radkernel-none.c \
-		kclock-note.c \
+		kclock-none.c \
 		pcap-none.c
 endif
 endif

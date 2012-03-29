@@ -23,17 +23,24 @@
 #include "../config.h"
 #ifdef WITH_RADKERNEL_NONE
 
+#include <errno.h>
+
+#include "radclock.h"
+
+
 int
 descriptor_set_tsmode(struct radclock *clock, pcap_t *p_handle, int kmode)
 {
 	return -ENOENT;
 }
 
+
 int
 descriptor_get_tsmode(struct radclock *clock, pcap_t *p_handle, int *kmode)
 {
 	return -ENOENT;
 }
+
 
 int
 extract_vcount_stamp(struct radclock *clock, pcap_t *p_handle,

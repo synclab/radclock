@@ -43,23 +43,16 @@ struct bintime {
 #else
 struct ffclock_estimate
 {
-    /* Time conversion of ffcounter below */
-    struct bintime time;
+	struct bintime	update_time;	/* Time of last estimates update. */
+	vcounter_t	update_ffcount;		/* Counter value at last update. */
+	vcounter_t	leapsec_next;		/* Counter value of next leap second. */
+	uint64_t	period;				/* Estimate of counter period. */
+	uint32_t	errb_abs;			/* Bound on absolute clock error [ns]. */
+	uint32_t	errb_rate;			/* Bound on counter rate error [ps/s]. */
+	uint32_t	status;				/* Clock status. */
+	int16_t		leapsec_total;		/* All leap seconds seen so far. */
+	int8_t		leapsec;			/* Next leap second (in {-1,0,1}). */
 
-	/* Timecounter period estimate */
-    uint64_t period;
-
-	/* Timecounter short term period estimate (aka plocal) */
-    uint64_t period_shortterm;
-
-    /* Last synchronization daemon update or update_ffclock() */
-    vcounter_t last_update;
-    
-	/* Clock status word */
-    uint32_t status;
-    
-	/* Average of clock error bound in [ns] */
-    uint32_t error_bound_avg;
 };
 #endif
 

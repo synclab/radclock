@@ -202,7 +202,6 @@ set_kernel_ffclock(struct radclock *clock, struct ffclock_estimate *cest)
 #endif
 
 
-
 /* XXX Deprecated
  * Old kernel patches for feed-forward support versions 0 and 1.
  * Used to add more IOCTL to the BPF device. The actual IOCTL number depends on
@@ -261,10 +260,5 @@ set_kernel_fixedpoint(struct radclock *clock, struct radclock_fixedpoint *fpdata
 
 	return (0);
 }
-
-
-
-
-
 
 #endif

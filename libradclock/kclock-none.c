@@ -24,13 +24,44 @@
 #include "../config.h"
 #ifdef WITH_RADKERNEL_NONE
 
+#include <errno.h>
+
 #include "radclock.h"
 #include "radclock-private.h"
+#include "kclock.h"
 
-inline int
-get_kernel_ffclock(struct radclock *clock, struct radclock_data *rad_data)
+
+int
+init_kernel_clock(struct radclock *clock)
 {
 	return (-ENOENT);
 }
+
+
+int
+get_kernel_ffclock(struct radclock *clock, struct ffclock_estimate *cest)
+{
+	return (-ENOENT);
+}
+
+
+int
+set_kernel_ffclock(struct radclock *clock, struct ffclock_estimate *cest)
+{
+	return (-ENOENT);
+}
+
+
+/*
+ * XXX Deprecated
+ * Old way of pushing clock updates to the kernel.
+ * TODO: remove when backward compatibility for kernel versions < 2 is dropped.
+ */
+int
+set_kernel_fixedpoint(struct radclock *clock, struct radclock_fixedpoint *fpdata)
+{
+	return (-ENOENT);
+}
+
 
 #endif

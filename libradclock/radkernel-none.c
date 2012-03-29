@@ -24,20 +24,20 @@
 #include "../config.h"
 #ifdef WITH_RADKERNEL_NONE
 
-#if defined(__APPLE__) 
-#include <machine/types.h>
-#elif defined(__FreeBSD__)
-#include <sys/types.h>
-#elif defined(linux)
-#include <asm/types.h>
-#endif
+//#if defined(__APPLE__) 
+//#include <machine/types.h>
+//#elif defined(__FreeBSD__)
+//#include <sys/types.h>
+//#elif defined(linux)
+//#include <asm/types.h>
+//#endif
 
-#include <sys/socket.h>
-#include <unistd.h>
-#include <err.h>
-#include <stdio.h>
-#include <string.h>
-
+//#include <sys/socket.h>
+//#include <unistd.h>
+//#include <err.h>
+//#include <stdio.h>
+//#include <string.h>
+//
 #include <errno.h>
 
 
@@ -58,18 +58,27 @@ found_ffwd_kernel_version(void)
 	return -1;
 }
 
+
+int
+has_vm_vcounter(struct radclock *clock)
+{
+	return (-ENOENT);
+}
+
+
 int
 radclock_init_vcounter_syscall(struct radclock *clock)
 {
-	handle->syscall_get_vcounter = 0;
-	handle->syscall_set_ffclock = 0;
+	clock->syscall_get_vcounter = 0;
+	clock->syscall_set_ffclock = 0;
 	return 0;
 }
+
 
 int
 radclock_init_vcounter(struct radclock *clock)
 {
-	handle->get_vcounter = NULL;
+	clock->get_vcounter = NULL;
 	return 0;
 }
 

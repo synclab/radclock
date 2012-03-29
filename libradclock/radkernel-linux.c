@@ -99,6 +99,56 @@ found_ffwd_kernel_version (void)
 	return (version);
 }
 
+
+/* Need to check that the passthrough mode is enabled and that the counter can
+ * do the job. The latter is a bit "hard coded"
+ */
+int
+has_vm_vcounter(struct radclock *handle)
+{
+	int passthrough_counter = 0;
+	char clocksource[32];
+	FILE *fd = NULL;
+
+	char *pass;
+
+	pass = "/sys/devices/system/clocksource/clocksource0/passthrough_clocksource";
+
+	fd = fopen (pass, "r");
+	if (!fd) {
+		verbose(LOG_ERR, "Cannot open passthrough_clocksource from sysfs");
+		return (0);
+	}
+	fscanf(fd, "%d", &passthrough_counter);
+	fclose(fd);
+
+	if ( passthrough_counter == 0)
+	{
+		verbose(LOG_ERR, "Clocksource not in pass-through mode. Cannot init virtual machine mode");
+		return (0);
+	}
+	verbose(LOG_NOTICE, "Found clocksource in pass-through mode");
+
+
+	fd = fopen ("/sys/devices/system/clocksource/clocksource0/current_clocksource", "r");
+	if (!fd)
+	{
+		verbose(LOG_WARNING, "Cannot open current_clocksource from sysfs");
+		return (1);
+	}
+	fscanf(fd, "%s", &clocksource[0]);
+	fclose(fd);
+
+	if ( (strcmp(clocksource, "tsc") != 0) && (strcmp(clocksource, "xen") != 0) )
+		verbose(LOG_WARNING, "Clocksource is neither tsc nor xen. "
+				"There must be something wrong!!");
+	else
+		verbose(LOG_WARNING, "Clocksource is %s", clocksource);
+
+	return (1);
+}
+
+
 #if HAVE_RDTSCLL_ASM
 # include <asm/msr.h>
 #elif HAVE_RDTSCLL_ASM_X86
