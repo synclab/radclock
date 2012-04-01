@@ -1,32 +1,35 @@
 /*
- * Copyright (C) 2006-2011 Julien Ridoux <julien@synclab.org>
+ * Copyright (C) 2006-2012 Julien Ridoux <julien@synclab.org>
+ * All rights reserved.
  *
- * This file is part of the radclock program.
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ *    list of conditions and the following disclaimer.
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
- * 02110-1301, USA.
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  */
 
-
-
 // TODO we probably don't need all these includes anymore
-#include <sys/shm.h>
-#include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 
 #include <net/if.h>
 #include <netinet/in_systm.h>
@@ -43,7 +46,6 @@
 #include <pthread.h>
 #include <sched.h>
 #include <signal.h>
-#include <stddef.h>		// offsetof
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -91,9 +93,6 @@ long int jdbg_memuse = 0;
 struct rusage jdbg_rusage;
 #endif
 
-
-
-static int init_raddata_shm_writer(struct radclock *clock);
 
 
 
@@ -199,11 +198,14 @@ rehash_daemon(struct radclock_handle *handle, uint32_t param_mask)
 	if (HAS_UPDATE(param_mask, UPDMASK_SERVER_IPC)) {
 		switch (conf->server_ipc) {
 		case BOOL_ON:
-			init_raddata_shm_writer(handle->clock);
+			err = shm_init_writer(handle->clock);
+			if (err)
+				return (1);
+			verbose(LOG_NOTICE, "IPC Shared Memory ready");
 			break;
 		case BOOL_OFF:
 			/* Detach for SHM segment, but do not destroy it */
-			shmdt(handle->clock->ipc_shm);
+			shm_detach(handle->clock);
 			break;
 		}
 	}
@@ -525,103 +527,6 @@ create_handle(struct radclock_config *conf, int is_daemon)
 
 
 
-/*
- * Create and or initialise IPC shared memory to pass radclock data to system
- * processes.
- * TODO: May want to move all these init functions in a separate file.
- */
-static int
-init_raddata_shm_writer(struct radclock *clock)
-{
-	struct shmid_ds shm_ctl;
-	struct radclock_shm *shm;
-	struct stat sb;
-	key_t shm_key;
-	unsigned int perm_flags;
-	int shm_fd, is_new_shm;
-
-	JDEBUG
-
-	is_new_shm = 0;
-
-	if (stat(RADCLOCK_RUN_DIRECTORY, &sb) < 0) {
-		if (mkdir(RADCLOCK_RUN_DIRECTORY, 0755) < 0) {
-			verbose(LOG_ERR, "Cannot create %s directory", RADCLOCK_RUN_DIRECTORY);
-			return (1);
-		}
-	}
-
-	/*
-	 * Create shm key (file created if it does not already exist)
-	 */
-	shm_fd = open(IPC_SHARED_MEMORY, O_RDWR|O_CREAT, 0644);
-	close(shm_fd);
-
-	shm_key = ftok(IPC_SHARED_MEMORY, 'a');
-	if (shm_key == -1) {
-		verbose(LOG_ERR, "ftok: %s", strerror(errno));
-		return (1);
-	}
-
-	/*
-	 * Create shared memory segment. IPC_EXCL will make this call fail if the
-	 * memory segment already exists.
-	 * May not be a bad thing, since a former instance of radclock that has
-	 * created it. However, cannot be sure the creator is the last one that has
-	 * updated it, and if that guy is still alive. Hard to do here, use pid
-	 * lockfile instead.
-	 */
-	perm_flags = SHM_R | SHM_W | (SHM_R>>3) | (SHM_R>>6);
-	clock->ipc_shm_id = shmget(shm_key, sizeof(struct radclock_shm),
-			IPC_CREAT | IPC_EXCL | perm_flags);
-	if (clock->ipc_shm_id < 0) {
-		switch(errno) {
-		case (EEXIST):
-			clock->ipc_shm_id = shmget(shm_key, sizeof(struct radclock_shm), 0);
-			shmctl(clock->ipc_shm_id, IPC_STAT, &shm_ctl);
-			shm_ctl.shm_perm.mode |= perm_flags;
-			shmctl(clock->ipc_shm_id, IPC_SET, &shm_ctl);
-			verbose(LOG_NOTICE, "IPC Shared Memory exists with %u processes "
-					"attached", shm_ctl.shm_nattch);
-			break;
-
-		default:
-			verbose(LOG_ERR, "shmget failed: %s\n", strerror(errno));
-			return (1);
-		}
-	}
-	else
-		is_new_shm = 1;
-
-	/*
-	 * Attach the process to the memory segment. Round it to kernel page size.
-	 */
-	clock->ipc_shm = shmat(clock->ipc_shm_id, (void *)0, 0);
-	if (clock->ipc_shm == (char *) -1) {
-		verbose(LOG_ERR, "shmat failed: %s\n", strerror(errno));
-		return (1);
-	}
-	shm = (struct radclock_shm *) clock->ipc_shm;
-
-	/* Zero the segment and init the buffer pointers if new. */
-	if (is_new_shm) {
-		memset(shm, 0, sizeof(struct radclock_shm));
-		shm->data_off = offsetof(struct radclock_shm, bufdata);
-		shm->data_off_old = shm->data_off + sizeof(struct radclock_data);
-		shm->error_off = offsetof(struct radclock_shm, buferr);
-		shm->error_off_old = shm->error_off + sizeof(struct radclock_error);
-		shm->gen = 1;
-	}
-
-	// TODO: need to init version number, clockid, valid / invalid status.
-	shm->version = 1;
-
-	verbose(LOG_NOTICE, "IPC Shared Memory ready");
-
-	return (0);
-}
-
-
 
 static int
 clock_init_live(struct radclock *clock, struct radclock_data *rad_data)
@@ -708,9 +613,10 @@ init_handle(struct radclock_handle *handle)
 		 * Initialise IPC shared memory segment
 		 */
 		if (handle->conf->server_ipc == BOOL_ON) {
-			err = init_raddata_shm_writer(handle->clock);
+			err = shm_init_writer(handle->clock);
 			if (err)
 				return (1);
+			verbose(LOG_NOTICE, "IPC Shared Memory ready");
 		}
 	}
 
@@ -1278,18 +1184,8 @@ main(int argc, char *argv[])
 	pthread_mutex_destroy(&(handle->rdb_mutex));
 
 	/* Detach IPC shared memory if were running as IPC server. */
-	if (handle->conf->server_ipc == BOOL_ON) {
-		shmdt(handle->clock->ipc_shm);
-		/*
-		 * Do not issue an IPC_RMID. Looked like a good idea, but it is not.
-		 * Processes still running will be attached to old shared memory segment
-		 * and won't catch updates from the new instance of the daemon (the new
-		 * segment would have a new id).
-		 * Best is to have the shared memory created once, reused and never
-		 * deleted.
-		 */
-		/* shmctl(handle->ipc_shm_id, IPC_RMID, NULL); */
-	}
+	if (handle->conf->server_ipc == BOOL_ON)
+		shm_detach(handle->clock);
 
 	/* Free the clock structure. All done. */
 	free(handle);
