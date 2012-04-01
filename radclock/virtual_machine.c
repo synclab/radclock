@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2006-2012 Julien Ridoux <julien@synclab.org>
- * Copyright (C) 2009-2012 Timothy Broomhead <t.broomhead@ugrad.unimelb.edu.au>
+ * Copyright (C) 2006-2012, Julien Ridoux <julien@synclab.org>
+ * Copyright (C) 2009-2012, Timothy Broomhead <t.broomhead@ugrad.unimelb.edu.au>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without

@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2006-2012 Julien Ridoux <julien@synclab.org>
- * Copyright (C) 2006-2007 Thomas Young <tfyoung@gmail.com>
+ * Copyright (C) 2006-2012, Julien Ridoux <julien@synclab.org>
+ * Copyright (C) 2006-2007, Thomas Young <tfyoung@gmail.com>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without

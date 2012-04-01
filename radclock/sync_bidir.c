@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2006-2012 Julien Ridoux <julien@synclab.org>
+ * Copyright (C) 2006-2012, Julien Ridoux <julien@synclab.org>
  * Copyright (C) 2006 Darryl Veitch <dveitch@unimelb.edu.au>
  * All rights reserved.
  *
@@ -1480,7 +1480,7 @@ process_thetahat_warmup(struct bidir_peer* peer, struct radclock_handle* handle,
 		ADD_STATUS(handle, STARAD_OFFSET_QUALITY);
 	}
 
-// TODO should we check causality if peer->thetahat has not been updated? Check with Darryl
+// TODO should we check causality if peer->thetahat has not been updated? Check with, Darryl
 // TODO also behaviour different in warmup and full algo
 
 	/* errTa - thetahat should be -ve */
@@ -2079,7 +2079,7 @@ process_bidir_stamp(struct radclock_handle *handle, struct bidir_peer *peer,
 		// XXX TODO stamp is passed only for quality warning, but plocal
 		// windows exclude the current stamp!! should take into account the
 		// quality warnings of the stamps actually picked up, no?
-		// Check with Darryl
+		// Check with, Darryl
 		process_plocal_full(peer, handle, plocal_winratio, stamp,
 				phat_sanity_raised, qual_warning);
 

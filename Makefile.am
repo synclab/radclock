@@ -1,5 +1,5 @@
 # 
-# Copyright (C) 2006-2012 Julien Ridoux <julien@synclab.org>
+# Copyright (C) 2006-2012, Julien Ridoux <julien@synclab.org>
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -52,15 +52,10 @@ cscope-clean:
 
 if HAVE_AUTOTOOLS_DIR
 dist-hook:
-	@echo "Cleaning the sync algo from its comments (radclock/sync_bidir.c)"
-	sed -f $(srcdir)/autotools/remove_comments.sed $(distdir)/radclock/sync_bidir.c > $(distdir)/radclock/sync_bidir.c.clean
-	cat $(srcdir)/autotools/copyright-header.txt > $(distdir)/radclock/sync_bidir.c
-	cat $(distdir)/radclock/sync_bidir.c.clean >> $(distdir)/radclock/sync_bidir.c
 	rm $(distdir)/radclock/sync_bidir.c.clean
 	@echo "Copying the python module and wall clock into the tarball"
 	cp $(srcdir)/python-gui/tscclock_wallclock.py $(distdir)/python-module/
 	cp -R $(srcdir)/python-gui/img $(distdir)/python-module/
-	rm -rf $(distdir)/python-module/img/.svn
 	@echo "Copying kernel patches into the tarball"
 	mkdir $(distdir)/kernel-patches
 	mkdir $(distdir)/kernel-patches/freebsd
@@ -73,8 +68,6 @@ dist-hook:
 		mkdir $(distdir)/kernel-patches/linux/$$d; \
 		cp -p $(srcdir)/kernel/linux/$$d/*.patch $(distdir)/kernel-patches/linux/$$d/ ; \
 	done
-	@echo "Cleaning release from svn infos"
-	find $(distdir) -type d -name ".svn" | xargs rm -rf
 	@echo "Pushing version number in packaging scripts" 
 	sed -i -e 's/_RADCLOCK_VERSION_/$(PACKAGE_VERSION)/' $(distdir)/debian/changelog
 	sed -i -e 's/_RADCLOCK_VERSION_/$(PACKAGE_VERSION)/' $(distdir)/redhat/radclock.spec
