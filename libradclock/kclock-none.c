@@ -38,21 +38,21 @@
 int
 init_kernel_clock(struct radclock *clock)
 {
-	return (-ENOENT);
+	return (1);
 }
 
 
 int
 get_kernel_ffclock(struct radclock *clock, struct ffclock_estimate *cest)
 {
-	return (-ENOENT);
+	return (1);
 }
 
 
 int
 set_kernel_ffclock(struct radclock *clock, struct ffclock_estimate *cest)
 {
-	return (-ENOENT);
+	return (1);
 }
 
 
@@ -64,7 +64,7 @@ set_kernel_ffclock(struct radclock *clock, struct ffclock_estimate *cest)
 int
 set_kernel_fixedpoint(struct radclock *clock, struct radclock_fixedpoint *fpdata)
 {
-	return (-ENOENT);
+	return (1);
 }
 
 

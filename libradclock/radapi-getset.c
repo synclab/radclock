@@ -96,7 +96,7 @@ radclock_get_last_stamp(struct radclock *clock, vcounter_t *last_vcount)
 		} while (generation != shm->gen || !shm->gen);
 	} else {
 
-		if (get_kernel_ffclock(clock, &cest) < 0)
+		if (get_kernel_ffclock(clock, &cest))
 			return (1);
 		fill_clock_data(&cest, &rad_data);
 		*last_vcount = rad_data.last_changed;
@@ -124,7 +124,7 @@ radclock_get_till_stamp(struct radclock *clock, vcounter_t *till_vcount)
 			*till_vcount = SHM_DATA(shm)->valid_till;
 		} while (generation != shm->gen || !shm->gen);
 	} else {
-		if (get_kernel_ffclock(clock, &cest) < 0)
+		if (get_kernel_ffclock(clock, &cest))
 			return (1);
 		fill_clock_data(&cest, &rad_data);
 		*till_vcount = rad_data.valid_till;
@@ -152,7 +152,7 @@ radclock_get_period(struct radclock *clock, double *period)
 			*period = SHM_DATA(shm)->phat;
 		} while (generation != shm->gen || !shm->gen);
 	} else {
-		if (get_kernel_ffclock(clock, &cest) < 0)
+		if (get_kernel_ffclock(clock, &cest))
 			return (1);
 		fill_clock_data(&cest, &rad_data);
 		*period = rad_data.phat;
@@ -180,7 +180,7 @@ radclock_get_offset(struct radclock *clock, long double *offset)
 			*offset = SHM_DATA(shm)->ca;
 		} while (generation != shm->gen || !shm->gen);
 	} else {
-		if (get_kernel_ffclock(clock, &cest) < 0)
+		if (get_kernel_ffclock(clock, &cest))
 			return (1);
 		fill_clock_data(&cest, &rad_data);
 		*offset = rad_data.ca;
@@ -208,7 +208,7 @@ radclock_get_period_error(struct radclock *clock, double *err_period)
 			*err_period = SHM_DATA(shm)->phat_err;
 		} while (generation != shm->gen || !shm->gen);
 	} else {
-		if (get_kernel_ffclock(clock, &cest) < 0)
+		if (get_kernel_ffclock(clock, &cest))
 			return (1);
 		fill_clock_data(&cest, &rad_data);
 		*err_period = rad_data.phat_err;
@@ -236,7 +236,7 @@ radclock_get_offset_error(struct radclock *clock, double *err_offset)
 			*err_offset = SHM_DATA(shm)->ca_err;
 		} while (generation != shm->gen || !shm->gen);
 	} else {
-		if (get_kernel_ffclock(clock, &cest) < 0)
+		if (get_kernel_ffclock(clock, &cest))
 			return (1);
 		fill_clock_data(&cest, &rad_data);
 		*err_offset = rad_data.ca_err;
@@ -264,7 +264,7 @@ radclock_get_status(struct radclock *clock, unsigned int *status)
 			*status = SHM_DATA(shm)->status;
 		} while (generation != shm->gen || !shm->gen);
 	} else {
-		if (get_kernel_ffclock(clock, &cest) < 0)
+		if (get_kernel_ffclock(clock, &cest))
 			return (1);
 		fill_clock_data(&cest, &rad_data);
 		*status = rad_data.status;

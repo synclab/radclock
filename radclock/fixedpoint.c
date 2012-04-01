@@ -168,7 +168,7 @@ int update_kernel_fixed(struct radclock_handle *handle)
 	err = radclock_get_vcounter(handle->clock, &vcount);
 	if (err < 0) {
 		verbose(LOG_ERR, "radclock_get_vcounter failed, fixedpoint not updated");
-		return (-1);
+		return (1);
 	}
 
 	counter_to_time(&handle->rad_data, &vcount, &time);

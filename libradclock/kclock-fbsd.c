@@ -87,7 +87,7 @@ init_kernel_clock(struct radclock *clock)
 		}
 		if (devnum == 254) {
 			logger(RADLOG_ERR, "Cannot open a bpf descriptor");
-			return (-1);
+			return (1);
 		}
 		PRIV_DATA(clock)->dev_fd = fd;
 		break;
@@ -99,7 +99,7 @@ init_kernel_clock(struct radclock *clock)
 
 	default:
 		logger(RADLOG_ERR, "Unknown kernel version");
-		return (-1);
+		return (1);
 	}
 
 	return (0);
@@ -125,7 +125,7 @@ get_kernel_ffclock(struct radclock *clock, struct ffclock_estimate *cest)
 // clock access into this function !!
 	if (clock->kernel_version < 2)
 // FIXME: is error code correct? Should it be +1?
-		return (-1);
+		return (1);
 
 	/* FreeBSD system call */
 	err = ffclock_getestimate(cest);
@@ -133,7 +133,7 @@ get_kernel_ffclock(struct radclock *clock, struct ffclock_estimate *cest)
 // TODO Clean up verbose logging
 		logger(RADLOG_ERR, "Clock estimate init from kernel failed");
 		fprintf(stdout, "Clock estimate init from kernel failed");
-		return (err);
+		return (1);
 	}
 
 	/* Sanity check to avoid introducing crazy data */
@@ -172,7 +172,7 @@ set_kernel_ffclock(struct radclock *clock, struct ffclock_estimate *cest)
 
 	if (clock->kernel_version < 2) {
 		logger(RADLOG_ERR, "set_kernel_ffclock with unfit kernel!");
-		return (-1);
+		return (1);
 	}
 
 	/* Push */
@@ -188,12 +188,12 @@ set_kernel_ffclock(struct radclock *clock, struct ffclock_estimate *cest)
 		break;
 	default:
 		logger(RADLOG_ERR, "Unknown kernel version");
-		return (-1);
+		return (1);
 	}
 
 	if (err < 0) {
 		logger(RADLOG_ERR, "error on syscall set_ffclock: %s", strerror(errno));
-		return (-1);
+		return (1);
 	}
 
 	return (0);
@@ -249,18 +249,18 @@ set_kernel_fixedpoint(struct radclock *clock, struct radclock_fixedpoint *fpdata
 		err = ioctl(PRIV_DATA(clock)->dev_fd, BIOCSRADCLOCKFIXED, fpdata);
 		if (err < 0) {
 			logger(RADLOG_ERR, "Setting fixedpoint data failed");
-			return (-1);
+			return (1);
 		}
 		break;
 
 	case 2:
 	case 3:
 		logger(RADLOG_ERR, "set_kernel_fixedpoint but kernel version 2 or higher!!");
-		return (-1);
+		return (1);
 
 	default:
 		logger(RADLOG_ERR, "Unknown kernel version");
-		return (-1);
+		return (1);
 	}
 
 	return (0);

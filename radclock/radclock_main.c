@@ -573,7 +573,7 @@ clock_init_live(struct radclock *clock, struct radclock_data *rad_data)
 
 	// TODO this could be revamped into one single function
 	err = init_kernel_clock(clock);
-	if (err < 0)
+	if (err)
 		return (1);
 	verbose(LOG_NOTICE, "Kernel clock support initialised");
 

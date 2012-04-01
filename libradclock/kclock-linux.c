@@ -91,7 +91,7 @@ init_kernel_clock(struct radclock *handle)
 	if (PRIV_DATA(handle)->radclock_gnl_id  == 0) {
 		//PANIC
 		logger(RADLOG_ERR, "Cannot lookup linux global data netlink ID");
-		return (-ENOENT);
+		return (1);
 	}
 	else {
 		logger(RADLOG_NOTICE, "Global data generic netlink id is %d",
@@ -425,7 +425,7 @@ get_kernel_ffclock(struct radclock *clock, struct ffclock_estimate *cest)
 	logger(RADLOG_ERR, "Not yet getting ffclock data in the kernel");
 	if (clock->kernel_version < 2) {
 		logger(RADLOG_ERR, "get_kernel_ffclock with unfit kernel!");
-		return (-1);
+		return (1);
 	}
 
 	return (0);
@@ -447,7 +447,7 @@ set_kernel_ffclock(struct radclock *clock, struct ffclock_estimate *cest)
 	logger(RADLOG_ERR, "Not yet setting ffclock data in the kernel");
 	if (clock->kernel_version < 2) {
 		logger(RADLOG_ERR, "set_kernel_ffclock with unfit kernel!");
-		return (-1);
+		return (1);
 	}
 
 //
@@ -485,7 +485,7 @@ set_kernel_ffclock(struct radclock *clock, struct ffclock_estimate *cest)
 //	err = radclock_gnl_set_attr(PRIV_DATA(clock)->radclock_gnl_id, RADCLOCK_ATTR_DATA,  &fdata);
 //	if ( err < 0 ) {
 //		logger(RADLOG_ERR, "error on syscall set_ffclock: %s", strerror(errno));
-//		return (-1);
+//		return (1);
 //	}
 //
 	return (0);
@@ -510,14 +510,16 @@ inline int set_kernel_fixedpoint(struct radclock *handle, struct radclock_fixedp
 
 	case 2:	
 		logger(RADLOG_ERR, "set_kernel_fixedpoint but kernel version 2!!");
-		return (-1);
+		return (1);
 
 	default:
 		logger(RADLOG_ERR, "Unknown kernel version");
-		return (-1);
+		return (1);
 	}
 
-	return (err);
+	if (err < 0) 
+		return (1);
+	return (0);
 }
 
 #endif

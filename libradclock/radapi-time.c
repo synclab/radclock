@@ -140,7 +140,7 @@ ffcounter_to_abstime_kernel(struct radclock *clock, vcounter_t vcount,
 	struct radclock_data rad_data;
 
 // TODO FIXME error code is out of whack
-	if (get_kernel_ffclock(clock, &cest) < 0)
+	if (get_kernel_ffclock(clock, &cest))
 		return (1);
 	fill_clock_data(&cest, &rad_data);
 
@@ -203,7 +203,7 @@ ffcounter_to_difftime_kernel(struct radclock *clock, vcounter_t from_vcount,
 
 
 // TODO FIXME error code is out of whack
-	if (get_kernel_ffclock(clock, &cest) < 0)
+	if (get_kernel_ffclock(clock, &cest))
 		return (1);
 	fill_clock_data(&cest, &rad_data);
 
