@@ -194,8 +194,7 @@ radclock_get_vcounter_rdtsc(struct radclock *handle, vcounter_t *vcount)
 int
 radclock_init_vcounter_syscall(struct radclock *handle)
 {
-	switch ( handle->kernel_version )
-	{
+	switch (handle->kernel_version) {
 	case 0:
 	case 1:
 		/* From config.h */
@@ -214,7 +213,7 @@ radclock_init_vcounter_syscall(struct radclock *handle)
 	default:
 		logger(RADLOG_ERR, "Unknown kernel version, cannot register "
 				"get_ffcounter syscall");
-		return (-1);
+		return (1);
 	}
 
 	return (0);

@@ -564,7 +564,7 @@ clock_init_live(struct radclock *clock, struct radclock_data *rad_data)
 	fill_clock_data(&cest, rad_data);
 
 	err = radclock_init_vcounter_syscall(clock);
-	if (err < 0)
+	if (err)
 		return (1);
 
 	err = radclock_init_vcounter(clock);

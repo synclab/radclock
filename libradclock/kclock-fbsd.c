@@ -124,7 +124,6 @@ get_kernel_ffclock(struct radclock *clock, struct ffclock_estimate *cest)
 // XXX FIXME comment above is not quite true, should integrate previous kernel
 // clock access into this function !!
 	if (clock->kernel_version < 2)
-// FIXME: is error code correct? Should it be +1?
 		return (1);
 
 	/* FreeBSD system call */

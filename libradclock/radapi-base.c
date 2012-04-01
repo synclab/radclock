@@ -244,11 +244,11 @@ radclock_init(struct radclock *clock)
 	clock->kernel_version = found_ffwd_kernel_version();
 
 	err = radclock_init_vcounter_syscall(clock);
-	if (err < 0)
+	if (err)
 		return (-1);
 
 	err = radclock_init_vcounter(clock);
-	if ( err < 0 )
+	if (err < 0)
 		return (-1);
 
 	/* SHM on library side */

@@ -111,7 +111,7 @@ found_ffwd_kernel_version (void)
 			version);
 
 	/* A quick reminder for the administrator. */
-	switch ( version ) {
+	switch (version) {
 	/* Version 3 is version 2 with the extended BPF header */
 	case 3:
 	case 2:
@@ -128,7 +128,7 @@ found_ffwd_kernel_version (void)
 		logger(RADLOG_NOTICE, "No Feed-Forward kernel support detected");
 		break;
 	}
-	return version;
+	return (version);
 }
 
 
@@ -237,16 +237,15 @@ radclock_init_vcounter_syscall(struct radclock *clock)
 	int err;
 
 	switch (clock->kernel_version) {
-
 	case 0:
 	case 1:
 		stat.version = sizeof(stat);
 		err = modstat(modfind("get_vcounter"), &stat);
-		if (err < 0 ) {
+		if (err < 0) {
 			logger(RADLOG_ERR, "Error on modstat (get_vcounter syscall): %s",
 				strerror(errno));
 			logger(RADLOG_ERR, "Is the radclock kernel module loaded?");
-			return (-1);
+			return (1);
 		}
 		clock->syscall_get_vcounter = stat.data.intval;
 		logger(RADLOG_NOTICE, "Registered get_vcounter syscall at %d",
@@ -259,7 +258,7 @@ radclock_init_vcounter_syscall(struct radclock *clock)
 		break;
 
 	default:
-		return (-1);
+		return (1);
 	}
 	return (0);
 }
@@ -274,7 +273,6 @@ radclock_get_vcounter_syscall(struct radclock *handle, vcounter_t *vcount)
 		return (-1);
 
 	switch (handle->kernel_version) {
-
 	case 0:
 	case 1:
 		ret = syscall(handle->syscall_get_vcounter, vcount);
@@ -288,7 +286,7 @@ radclock_get_vcounter_syscall(struct radclock *handle, vcounter_t *vcount)
 		break;
 	}
 
-	if ( ret < 0 ) {
+	if (ret < 0) {
 		logger(RADLOG_ERR, "error on syscall get_vcounter: %s", strerror(errno));
 		return (-1);
 	}
@@ -327,8 +325,7 @@ radclock_init_vcounter(struct radclock *handle)
 		}
 		break;
 
-// FIXME
-// XXX For these two versions, the sysctl has snicked in the official kernel
+// FIXME XXX For these two versions, the sysctl has snicked in the official kernel
 // withouth the backend support. This test is not discrimating!
 	case 2:
 	case 3:
