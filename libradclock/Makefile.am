@@ -39,19 +39,19 @@ libradclock_la_SOURCES = \
 
 if MAKE_RADKERNEL_FBSD
 libradclock_la_SOURCES += \
-		radkernel-fbsd.c \
+		ffkernel-fbsd.c \
 		kclock-fbsd.c \
 		pcap-fbsd.c
 else
 if MAKE_RADKERNEL_LINUX
 libradclock_la_SOURCES += \
-		radkernel-linux.c \
+		ffkernel-linux.c \
 		kclock-linux.c \
 		pcap-linux.c
 else
 if MAKE_RADKERNEL_NONE
 libradclock_la_SOURCES += \
-		radkernel-none.c \
+		ffkernel-none.c \
 		kclock-none.c \
 		pcap-none.c
 endif
