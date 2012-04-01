@@ -5,8 +5,8 @@
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- * 1. Redistributions of source code must retain the above copyright notice, this
- *    list of conditions and the following disclaimer.
+ * 1. Redistributions of source code must retain the above copyright notice,
+ *    this list of conditions and the following disclaimer.
  *
  * 2. Redistributions in binary form must reproduce the above copyright notice,
  *    this list of conditions and the following disclaimer in the documentation
@@ -379,8 +379,10 @@ deliver_rawdata_spy(struct radclock_handle *handle, struct stamp_t *stamp)
 
 
 
-// XXX TODO XXX this is a bit messy. some parts are specific to the source, maybe that should be in the corresponding file?
-// XXX XXX Quite complicated with multiple sources, the chain list management is not re-entrant with multiple sources!!
+// XXX TODO XXX this is a bit messy. some parts are specific to the source,
+// maybe that should be in the corresponding file?  Quite complicated with
+// multiple sources, the chain list management is not re-entrant with multiple
+// sources!!
 int
 deliver_rawdata_ntp(struct radclock_handle *handle, struct radpcap_packet_t *pkt,
 		vcounter_t *vcount)

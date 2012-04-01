@@ -5,8 +5,8 @@
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- * 1. Redistributions of source code must retain the above copyright notice, this
- *    list of conditions and the following disclaimer.
+ * 1. Redistributions of source code must retain the above copyright notice,
+ *    this list of conditions and the following disclaimer.
  *
  * 2. Redistributions in binary form must reproduce the above copyright notice,
  *    this list of conditions and the following disclaimer in the documentation
@@ -66,7 +66,8 @@ extern struct verbose_data_t verbose_data;
 
 extern void verbose(int facility, const char* format, ...); 
 
-extern void set_verbose(struct radclock_handle *handle, int verbose_level, int initialized);
+extern void set_verbose(struct radclock_handle *handle, int verbose_level,
+		int initialized);
 extern void unset_verbose();
 extern int get_verbose_level();
 /* Short cut */

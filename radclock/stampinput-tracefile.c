@@ -5,8 +5,8 @@
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- * 1. Redistributions of source code must retain the above copyright notice, this
- *    list of conditions and the following disclaimer.
+ * 1. Redistributions of source code must retain the above copyright notice,
+ *    this list of conditions and the following disclaimer.
  *
  * 2. Redistributions in binary form must reproduce the above copyright notice,
  *    this list of conditions and the following disclaimer in the documentation
@@ -161,7 +161,8 @@ tracefilestamp_init(struct radclock_handle *handle, struct stampsource *source)
 	 * reading from live input and it is not carried in each packet, so we have
 	 * to store it from here.
 	 */
-	TRACEFILE_DATA(source)->data_link = pcap_datalink(TRACEFILE_DATA(source)->trace_input);
+	TRACEFILE_DATA(source)->data_link =
+		pcap_datalink(TRACEFILE_DATA(source)->trace_input);
 	if ((TRACEFILE_DATA(source)->data_link != DLT_EN10MB) &&
 			(TRACEFILE_DATA(source)->data_link != DLT_LINUX_SLL)) {
 		verbose(LOG_ERR, "Unknown link layer type from raw file: %d",
@@ -174,8 +175,8 @@ tracefilestamp_init(struct radclock_handle *handle, struct stampsource *source)
 
 
 static int
-tracefilestamp_get_next(struct radclock_handle *handle, struct stampsource *source,
-	struct stamp_t *stamp)
+tracefilestamp_get_next(struct radclock_handle *handle,
+		struct stampsource *source, struct stamp_t *stamp)
 {
 	int err;
 
@@ -191,7 +192,8 @@ tracefilestamp_get_next(struct radclock_handle *handle, struct stampsource *sour
 
 
 static void
-tracefilestamp_breakloop(struct radclock_handle *handle, struct stampsource *source)
+tracefilestamp_breakloop(struct radclock_handle *handle,
+		struct stampsource *source)
 {
 
 	verbose(LOG_WARNING, "Call to breakloop in tracefile replay has no effect");
@@ -199,7 +201,8 @@ tracefilestamp_breakloop(struct radclock_handle *handle, struct stampsource *sou
 
 
 static void
-tracefilestamp_finish(struct radclock_handle *handle, struct stampsource *source)
+tracefilestamp_finish(struct radclock_handle *handle,
+		struct stampsource *source)
 {
 	pcap_close(TRACEFILE_DATA(source)->trace_input);
 	JDEBUG_MEMORY(JDBG_FREE, TRACEFILE_DATA(source));
@@ -208,14 +211,16 @@ tracefilestamp_finish(struct radclock_handle *handle, struct stampsource *source
 
 
 static int
-tracefilestamp_update_filter(struct radclock_handle *handle, struct stampsource *source)
+tracefilestamp_update_filter(struct radclock_handle *handle,
+		struct stampsource *source)
 {
 	/* So far this does nothing .. */
 	return (0);
 }
 
 static int
-tracefilestamp_update_dumpout(struct radclock_handle *handle, struct stampsource *source)
+tracefilestamp_update_dumpout(struct radclock_handle *handle,
+		struct stampsource *source)
 {
 	/* So far this does nothing .. */
 	return (0);

@@ -5,8 +5,8 @@
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- * 1. Redistributions of source code must retain the above copyright notice, this
- *    list of conditions and the following disclaimer.
+ * 1. Redistributions of source code must retain the above copyright notice,
+ *    this list of conditions and the following disclaimer.
  *
  * 2. Redistributions in binary form must reproduce the above copyright notice,
  *    this list of conditions and the following disclaimer in the documentation
@@ -117,7 +117,8 @@ int radclock_init(struct radclock *clock);
  * @param clock The radclock clock
  * @param local_period_mode A reference to the mode used for creating timestamps 
  */
-int radclock_set_local_period_mode(struct radclock *clock, radclock_local_period_t *local_period_mode);
+int radclock_set_local_period_mode(struct radclock *clock,
+		radclock_local_period_t *local_period_mode);
 
 
 /**
@@ -125,7 +126,8 @@ int radclock_set_local_period_mode(struct radclock *clock, radclock_local_period
  * @param clock The radclock clock
  * @param local_period_mode A reference to the mode used for creating timestamps 
  */
-int radclock_get_local_period_mode(struct radclock *clock, radclock_local_period_t *local_period_mode);
+int radclock_get_local_period_mode(struct radclock *clock,
+		radclock_local_period_t *local_period_mode);
 
 
 /**
@@ -145,7 +147,6 @@ int radclock_gettime(struct radclock *clock, long double *abstime);
 /**
  * Convert a vcounter value to a timeval struct representation of absolute time,
  * based on the current radclock parameters.
- * Obtain a micro second resolution. 
  * @param  clock The private clock for accessing global data
  * @param  vcount A reference to the vcounter_t vcounter value to convert 
  * @param  abstime_tv A reference to the timeval structure to be filled 
@@ -161,8 +162,8 @@ int radclock_vcount_to_abstime(struct radclock *clock, const vcounter_t *vcount,
 
 
 /** 
- * Get the time elapsed since a vcount event in a timeval format based on the current radclock parameters.
- * Obtain a micro second resolution. 
+ * Get the time elapsed since a vcount event in a timeval format based on the
+ * current radclock parameters.
  * @param  clock The private clock for accessing global data 
  * @param  past_vcount A reference to the vcount value corresponding to the past event
  * @param  duration_tv A reference to the long double time value to be filled 
@@ -178,10 +179,10 @@ int radclock_elapsed(struct radclock *clock, const vcounter_t *past_vcount,
 
 
 /** 
- * Get a duration between two vcount events in a timeval format based on the current radclock parameters.
- * Obtain a micro second resolution. 
+ * Get a duration between two vcount events in a timeval format based on the current
+ * radclock parameters.
  * @param  clock The private clock for accessing global data 
- * @param  start_vcount A reference to the vcount value corresponding to the starting event
+ * @param  start_vcount A reference to the vcount value corresponding to the start event
  * @param  end_vcount A reference to the vcount value corresponding to the ending event
  * @param  duration_tv A reference to the timeval structure to be filled 
  * @return 0 on success
@@ -370,7 +371,8 @@ int radclock_register_pcap(struct radclock *clock, pcap_t *pcap_handle);
  * This will only work on a live socket.
  * @return 0 on success, non-zero on failure
  */
-int radclock_set_tsmode(struct radclock *clock, pcap_t *p_handle, radclock_tsmode_t mode);
+int radclock_set_tsmode(struct radclock *clock, pcap_t *p_handle,
+		radclock_tsmode_t mode);
 
 
 /**
@@ -378,7 +380,8 @@ int radclock_set_tsmode(struct radclock *clock, pcap_t *p_handle, radclock_tsmod
  * This will only work on a live socket.
  * @return 0 on success, non-zero on failure
  */
-int radclock_get_tsmode(struct radclock *clock, pcap_t *p_handle, radclock_tsmode_t *mode);
+int radclock_get_tsmode(struct radclock *clock, pcap_t *p_handle,
+		radclock_tsmode_t *mode);
 
 
 /**
@@ -388,7 +391,8 @@ int radclock_get_tsmode(struct radclock *clock, pcap_t *p_handle, radclock_tsmod
  * @return error code 
  */
 int radclock_get_packet(struct radclock *clock, pcap_t *p_handle,
-		struct pcap_pkthdr *header, unsigned char **packet, vcounter_t *vcount, struct timeval *ts);
+		struct pcap_pkthdr *header, unsigned char **packet, vcounter_t *vcount,
+		struct timeval *ts);
 
 
 #endif

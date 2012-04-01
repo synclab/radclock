@@ -5,8 +5,8 @@
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- * 1. Redistributions of source code must retain the above copyright notice, this
- *    list of conditions and the following disclaimer.
+ * 1. Redistributions of source code must retain the above copyright notice,
+ *    this list of conditions and the following disclaimer.
  *
  * 2. Redistributions in binary form must reproduce the above copyright notice,
  *    this list of conditions and the following disclaimer in the documentation
@@ -50,7 +50,8 @@
 #include "pthread_mgr.h"
 #include "jdebug.h"
 
-#include <sys/sysctl.h>		// TODO remove when pushing sysctl code within arch specific code
+#include <sys/sysctl.h>		// TODO remove when pushing sysctl code within arch
+							// specific code
 
 
 #ifdef WITH_RADKERNEL_NONE
@@ -360,7 +361,8 @@ update_system_clock(struct radclock_handle *handle)
 	tx.status = STA_PLL;
 	tx.maxerror = (long) ((SERVER_DATA(handle)->rootdelay/2 +
 			SERVER_DATA(handle)->rootdispersion) * 1e6);
-	tx.esterror = (long) (RAD_DATA(handle)->phat * 1e6);	/* TODO: not the right estimate !! */
+	/* TODO: not the right estimate !! */
+	tx.esterror = (long) (RAD_DATA(handle)->phat * 1e6);
 	
 	/* Play slightly with the rate of convergence of the PLL in the kernel. Try
 	 * to converge faster when it is further away
@@ -668,16 +670,19 @@ process_rawdata(struct radclock_handle *handle, struct bidir_peer *peer)
 		min_RTT = RAD_ERROR(handle)->min_RTT;
 		timediff = (double) (currtime - (long double) BST(&stamp)->Te);
 
-		verbose(VERB_CONTROL, "i=%ld: NTPserver stamp %.6Lf, RAD - NTPserver = %.3f [ms], RTT/2 = %.3f [ms]",
+		verbose(VERB_CONTROL, "i=%ld: NTPserver stamp %.6Lf, RAD - NTPserver "
+				"= %.3f [ms], RTT/2 = %.3f [ms]",
 				((struct bidir_output *)handle->algo_output)->n_stamps - 1,
 				BST(&stamp)->Te, timediff * 1000, min_RTT / 2 * 1000);
 
 		error_bound = RAD_ERROR(handle)->error_bound;
 		error_bound_avg = RAD_ERROR(handle)->error_bound_avg;
 		error_bound_std = RAD_ERROR(handle)->error_bound_std;
-		verbose(VERB_CONTROL, "i=%ld: Clock Error Bound (cur,avg,std) %.6f %.6f %.6f [ms]",
+		verbose(VERB_CONTROL, "i=%ld: Clock Error Bound (cur,avg,std) %.6f "
+				"%.6f %.6f [ms]",
 				((struct bidir_output *)handle->algo_output)->n_stamps - 1,
-				error_bound * 1000, error_bound_avg * 1000, error_bound_std * 1000);
+				error_bound * 1000, error_bound_avg * 1000,
+				error_bound_std * 1000);
 	}
 
 	/* Set initial state of 'signals' - important !!

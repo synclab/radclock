@@ -27,7 +27,8 @@ dnl POSSIBILITY OF SUCH DAMAGE.
 dnl Check for autoconf version
 AC_PREREQ(2.57)
 
-AC_INIT(radclock, 0.4.x, [julien@synclab.org], radclock, http://www.synclab.org/radclock/)
+AC_INIT(radclock, 0.4.x, [julien@synclab.org], radclock,
+		http://www.synclab.org/radclock/)
 
 dnl This should set the target_cpu, target_os and target_vendor variables
 AC_CANONICAL_TARGET
@@ -44,7 +45,8 @@ dnl Project internals: define directories with friends to compile
 dnl ===========================================================================
 
 AC_CONFIG_SRCDIR(radclock/radclock_main.c)
-AC_CONFIG_FILES([Makefile libradclock/Makefile radclock/Makefile examples/Makefile man/Makefile tests/Makefile])
+AC_CONFIG_FILES([Makefile libradclock/Makefile radclock/Makefile
+				 examples/Makefile man/Makefile tests/Makefile])
 
 dnl Conditional for the autotools that are not shipped away 
 if test -d autotools; then
@@ -78,9 +80,9 @@ if test "$jdebug" = "yes"; then
 fi
 
 dnl Kernel support forced or auto-detect  
-AC_ARG_WITH([radclock-kernel],
-		[AS_HELP_STRING([--with-radclock-kernel], [Force compilation of radclock kernel support])], 
-		[tscexts=yes],[tscexts=no])
+AC_ARG_WITH([radclock-kernel], [AS_HELP_STRING([--with-radclock-kernel],
+		[Force compilation of radclock kernel support])], [tscexts=yes],
+		[tscexts=no])
 
 
 
@@ -191,7 +193,8 @@ AC_CHECK_HEADER(pcap.h, [], [pcap_ok=0])
 AC_CHECK_LIB(pcap, pcap_next_ex,,pcap_ok=0)
 AC_CHECK_LIB(pcap, pcap_dump_flush,,pcap_ok=0)
 
-dnl check if we have libpcap version >= 1.0.0. It is essential for Linux MMAP support
+dnl check if we have libpcap version >= 1.0.0.
+dnl It is essential for Linux MMAP support
 dnl pcap_activate does not exist in previous versions
 dnl need AC_CHECK_LIB beforehand
 AC_CHECK_FUNCS(pcap_activate)

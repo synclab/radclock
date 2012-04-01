@@ -5,8 +5,8 @@
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- * 1. Redistributions of source code must retain the above copyright notice, this
- *    list of conditions and the following disclaimer.
+ * 1. Redistributions of source code must retain the above copyright notice,
+ *    this list of conditions and the following disclaimer.
  *
  * 2. Redistributions in binary form must reproduce the above copyright notice,
  *    this list of conditions and the following disclaimer in the documentation
@@ -85,7 +85,8 @@ found_ffwd_kernel_version (void)
 	size_ctl = sizeof(version);
 
 	/* Sysctl for version 2 and 3*/
-	ret = sysctlbyname("kern.sysclock.ffclock.version", &version, &size_ctl, NULL, 0);
+	ret = sysctlbyname("kern.sysclock.ffclock.version", &version, &size_ctl,
+			NULL, 0);
 	if (ret < 0) {
 
 		/* Sysctl for version 1 */
@@ -223,7 +224,8 @@ vcounter_t radclock_readtsc(void) {
 }
 
 // TODO we could afford some cleaning in here
-inline int radclock_get_vcounter_rdtsc(struct radclock *handle, vcounter_t *vcount)
+inline int
+radclock_get_vcounter_rdtsc(struct radclock *handle, vcounter_t *vcount)
 {
 	*vcount = radclock_readtsc();
 	return 0;
@@ -317,7 +319,8 @@ radclock_init_vcounter(struct radclock *handle)
 
 	case 1:
 		size_ctl = sizeof(passthrough_counter);
-		ret = sysctlbyname("kern.timecounter.passthrough", &passthrough_counter, &size_ctl, NULL, 0);
+		ret = sysctlbyname("kern.timecounter.passthrough", &passthrough_counter,
+				&size_ctl, NULL, 0);
 		if (ret == -1)
 		{
 			logger(RADLOG_ERR, "Cannot find kern.timecounter.passthrough in sysctl");
@@ -325,8 +328,8 @@ radclock_init_vcounter(struct radclock *handle)
 		}
 		break;
 
-// FIXME XXX For these two versions, the sysctl has snicked in the official kernel
-// withouth the backend support. This test is not discrimating!
+// FIXME XXX For these two versions, the sysctl has snicked in the official
+// kernel withouth the backend support. This test is not discrimating!
 	case 2:
 	case 3:
 		size_ctl = sizeof(passthrough_counter);
@@ -367,7 +370,8 @@ radclock_init_vcounter(struct radclock *handle)
 	if (passthrough_counter == 1) {
 		if ((strcmp(handle->hw_counter, "TSC") != 0)
 			&& (strcmp(handle->hw_counter, "ixen") != 0))
-			logger(RADLOG_ERR, "Passthrough mode in ON but the timecounter does not support it!!");
+			logger(RADLOG_ERR, "Passthrough mode in ON but the timecounter "
+					"does not support it!!");
 	}
 
 	return (0);

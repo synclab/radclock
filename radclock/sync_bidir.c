@@ -6,8 +6,8 @@
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- * 1. Redistributions of source code must retain the above copyright notice, this
- *    list of conditions and the following disclaimer.
+ * 1. Redistributions of source code must retain the above copyright notice,
+ *    this list of conditions and the following disclaimer.
  *
  * 2. Redistributions in binary form must reproduce the above copyright notice,
  *    this list of conditions and the following disclaimer in the documentation
@@ -1480,7 +1480,7 @@ process_thetahat_warmup(struct bidir_peer* peer, struct radclock_handle* handle,
 		ADD_STATUS(handle, STARAD_OFFSET_QUALITY);
 	}
 
-// TODO should we check causality if peer->thetahat has not been updated? Check with, Darryl
+// TODO should we check causality if peer->thetahat has not been updated?
 // TODO also behaviour different in warmup and full algo
 
 	/* errTa - thetahat should be -ve */
@@ -1492,7 +1492,8 @@ process_thetahat_warmup(struct bidir_peer* peer, struct radclock_handle* handle,
 	}
 
 	/* errTf - thetahat should be +ve */
-	errTf = (double)((long double)stamp->Tf * peer->phat + peer->C - (long double) stamp->Te);
+	errTf = (double)((long double)stamp->Tf * peer->phat + peer->C -
+			(long double) stamp->Te);
 	if ( errTf < peer->thetahat ) {
 		verbose(VERB_CAUSALITY, "i=%lu: causality error on C(Tf), errTf = %5.3lf [ms], "
 				"thetahat = %5.3lf [ms], diff = %5.3lf [ms] ",
@@ -1527,7 +1528,7 @@ void process_thetahat_full (struct bidir_peer* peer, struct radclock_handle* han
 		struct radclock_phyparam *phyparam, vcounter_t RTT,
 		struct bidir_stamp* stamp, int qual_warning)
 {
-	double thetahat;	// double ok since this corrects clock which is already almost right
+	double thetahat;	// double ok since this corrects clock which is almost right
 	double errTa = 0;	// calculate causality errors for correction of thetahat
 	double errTf = 0;	// calculate causality errors for correction of thetahat
 	double wj;			// weight of pkt i
@@ -1537,7 +1538,7 @@ void process_thetahat_full (struct bidir_peer* peer, struct radclock_handle* han
 	double minET = 0;	// error thetahat ?
 
 	double *thnaive_tmp;
-	double gapsize;		// size in seconds between pkts, used to track widest gap in offset_win
+	double gapsize;		// size in seconds between pkts, tracks widest gap in offset_win
 	int gap = 0;		// logical: 1 = have found a large gap at THIS stamp
 
 	index_t adj_win;					// adjusted window
@@ -1651,9 +1652,12 @@ void process_thetahat_full (struct bidir_peer* peer, struct radclock_handle* han
 			stamp_tmp2 = history_find(&peer->stamp_hist, j+1);
 			gapsize = MAX(gapsize, peer->phat * (double) (stamp_tmp2->Tf - stamp_tmp->Tf));
 		}
-		/* Don't reassess pt errors (shifts already accounted for)
-		 * then add SD quality measure (large SD at small RTT=> delayed Te, distorting th_naive)
-		 * then add aging with pessimistic rate (safer to trust recent)
+
+		/*
+		 * Don't reassess pt errors (shifts already accounted for) then add SD
+		 * quality measure (large SD at small RTT=> delayed Te, distorting
+		 * th_naive) then add aging with pessimistic rate (safer to trust
+		 * recent)
 		 */
 		RTT_tmp = history_find(&peer->RTT_hist, j);
 		RTThat_tmp = history_find(&peer->RTThat_hist, j);
@@ -1666,9 +1670,10 @@ void process_thetahat_full (struct bidir_peer* peer, struct radclock_handle* han
 
 		/* Add SD penalty to ET
 		 * XXX: SD quality measure has been problematic in different cases:
-		 * - kernel timestamping with hardware based servers(DAG, 1588), punish good packets
-		 * - with bad NTP servers that have SD > Eoffset_qual all the time (cf CAIDA example).
-		 * removed it definitively on 28/07/2011
+		 * - kernel timestamping with hardware based servers(DAG, 1588), punish
+		 *   good packets
+		 * - with bad NTP servers that have SD > Eoffset_qual all the time.
+		 * Definitively removed on 28/07/2011
 		 */
 		//ET += stamp_tmp->Te - stamp_tmp->Tb;
 
@@ -1708,8 +1713,9 @@ void process_thetahat_full (struct bidir_peer* peer, struct radclock_handle* han
 		 * else safe to normalise
 		 */
 		if (wsum == 0) {
-			verbose(VERB_QUALITY, "i=%lu: quality looks good (minET = %lg) yet wsum=0! "
-					"Eoffset_qual = %lg may be too large", peer->stamp_i, minET,peer->Eoffset_qual);
+			verbose(VERB_QUALITY, "i=%lu: quality looks good (minET = %lg) yet "
+					"wsum=0! Eoffset_qual = %lg may be too large",
+					peer->stamp_i, minET,peer->Eoffset_qual);
 			thetahat = peer->thetahat;
 		}
 		else {
@@ -1718,9 +1724,16 @@ void process_thetahat_full (struct bidir_peer* peer, struct radclock_handle* han
 			peer->minET = minET;
 		}
 	}
-	/* quality bad, forget weights (and plocal refinement) and lean on last reliable estimate */
+
+	/*
+	 * Quality bad, forget weights (and plocal refinement) and lean on last
+	 * reliable estimate
+	 */
 	else {
-		/* if this executes, sanity can't be triggered! quality so bad, simply can't update */
+		/*
+		 * if this executes, sanity can't be triggered! quality so bad,
+		 * simply can't update
+		 */
 		thetahat = peer->thetahat;
 		verbose(VERB_QUALITY, "i=%lu: thetahat quality very poor. wsum = %5.3lg, "
 				"curr err = %5.3lg, old = %5.3lg, this pt-err = [%5.3lg] [ms]",
@@ -1733,17 +1746,21 @@ void process_thetahat_full (struct bidir_peer* peer, struct radclock_handle* han
 // TODO thetahat or peer->thetahat?
 
 	/* errTa - thetahat should be -ve */
-	errTa = (double)((long double)stamp->Ta * peer->phat + peer->C - (long double) stamp->Tb);
-	if ( errTa > peer->thetahat )
-		verbose(VERB_CAUSALITY, "i=%lu: causality error uncorrected on C(Ta), errTa = %5.3lf [ms], "
-				"thetahat = %5.3lf [ms], diff = %5.3lf [ms]",
+	errTa = (double)((long double)stamp->Ta * peer->phat + peer->C -
+			(long double) stamp->Tb);
+
+	if (errTa > peer->thetahat)
+		verbose(VERB_CAUSALITY, "i=%lu: causality error uncorrected on C(Ta), "
+				"errTa = %5.3lf [ms], thetahat = %5.3lf [ms], diff = %5.3lf [ms]",
 				peer->stamp_i, 1000*errTa, 1000*thetahat, 1000*(errTa-thetahat));
 	
 	/* errTf - thetahat should be +ve */
-	errTf = (double)((long double)stamp->Tf * peer->phat + peer->C - (long double) stamp->Te);
-	if ( errTf < peer->thetahat )
-		verbose(VERB_CAUSALITY, "i=%lu: causality error uncorrected on C(Tf), errTf = %5.3lf [ms], "
-				"thetahat = %5.3lf [ms], diff = %5.3lf [ms]",
+	errTf = (double)((long double)stamp->Tf * peer->phat + peer->C -
+			(long double) stamp->Te);
+
+	if (errTf < peer->thetahat)
+		verbose(VERB_CAUSALITY, "i=%lu: causality error uncorrected on C(Tf), "
+				"errTf = %5.3lf [ms], thetahat = %5.3lf [ms], diff = %5.3lf [ms]",
 				peer->stamp_i, 1000*errTf, 1000*thetahat,1000*(errTf-thetahat));
 
 	/* Apply Sanity Check 
@@ -1751,14 +1768,14 @@ void process_thetahat_full (struct bidir_peer* peer, struct radclock_handle* han
 	 */
 	gapsize = MAX(gapsize, peer->phat * (double)(stamp->Tf - peer->thetastamp.Tf) );
 	/* if looks insane given gapsize, refuse update */
-	if ( ( fabs(peer->thetahat-thetahat) > (peer->Eoffset_sanity_min + peer->Eoffset_sanity_rate * gapsize))
-			|| qual_warning)
-	{
+	if ((fabs(peer->thetahat-thetahat) > (peer->Eoffset_sanity_min + 
+				peer->Eoffset_sanity_rate * gapsize)) || qual_warning) {
 		if (qual_warning)
 			verbose(VERB_QUALITY, "i=%lu: qual_warning received, following sanity check for thetahat",
 				   	peer->stamp_i);
-		verbose(VERB_SANITY, "i=%lu: thetahat update fails sanity check. diff= %5.3lg [ms], "
-				"est''d err= %5.3lg [ms], sanity level: %5.3lg [ms] with total gapsize = %.0lf [sec]",
+		verbose(VERB_SANITY, "i=%lu: thetahat update fails sanity check."
+				"diff= %5.3lg [ms], est''d err= %5.3lg [ms], sanity level: %5.3lg [ms] "
+				"with total gapsize = %.0lf [sec]",
 				peer->stamp_i, 1000*(thetahat-peer->thetahat), 1000*minET, 
 				1000*(peer->Eoffset_sanity_min+peer->Eoffset_sanity_rate*gapsize), gapsize);
 		peer->offset_sanity_count++;
@@ -1994,8 +2011,9 @@ process_bidir_stamp(struct radclock_handle *handle, struct bidir_peer *peer,
 		PEER_ERROR(peer)->sq_cumsum_hwin = 0;
 		PEER_ERROR(peer)->nerror_hwin = 0;
 
-		verbose(VERB_CONTROL, "Adjusting history window before normal processing of stamp %lu. "
-				"FIRST 1/2 window reached", peer->stamp_i);
+		verbose(VERB_CONTROL, "Adjusting history window before normal "
+				"processing of stamp %lu. FIRST 1/2 window reached",
+				peer->stamp_i);
 	}
 
 	/* at end of history window */
@@ -2169,9 +2187,11 @@ output_results:
 	if (peer->stamp_i > 1)
 		/* TODO: XXX Previously valid till was offset by 1.5s to allow for NTP's
 		 * varying poll period when in piggy back mode
-		 * RAD_DATA(handle)->valid_till	= stamp->Tf + ((peer->poll_period -1.5) / peer->phat); */
-		RAD_DATA(handle)->valid_till	= stamp->Tf + ((peer->poll_period) / peer->phat);
-
+		 * RAD_DATA(handle)->valid_till	= stamp->Tf +
+		 * ((peer->poll_period - 1.5) / peer->phat);
+		 */
+		RAD_DATA(handle)->valid_till = stamp->Tf + (peer->poll_period /
+				peer->phat);
 
 	/* Clock error estimates.
 	 * Aging similar to fast recovery after gap

@@ -5,8 +5,8 @@
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- * 1. Redistributions of source code must retain the above copyright notice, this
- *    list of conditions and the following disclaimer.
+ * 1. Redistributions of source code must retain the above copyright notice,
+ *    this list of conditions and the following disclaimer.
  *
  * 2. Redistributions in binary form must reproduce the above copyright notice,
  *    this list of conditions and the following disclaimer in the documentation
@@ -41,8 +41,14 @@
 
 
 // TODO : should provide methods for modify this? 
-typedef enum { RADCLOCK_SYNC_NOTSET, RADCLOCK_SYNC_DEAD, RADCLOCK_SYNC_LIVE } radclock_runmode_t;
-typedef enum { RADCLOCK_UNIDIR, RADCLOCK_BIDIR} radclock_syncalgo_mode_t;
+typedef enum {
+	RADCLOCK_SYNC_NOTSET,
+	RADCLOCK_SYNC_DEAD,
+	RADCLOCK_SYNC_LIVE } radclock_runmode_t;
+
+typedef enum {
+	RADCLOCK_UNIDIR,
+	RADCLOCK_BIDIR} radclock_syncalgo_mode_t;
 
 
 struct radclock_handle;
@@ -128,7 +134,8 @@ struct radclock_handle {
 	int wakeup_data_ready;
 	pthread_mutex_t wakeup_mutex;
 	pthread_cond_t wakeup_cond;
-	pthread_mutex_t rdb_mutex;	// XXX arbiter between insert_rdb_in_list and free_and_cherry_pick
+	pthread_mutex_t rdb_mutex;	// XXX arbiter between insert_rdb_in_list
+								// and free_and_cherry_pick
    								// XXX Should not need a lock, but there is
 								// XXX quite some messing around if hammering
 								// XXX NTP control packets	
@@ -143,8 +150,10 @@ struct radclock_handle {
 	/* Stamp source */
 	void *stamp_source; /* Defined as void* since not part of the library */
 
-	/* Synchronisation Peers */
-	void *active_peer; 	/* Peers are of different nature (bidir, oneway) will cast */
+	/* Synchronisation Peers. Peers are of different nature (bidir, oneway) will
+	 * cast
+	 */
+	void *active_peer;
 	
 };
 

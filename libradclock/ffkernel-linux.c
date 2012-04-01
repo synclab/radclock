@@ -5,8 +5,8 @@
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- * 1. Redistributions of source code must retain the above copyright notice, this
- *    list of conditions and the following disclaimer.
+ * 1. Redistributions of source code must retain the above copyright notice,
+ *    this list of conditions and the following disclaimer.
  *
  * 2. Redistributions in binary form must reproduce the above copyright notice,
  *    this list of conditions and the following disclaimer in the documentation
@@ -127,15 +127,16 @@ has_vm_vcounter(struct radclock *handle)
 	fscanf(fd, "%d", &passthrough_counter);
 	fclose(fd);
 
-	if ( passthrough_counter == 0)
-	{
-		logger(RADLOG_ERR, "Clocksource not in pass-through mode. Cannot init virtual machine mode");
+	if (passthrough_counter == 0) {
+		logger(RADLOG_ERR, "Clocksource not in pass-through mode. Cannot init "
+				"virtual machine mode");
 		return (0);
 	}
 	logger(RADLOG_NOTICE, "Found clocksource in pass-through mode");
 
 
-	fd = fopen ("/sys/devices/system/clocksource/clocksource0/current_clocksource", "r");
+	fd = fopen ("/sys/devices/system/clocksource/clocksource0/"
+			"current_clocksource", "r");
 	if (!fd)
 	{
 		logger(RADLOG_WARNING, "Cannot open current_clocksource from sysfs");

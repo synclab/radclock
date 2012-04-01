@@ -5,8 +5,8 @@
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- * 1. Redistributions of source code must retain the above copyright notice, this
- *    list of conditions and the following disclaimer.
+ * 1. Redistributions of source code must retain the above copyright notice,
+ *    this list of conditions and the following disclaimer.
  *
  * 2. Redistributions in binary form must reproduce the above copyright notice,
  *    this list of conditions and the following disclaimer in the documentation
@@ -30,50 +30,41 @@
 
 #define INPUT_OPS(x) x->def
 
-/**
+/*
  * Private stamp source definiton
  * All fields compulsary
  */
 struct stampsource_def
 {
-	/** 
-	 * Initialise the source
-	 */
+	/* Initialise the source */
 	int (*init)(struct radclock_handle *handle, struct stampsource *source);
-	/**
-	 * Get the next stamp, return 0 on sucess
-	 */
-	int (*get_next_stamp)(struct radclock_handle *handle, struct stampsource *source, struct stamp_t *stamp);
 
-	/**
-	 * Break blocking loop getting packets
-	 */
-	void (*source_breakloop)(struct radclock_handle *handle, struct stampsource *source);
+	/* Get the next stamp, return 0 on sucess */
+	int (*get_next_stamp)(struct radclock_handle *handle,
+			struct stampsource *source, struct stamp_t *stamp);
+
+	/* Break blocking loop getting packets */
+	void (*source_breakloop)(struct radclock_handle *handle,
+		   	struct stampsource *source);
 	
-	/**
-	 * Clean up
-	 */
+	/* Clean up */
 	void (*destroy)(struct radclock_handle *handle, struct stampsource *source);
-	/**
-	 * Update source BPF filter
-	 */
-	int (*update_filter)(struct radclock_handle *handle, struct stampsource *source);
-	/**
-	 * Update source RAW file dump out 
-	 */
-	int (*update_dumpout)(struct radclock_handle *handle, struct stampsource *source);
+
+	/* Update source BPF filter */
+	int (*update_filter)(struct radclock_handle *handle,
+			struct stampsource *source);
+
+	/* Update source RAW file dump out */
+	int (*update_dumpout)(struct radclock_handle *handle,
+			struct stampsource *source);
 };
 
 struct stampsource
 {
-	/**
-	 * Sources may use this pointer to store any data
-	 */
+	/* Sources may use this pointer to store any data */
 	void *priv_data;
-	/**
-	 * The current definition.
-	 * Sources shouldn't need to touch this
-	 */
+
+	/* The current definition. Sources shouldn't need to touch this */
 	struct stampsource_def *def;
 
 	struct timeref_stats ntp_stats;

@@ -5,8 +5,8 @@
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- * 1. Redistributions of source code must retain the above copyright notice, this
- *    list of conditions and the following disclaimer.
+ * 1. Redistributions of source code must retain the above copyright notice,
+ *    this list of conditions and the following disclaimer.
  *
  * 2. Redistributions in binary form must reproduce the above copyright notice,
  *    this list of conditions and the following disclaimer in the documentation
@@ -287,7 +287,9 @@ struct bpf_hdr_hack_v1 {
 	struct timeval bh_tstamp;	/* time stamp */
 	bpf_u_int32 bh_caplen;		/* length of captured portion */
 	bpf_u_int32 bh_datalen;		/* original length of packet */
-	u_short bh_hdrlen;			/* length of bpf header (this struct plus alignment padding) */
+	u_short bh_hdrlen;			/* length of bpf header (this struct plus
+								 * alignment padding)
+								 */
 	u_short padding;			/* padding to align the fields */
 	vcounter_t vcount;			/* raw vcount value for this packet */
 };
@@ -303,7 +305,8 @@ struct bpf_hdr_hack_v1 {
 	(offsetof(type, vcount) + sizeof(((type *)0)->vcount))
 
 #define BPF_HDR_LEN_v1		\
-	(BPF_WORDALIGN(SIZEOF_BPF_HDR_v1(struct bpf_hdr_hack_v1) + ETHER_HDR_LEN) - ETHER_HDR_LEN)
+	(BPF_WORDALIGN(SIZEOF_BPF_HDR_v1(struct bpf_hdr_hack_v1) + ETHER_HDR_LEN) \
+	 - ETHER_HDR_LEN)
 
 // FIXME inline should be in a header file, d'oh...
 // FIXME should convert to void, make these tests once and not on each packet
@@ -368,7 +371,9 @@ struct bpf_hdr_hack_v3 {
 	vcounter_t vcount;			/* raw vcount value for this packet */
 	bpf_u_int32 bh_caplen;		/* length of captured portion */
 	bpf_u_int32 bh_datalen;		/* original length of packet */
-	u_short bh_hdrlen;			/* length of bpf header (this struct plus alignment padding) */
+	u_short bh_hdrlen;			/* length of bpf header (this struct plus 
+								 * alignment padding)
+								 */
 };
 
 
@@ -417,8 +422,8 @@ extract_vcount_stamp_v3(pcap_t *p_handle, const struct pcap_pkthdr *header,
 	 * by name.
 	 * */
 	if (hack->bh_hdrlen != BPF_HDR_LEN_v3(hlen)) {
-		logger(RADLOG_ERR, "Feed-forward kernel v3 error: BPF header length mismatch %d vs %d", 
-				hack->bh_hdrlen, BPF_HDR_LEN_v3(hlen));
+		logger(RADLOG_ERR, "Feed-forward kernel v3 error: BPF header length "
+				"mismatch %d vs %d", hack->bh_hdrlen, BPF_HDR_LEN_v3(hlen));
 		return (1);
 	}
 	if (memcmp(&hack->bh_tstamp, &header->ts, sizeof(struct timeval)) != 0) {

@@ -6,8 +6,8 @@
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- * 1. Redistributions of source code must retain the above copyright notice, this
- *    list of conditions and the following disclaimer.
+ * 1. Redistributions of source code must retain the above copyright notice,
+ *    this list of conditions and the following disclaimer.
  *
  * 2. Redistributions in binary form must reproduce the above copyright notice,
  *    this list of conditions and the following disclaimer in the documentation
@@ -154,7 +154,8 @@ pull_data_xen(struct radclock_handle *handle)
 			verbose(LOG_ERR, "Virtual store data not suitable for this counter");
 		}
 	} else {
-// We've gone over the valid till point, just keep checking at every 500000us until we are successful
+// We've gone over the valid till point, just keep checking at every 500000us
+// until we are successful
 		usleep(500000);
 	}
 
@@ -205,7 +206,9 @@ init_multicast(struct radclock_handle *handle)
 	
 		case VM_MULTICAST_SLAVE:
 			RAD_VM(handle)->server_addr.sin_addr.s_addr = INADDR_ANY;
-			if (bind(RAD_VM(handle)->sock,(struct sockaddr *)&(RAD_VM(handle)->server_addr), sizeof (struct sockaddr)) == -1){
+			if (bind(RAD_VM(handle)->sock,
+						(struct sockaddr *)&(RAD_VM(handle)->server_addr),
+						sizeof (struct sockaddr)) == -1){
 				verbose(LOG_ERR, "Could not bind socket for multicast");
 				return (-1);
 			}
@@ -296,8 +299,8 @@ init_virtual_machine_mode(struct radclock_handle *handle)
 	case VM_XEN_MASTER:
 
 		if (init_xenstore(handle) == NOXENSUPPORT) {
-			verbose(LOG_ERR,
-					"Could not open Xenstore as Master, changing virtual machine mode to none");
+			verbose(LOG_ERR, "Could not open Xenstore as Master, changing "
+					"virtual machine mode to none");
 			handle->conf->virtual_machine = VM_NONE;
 			RAD_VM(handle)->push_data = &push_data_none;
 		} else {
@@ -310,8 +313,8 @@ init_virtual_machine_mode(struct radclock_handle *handle)
 	case VM_XEN_SLAVE:
 
 		if (init_xenstore(handle) == NOXENSUPPORT) {
-			verbose(LOG_ERR,
-					"Could not open Xenstore as Slave, changing virtual machine mode to none");
+			verbose(LOG_ERR, "Could not open Xenstore as Slave, changing "
+					"virtual machine mode to none");
 			handle->conf->virtual_machine = VM_NONE;
 			RAD_VM(handle)->pull_data = &pull_data_none;
 		} else {
@@ -323,7 +326,8 @@ init_virtual_machine_mode(struct radclock_handle *handle)
 
 	case VM_MULTICAST_MASTER:
 		if (init_multicast(handle) != 0) {
-			verbose(LOG_ERR, "Could not initialise multicast-master, disabling multicast");
+			verbose(LOG_ERR, "Could not initialise multicast-master, "
+					"disabling multicast");
 			handle->conf->virtual_machine = VM_NONE;
 			RAD_VM(handle)->push_data =&push_data_none;
 		} else {
@@ -334,7 +338,8 @@ init_virtual_machine_mode(struct radclock_handle *handle)
 
 	case VM_MULTICAST_SLAVE:
 		if (init_multicast(handle) != 0) {
-			verbose(LOG_ERR, "Could not initialise multicast-slave, disabling multicast");
+			verbose(LOG_ERR, "Could not initialise multicast-slave, "
+					"disabling multicast");
 			handle->conf->virtual_machine = VM_NONE;
 			RAD_VM(handle)->pull_data = &pull_data_none;
 		} else {
