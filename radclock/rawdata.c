@@ -119,6 +119,7 @@ fill_rawdata_ntp(u_char *c_handle, const struct pcap_pkthdr *pcap_hdr,
 	/* Copy data of interest into the raw data bundle */
 	RD_NTP(rdb)->vcount = 0;
 
+	// TODO: should process the error code correctly
 	err = extract_vcount_stamp(handle->clock, handle->clock->pcap_handle,
 			pcap_hdr, packet_data, &(RD_NTP(rdb)->vcount));
 

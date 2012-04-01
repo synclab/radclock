@@ -36,14 +36,14 @@
 int
 descriptor_set_tsmode(struct radclock *clock, pcap_t *p_handle, int kmode)
 {
-	return -ENOENT;
+	return (1);
 }
 
 
 int
 descriptor_get_tsmode(struct radclock *clock, pcap_t *p_handle, int *kmode)
 {
-	return -ENOENT;
+	return (1);
 }
 
 
@@ -52,7 +52,7 @@ extract_vcount_stamp(struct radclock *clock, pcap_t *p_handle,
 		const struct pcap_pkthdr *header, const unsigned char *packet,
 		vcounter_t *vcount)
 {
-	return -ENOENT;
+	return (1);
 }
 
 #endif

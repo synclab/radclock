@@ -48,12 +48,13 @@
 
 
 int
-radclock_set_tsmode(struct radclock *clock, pcap_t *p_handle, radclock_tsmode_t mode)
+radclock_set_tsmode(struct radclock *clock, pcap_t *p_handle,
+		radclock_tsmode_t mode)
 {
 	int kmode;
 	if (clock == NULL) {
 		logger(RADLOG_ERR, "Clock handle is null, can't set mode");
-		return -1;
+		return (-1);
 	}
 
 	switch (mode) {
@@ -76,7 +77,7 @@ radclock_set_tsmode(struct radclock *clock, pcap_t *p_handle, radclock_tsmode_t 
 	}
 
 	/* Call to system specific method to set the mode */
-	if (descriptor_set_tsmode(clock, p_handle, kmode) == -1)
+	if (descriptor_set_tsmode(clock, p_handle, kmode))
 		return (-1);
 
 	clock->tsmode = mode;
@@ -86,23 +87,26 @@ radclock_set_tsmode(struct radclock *clock, pcap_t *p_handle, radclock_tsmode_t 
 
 
 
-int radclock_get_tsmode(struct radclock *handle, pcap_t *p_handle, radclock_tsmode_t *mode)
+int
+radclock_get_tsmode(struct radclock *handle, pcap_t *p_handle,
+		radclock_tsmode_t *mode)
 {
-	int kmode = 0;	// Need to be initialised for FreeBSD, don't exactly know why.
+	int kmode;
 	
 	if (handle == NULL) {
 		logger(RADLOG_ERR, "Clock handle is null, can't set mode");
-		return -1;
+		return (-1);
 	}
 	
 	/* Call to system specific method to get the mode */
-	if (descriptor_get_tsmode(handle, p_handle, &kmode) == -1)
-		return -1;
+	kmode = 0;
+	if (descriptor_get_tsmode(handle, p_handle, &kmode))
+		return (-1);
 
 	//TODO align enum with kernel modes
 	*mode = kmode;
 
-	return 0;
+	return (0);
 }
 
 
@@ -165,10 +169,10 @@ int radclock_get_packet( struct radclock *clock,
 		perror("pcap_loop:");
 		return (err);
 	}
-	if (data.ret < 0) {
+	if (data.ret) {
 		logger(LOG_ERR, "extract_vcount_stamp error");
 		return (-1);
 	}
-	return 0;
+	return (0);
 }
 

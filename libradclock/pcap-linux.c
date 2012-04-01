@@ -79,7 +79,7 @@ descriptor_set_tsmode(struct radclock *handle, pcap_t *p_handle, int kmode)
 	if (ioctl(pcap_fileno(p_handle), SIOCSRADCLOCKTSMODE,
 			(caddr_t)&kmode_long) == -1) {
 		logger(RADLOG_ERR, "Setting capture mode failed: %s", strerror(errno));
-		return (-1);
+		return (1);
 	}
 	return (0);
 }
@@ -95,7 +95,7 @@ descriptor_get_tsmode(struct radclock *handle, pcap_t *p_handle, int *kmode)
 	if (ioctl(pcap_fileno(p_handle), SIOCGRADCLOCKTSMODE,
 			(caddr_t)(&kmode_long)) == -1) {
 		logger(RADLOG_ERR, "Getting capture mode failed: %s", strerror(errno));
-		return (-1);
+		return (1);
 	}
 	*kmode = 0;
 	*kmode += kmode_long;
@@ -127,11 +127,10 @@ extract_vcount_stamp(struct radclock *clock, pcap_t *p_handle,
 		const struct pcap_pkthdr *header, const unsigned char *packet,
 		vcounter_t *vcount)
 {
-	if (ioctl(pcap_fileno(p_handle), SIOCGRADCLOCKSTAMP, vcount))
-	{
+	if (ioctl(pcap_fileno(p_handle), SIOCGRADCLOCKSTAMP, vcount) == -1) {
 		perror("ioctl");
 		logger(RADLOG_ERR, "IOCTL failed to get vcount");
-		return (-1);
+		return (1);
 	}
 	return (0);
 }

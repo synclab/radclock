@@ -124,7 +124,7 @@ descriptor_set_tsmode(struct radclock *handle, pcap_t *p_handle, int kmode)
 	case 1:
 		if (ioctl(pcap_fileno(p_handle), BIOCSRADCLOCKTSMODE, (caddr_t)&kmode) == -1) {
 			logger(LOG_ERR, "Setting capture mode failed");
-			return (-1);
+			return (1);
 		}
 		break;
 
@@ -147,20 +147,19 @@ descriptor_set_tsmode(struct radclock *handle, pcap_t *p_handle, int kmode)
 				break;
 			default:
 				logger(LOG_ERR, "descriptor_set_tsmode: Unknown timestamping mode.");
-				return (-1);
+				return (1);
 		}
 
-		if (ioctl(pcap_fileno(p_handle), BIOCSTSTAMP, (caddr_t)&bd_tstamp) == -1) 
-		{
+		if (ioctl(pcap_fileno(p_handle), BIOCSTSTAMP, (caddr_t)&bd_tstamp) == -1) {
 			logger(LOG_ERR, "Setting capture mode failed: %s", strerror(errno));
-			return (-1);
+			return (1);
 		}
 
 		break;
 
 	default:
 		logger(LOG_ERR, "Unknown kernel version");
-		return (-1);
+		return (1);
 
 	}
 
@@ -179,10 +178,9 @@ descriptor_get_tsmode(struct radclock *handle, pcap_t *p_handle, int *kmode)
 
 	case 0:
 	case 1:
-		if (ioctl(pcap_fileno(p_handle), BIOCGRADCLOCKTSMODE, (caddr_t)kmode) == -1)
-		{
+		if (ioctl(pcap_fileno(p_handle), BIOCGRADCLOCKTSMODE, (caddr_t)kmode) == -1) {
 			logger(LOG_ERR, "Getting timestamping mode failed");
-			return (-1);
+			return (1);
 		}
 		break;
 
@@ -190,7 +188,7 @@ descriptor_get_tsmode(struct radclock *handle, pcap_t *p_handle, int *kmode)
 	case 3:
 		if (ioctl(pcap_fileno(p_handle), BIOCGTSTAMP, (caddr_t)(&bd_tstamp)) == -1) {
 			logger(LOG_ERR, "Getting timestamping mode failed: %s", strerror(errno));
-			return (-1);
+			return (1);
 		}
 
 		// FIXME: loosy output for debugging 
@@ -228,7 +226,7 @@ descriptor_get_tsmode(struct radclock *handle, pcap_t *p_handle, int *kmode)
 
 	default:
 		logger(LOG_ERR, "Unknown kernel version");
-		return (-1);
+		return (1);
 	}
 	
 	return (0);
@@ -325,11 +323,10 @@ extract_vcount_stamp_v1(pcap_t *p_handle, const struct pcap_pkthdr *header,
 	// TODO: it may be that BPF_FFCOUNTER was not defined in the kernel.
 	// it is not a bug anymore, but a new case to handle
 	if ((hack->bh_hdrlen != BPF_HDR_LEN_v1)
-		|| (memcmp(hack, header, sizeof(struct pcap_pkthdr)) != 0))
-	{
+		|| (memcmp(hack, header, sizeof(struct pcap_pkthdr)) != 0)) {
 		logger(RADLOG_ERR, "Either modified kernel not installed, "
 				"or bpf interface has changed");
-		return (-1);
+		return (1);
 	}
 
 	*vcount= hack->vcount;
@@ -422,11 +419,11 @@ extract_vcount_stamp_v3(pcap_t *p_handle, const struct pcap_pkthdr *header,
 	if (hack->bh_hdrlen != BPF_HDR_LEN_v3(hlen)) {
 		logger(RADLOG_ERR, "Feed-forward kernel v3 error: BPF header length mismatch %d vs %d", 
 				hack->bh_hdrlen, BPF_HDR_LEN_v3(hlen));
-		return (-1);
+		return (1);
 	}
 	if (memcmp(&hack->bh_tstamp, &header->ts, sizeof(struct timeval)) != 0) {
 		logger(RADLOG_ERR, "Feed-forward kernel v3 error: BPF headers do not match");
-		return (-1);
+		return (1);
 	}
 
 	*vcount= hack->vcount;
@@ -444,7 +441,7 @@ extract_vcount_stamp(struct radclock *clock, pcap_t *p_handle,
 
 	/* Check we are running live */
 	if (pcap_fileno(p_handle) < 0)
-		return (-1);
+		return (1);
 
 	// FIXME : need a function pointer to the correct extract_vcount function
 	switch (clock->kernel_version) {
@@ -458,7 +455,7 @@ extract_vcount_stamp(struct radclock *clock, pcap_t *p_handle,
 			err = extract_vcount_stamp_v2(clock->pcap_handle, header, packet, vcount);
 		else {
 			*vcount = 0;
-			err = -2;
+			err = 2;
 		}
 		break;
 	case 3:
@@ -472,16 +469,16 @@ extract_vcount_stamp(struct radclock *clock, pcap_t *p_handle,
 			err = extract_vcount_stamp_v3(clock->pcap_handle, header, packet, vcount);
 		break;
 	default:
-		err = -1;
+		err = 1;
 		break;
 	}
 
-	if (err < 0) {
+	if (err) {
 		logger(RADLOG_ERR, "Cannot extract vcounter from packet timestamped: %ld.%ld",
 			header->ts.tv_sec, header->ts.tv_usec);
-		if (err == -2)
+		if (err == 2)
 			logger(RADLOG_ERR, "Timestamping mode should be RADCLOCK");
-		return (-1);
+		return (1);
 	}
 
 	return (0);
