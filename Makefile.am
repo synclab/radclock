@@ -36,7 +36,8 @@ SUBDIRS += tests
 # Extra cscope target
 CSCOPE_DIRS = libradclock radclock
 
-cscope: cscope.out
+cscope: cscope-clean cscope.out
+
 cscope.out: $(srcdir)/cscope.files
 	cd $(srcdir); cscope -buq -p4
 
