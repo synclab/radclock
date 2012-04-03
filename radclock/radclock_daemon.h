@@ -83,11 +83,32 @@ struct radclock_ntpserver_data {
  */
 struct radclock_vm
 {
-	int (*pull_data) (struct radclock_handle *handle);
-	int (*push_data) (struct radclock_handle *handle);
+	/* A handle to the xenstore */
 	void *store_handle;
+
+	/* Socket for vm_udp push / pull (the vm_server maintains its own socket) */
 	int sock;
 	struct sockaddr_in server_addr;
+};
+
+#define VM_MAGIC_NUMBER		31051978
+#define VM_REQ_RAD_DATA		1
+#define VM_REQ_RAD_ERROR	2
+
+struct vm_request {
+	unsigned int magic_number;
+	unsigned int version;
+	unsigned int request_type;
+};
+
+struct vm_reply {
+	unsigned int magic_number;
+	unsigned int version;
+	unsigned int reply_type;
+	union {
+		struct radclock_data rad_data;
+		struct radclock_error rad_error;
+	};
 };
 
 
@@ -164,12 +185,16 @@ struct radclock_handle {
 #define RAD_ERROR(x) (&(x->rad_error))
 #define RAD_VM(x) (&(x->rad_vm))
 
-#define ADD_STATUS(x,y) (RAD_DATA(x)->status = RAD_DATA(x)->status | y ) 
-#define DEL_STATUS(x,y) (RAD_DATA(x)->status = RAD_DATA(x)->status & ~y ) 
-#define HAS_STATUS(x,y) ((RAD_DATA(x)->status & y ) == y ) 
+#define ADD_STATUS(x,y) (RAD_DATA(x)->status = RAD_DATA(x)->status | y )
+#define DEL_STATUS(x,y) (RAD_DATA(x)->status = RAD_DATA(x)->status & ~y )
+#define HAS_STATUS(x,y) ((RAD_DATA(x)->status & y ) == y )
 
 
-
-int init_virtual_machine_mode(struct radclock_handle *handle);
+/*
+ * Functions which handle the push and pull of virtual machine data
+ */
+int init_vm(struct radclock_handle *handle);
+int push_data_vm(struct radclock_handle *handle);
+int receive_loop_vm(struct radclock_handle *handle);
 
 #endif

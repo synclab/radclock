@@ -29,48 +29,54 @@
 #define _PTHREAD_MGR_H
 
 
-/* Pthread description for their IDs
+/*
+ * Pthread description for their IDs
  * Check we have enough space allocated in radclock structure
  * for the pthread IDs
  */
-#define PTH_NONE		0
-#define PTH_DATA_PROC	1
-#define PTH_TRIGGER		2
-#define PTH_NTP_SERV	3
-#define PTH_FIXEDPOINT	4
+#define PTH_NONE			0
+#define PTH_DATA_PROC		1
+#define PTH_TRIGGER			2
+#define PTH_NTP_SERV		3
+#define PTH_FIXEDPOINT		4
+#define PTH_VM_UDP_SERV		5
 
 
-/**
+/*
  * Flags to signal threads they have to commit suicide
  */
-#define PTH_DATA_PROC_STOP	0x00001
-#define PTH_TRIGGER_STOP	0x00010
-#define PTH_NTP_SERV_STOP	0x00100
-#define PTH_FIXEDPOINT_STOP	0x01000
-#define PTH_STOP_ALL		(PTH_DATA_PROC_STOP|PTH_TRIGGER_STOP|PTH_FIXEDPOINT_STOP|PTH_NTP_SERV_STOP)
+#define PTH_DATA_PROC_STOP		0x00001
+#define PTH_TRIGGER_STOP		0x00010
+#define PTH_NTP_SERV_STOP		0x00100
+#define PTH_FIXEDPOINT_STOP		0x01000
+#define PTH_VM_UDP_SERV_STOP	0x10000
+#define PTH_STOP_ALL			(PTH_DATA_PROC_STOP | PTH_TRIGGER_STOP | \
+		PTH_FIXEDPOINT_STOP | PTH_NTP_SERV_STOP | PTH_VM_UDP_SERV_STOP)
 
 
-/**
+/*
  *  Threads starters
  */
 int start_thread_DATA_PROC(struct radclock_handle *handle);
 int start_thread_TRIGGER(struct radclock_handle *handle);
 int start_thread_NTP_SERV(struct radclock_handle *handle);
+int start_thread_VM_UDP_SERV(struct radclock_handle *handle);
 int start_thread_FIXEDPOINT(struct radclock_handle *handle);
 
 
-/**
+/*
  * Threads starters init functions
  */
 void* thread_data_processing(void *c_handle);
 void* thread_trigger(void *c_handle);
 void* thread_ntp_server(void *c_handle);
+void* thread_vm_udp_server(void *c_handle);
 
-int trigger_work(struct radclock_handle *handle); 
+int trigger_work(struct radclock_handle *handle);
 int process_rawdata(struct radclock_handle *handle, struct bidir_peer *peer);
 
 
-/**
+/*
  * Threads initialisation
  */
 void init_thread_signal_mgt();

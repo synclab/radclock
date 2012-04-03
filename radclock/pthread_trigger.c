@@ -381,25 +381,21 @@ trigger_work(struct radclock_handle *handle)
 
 	JDEBUG
 
-	if (VM_SLAVE(handle)) {
-		err = RAD_VM(handle)->pull_data(handle);
-	} else {
-		switch (handle->conf->synchro_type) {
-		case SYNCTYPE_SPY:
-		case SYNCTYPE_PIGGY:
-		case SYNCTYPE_PPS:
-		case SYNCTYPE_1588:
-			dummy_client();
-			break;
+	switch (handle->conf->synchro_type) {
+	case SYNCTYPE_SPY:
+	case SYNCTYPE_PIGGY:
+	case SYNCTYPE_PPS:
+	case SYNCTYPE_1588:
+		dummy_client();
+		break;
 
-		case SYNCTYPE_NTP:
-			ntp_client(handle);
-			break;
+	case SYNCTYPE_NTP:
+		ntp_client(handle);
+		break;
 
-		default:
-			verbose(LOG_ERR, "Trigger for this sync type is not implemented");
-			break;
-		}
+	default:
+		verbose(LOG_ERR, "Trigger for this sync type is not implemented");
+		break;
 	}
 
 	/*

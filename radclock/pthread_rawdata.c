@@ -635,11 +635,16 @@ process_rawdata(struct radclock_handle *handle, struct bidir_peer *peer)
 			set_kernel_ffclock(handle->clock, &cest);
 			verbose(VERB_DEBUG, "Feed-forward kernel clock has been set.");
 		}
-
-		/* Update any virtual machine store if configured */
-		RAD_VM(handle)->push_data(handle);
 	}
 
+	/* Update any virtual machine store if configured */
+  	if ((handle->run_mode == RADCLOCK_SYNC_LIVE) && VM_MASTER(handle)) {
+		err = push_data_vm(handle);
+		if (err < 0) {
+			verbose(LOG_WARNING, "Error attempting to push VM data");
+			return (1);
+		}
+	}
 
 	/* Adjust the system clock, we only pass in here if we are not piggybacking
 	 * on ntp daemon.

@@ -53,6 +53,9 @@
 #define SYNCTYPE_NTP	2
 #define SYNCTYPE_1588	3
 #define SYNCTYPE_PPS	4
+#define SYNCTYPE_VM_UDP 5
+#define SYNCTYPE_XEN	6
+#define SYNCTYPE_VMWARE	7
 
 /*
  * Server Protocol configuration
@@ -64,14 +67,13 @@
 /*
  * Virtual Machine environmnent
  */
-#define VM_NONE				0x00 
-#define VM_XEN_SLAVE		0x01
-#define VM_XEN_MASTER		0x02
-#define VM_VBOX_SLAVE		0x03
-#define VM_VBOX_MASTER		0x04
-#define VM_MULTICAST_SLAVE	0x05
-#define VM_MULTICAST_MASTER	0x06
-#define VM_SLAVE(val) ((val->conf->virtual_machine & 0x01) == 0x01)
+#define VM_SLAVE(val) ((val->conf->synchro_type == SYNCTYPE_VM_UDP) || \
+		(val->conf->synchro_type == SYNCTYPE_XEN) || \
+		(val->conf->synchro_type == SYNCTYPE_VMWARE))
+
+#define VM_MASTER(val) ((val->conf->server_vm_udp == BOOL_ON) || \
+		(val->conf->server_xen == BOOL_ON) || \
+		(val->conf->server_vmware == BOOL_ON))
 
 /* 
  * Default configuration values 
@@ -80,6 +82,9 @@
 #define DEFAULT_SYNCHRO_TYPE		SYNCTYPE_NTP	// Protocol used 
 #define DEFAULT_SERVER_IPC			BOOL_ON			// Update the clock 
 #define DEFAULT_SERVER_NTP			BOOL_ON			// Default we start a NTP server 
+#define DEFAULT_SERVER_VM_UDP		BOOL_OFF		// Don't Start VM servers
+#define DEFAULT_SERVER_XEN			BOOL_OFF
+#define DEFAULT_SERVER_VMWARE		BOOL_OFF
 #define DEFAULT_ADJUST_SYSCLOCK		BOOL_ON			// Default we adjust the system clock 
 #define DEFAULT_NTP_POLL_PERIOD 	16				// 16 NTP pkts every [sec]
 #define DEFAULT_PHAT_INIT			1.e-9
@@ -93,8 +98,8 @@
 #define DEFAULT_SYNC_OUT_PCAP		"sync_output.pcap"
 #define DEFAULT_SYNC_OUT_ASCII		"sync_output.ascii"
 #define DEFAULT_CLOCK_OUT_ASCII		"clock_output.ascii"
-#define DEFAULT_VIRTUAL_MACHINE		VM_NONE			// Default we do not run in vm environment 
 
+#define DEFAULT_VM_UDP_LIST			"vm_udp_list"
 
 
 /*
@@ -134,7 +139,10 @@
 #define CONFIG_SYNC_OUT_ASCII	54
 #define CONFIG_CLOCK_OUT_ASCII	55
 /* Virtual Machine stuff */
-#define CONFIG_VIRTUAL_MACHINE	56
+#define CONFIG_SERVER_VM_UDP	60
+#define CONFIG_SERVER_XEN		61
+#define CONFIG_SERVER_VMWARE	62
+#define CONFIG_VM_UDP_LIST		63
 
 
 
@@ -149,33 +157,36 @@
 #define CONFIG_QUALITY_UNKWN	3
 
 
-/* 
+/*
  * Masks to reload the configuration parameters
  */
-#define UPDMASK_NOUPD			0x000000
-#define UPDMASK_POLLPERIOD		0x000001
-//#define UPDMASK_				0x000002
-#define UPDMASK_TEMPQUALITY		0x000004
-#define UPDMASK_ASYM_HOST		0x000008
-#define UPDMASK_ASYM_NET		0x000010
-#define UPDMASK_SERVER_IPC		0x000020
-//#define UPDMASK_				0x000040
-#define UPDMASK_SYNCHRO_TYPE	0x000080
-#define UPDMASK_SERVER_NTP		0x000100
-#define UPDMASK_ADJUST_SYSCLOCK	0x000200
-#define UPDMASK_HOSTNAME		0x000400
-#define UPDMASK_TIME_SERVER		0x000800
-#define UPDMASK_VERBOSE			0x001000
-#define UPDMASK_NETWORKDEV		0x002080
-#define UPDMASK_SYNC_IN_PCAP	0x004000
-#define UPDMASK_SYNC_IN_ASCII	0x008000
-#define UPDMASK_SYNC_OUT_PCAP	0x010000
-#define UPDMASK_SYNC_OUT_ASCII	0x020800
-#define UPDMASK_CLOCK_OUT_ASCII	0x040000
-#define UPDMASK_VIRTUAL_MACHINE	0x080000
-#define UPDMASK_PID_FILE	0x100000
-#define UPD_NTP_UPSTREAM_PORT	0x200000
-#define UPD_NTP_DOWNSTREAM_PORT	0x400000
+#define UPDMASK_NOUPD			0x0000000
+#define UPDMASK_POLLPERIOD		0x0000001
+//#define UPDMASK_				0x0000002
+#define UPDMASK_TEMPQUALITY		0x0000004
+#define UPDMASK_ASYM_HOST		0x0000008
+#define UPDMASK_ASYM_NET		0x0000010
+#define UPDMASK_SERVER_IPC		0x0000020
+//#define UPDMASK_				0x0000040
+#define UPDMASK_SYNCHRO_TYPE	0x0000080
+#define UPDMASK_SERVER_NTP		0x0000100
+#define UPDMASK_ADJUST_SYSCLOCK	0x0000200
+#define UPDMASK_HOSTNAME		0x0000400
+#define UPDMASK_TIME_SERVER		0x0000800
+#define UPDMASK_VERBOSE			0x0001000
+#define UPDMASK_NETWORKDEV		0x0002000
+#define UPDMASK_SYNC_IN_PCAP	0x0004000
+#define UPDMASK_SYNC_IN_ASCII	0x0008000
+#define UPDMASK_SYNC_OUT_PCAP	0x0010000
+#define UPDMASK_SYNC_OUT_ASCII	0x0020000
+#define UPDMASK_CLOCK_OUT_ASCII	0x0040000
+#define UPDMASK_SERVER_VM_UDP	0x0080000
+#define UPDMASK_SERVER_XEN		0x0100000
+#define UPDMASK_SERVER_VMWARE	0x0200000
+#define UPDMASK_VM_UDP_LIST		0x0400000
+#define UPDMASK_PID_FILE		0x0800000
+#define UPD_NTP_UPSTREAM_PORT	0x1000000
+#define UPD_NTP_DOWNSTREAM_PORT	0x2000000
 
 
 #define HAS_UPDATE(val,mask)	((val & mask) == mask)	
@@ -199,8 +210,10 @@ struct radclock_config {
 	int 	synchro_type; 				/* multi-choice depending on client-side protocol */
 	int 	server_ipc; 				/* Boolean */
 	int 	server_ntp;					/* Boolean */
+	int 	server_vm_udp;				/* Boolean */
+	int 	server_xen;					/* Boolean */
+	int 	server_vmware;				/* Boolean */
 	int 	adjust_sysclock;			/* Boolean */
-	int 	virtual_machine;			/* Virtual Machine environment run mode */
 	double 	phat_init;					/* Initial value for phat */
 	double 	asym_host;					/* Host asymmetry estimate [sec] */
 	double	asym_net;					/* Network asymmetry estimate [sec] */ 
@@ -214,6 +227,7 @@ struct radclock_config {
 	char 	sync_out_pcap[MAXLINE]; 		/* raw packet Output file name */
 	char 	sync_out_ascii[MAXLINE]; 	/* output processed stamp file */
 	char 	clock_out_ascii[MAXLINE];  		/* output matlab requirements */
+	char 	vm_udp_list[MAXLINE];  		/* File containing list of udp vm's */
 };
 
 

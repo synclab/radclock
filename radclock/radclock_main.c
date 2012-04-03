@@ -174,11 +174,6 @@ rehash_daemon(struct radclock_handle *handle, uint32_t param_mask)
 		verbose(LOG_WARNING, "It is not possible to change the type of client "
 				"synchronisation on the fly!");
 	
-	// TODO XXX TODO
-	if (HAS_UPDATE(param_mask, UPDMASK_VIRTUAL_MACHINE))
-		verbose(LOG_WARNING, "It is not possible to change the virtual machine "
-				"environment on the fly!");
-	
 	//XXX Should check we have only one input selected
 	if (HAS_UPDATE(param_mask, UPDMASK_NETWORKDEV) ||
 			HAS_UPDATE(param_mask, UPDMASK_SYNC_IN_PCAP) ||
@@ -211,7 +206,7 @@ rehash_daemon(struct radclock_handle *handle, uint32_t param_mask)
 	}
 
 	if (HAS_UPDATE(param_mask, UPDMASK_SERVER_NTP)) {
-		switch( conf->server_ntp) {
+		switch (conf->server_ntp) {
 		case BOOL_ON:
 			/* We start NTP server */
 			start_thread_NTP_SERV(handle);
@@ -221,6 +216,21 @@ rehash_daemon(struct radclock_handle *handle, uint32_t param_mask)
 			handle->pthread_flag_stop |= PTH_NTP_SERV_STOP;
 // TODO should we join the thread in here ... requires testing
 //			pthread_join(handle->threads[PTH_NTP_SERV], &thread_status);
+			break;
+		}
+	}
+
+	if (HAS_UPDATE(param_mask, UPDMASK_SERVER_VM_UDP)) {
+		switch (conf->server_vm_udp) {
+		case BOOL_ON:	
+			/* We start NTP server */
+			start_thread_VM_UDP_SERV(handle);
+			break;
+		case BOOL_OFF:
+			/* We stop the NTP server */
+			clock_handle->pthread_flag_stop |= PTH_VM_UDP_SERV_STOP; 
+// TODO should we join the thread in here ... requires testing
+//			pthread_join(clock_handle->threads[PTH_VM_UDP_SERV], &thread_status);
 			break;
 		}
 	}
@@ -518,10 +528,6 @@ create_handle(struct radclock_config *conf, int is_daemon)
 	JDEBUG_MEMORY(JDBG_MALLOC, handle->algo_output);
 	memset(handle->algo_output, 0, sizeof(struct bidir_output));
 
-	/* Virtual machine stuff */
-	RAD_VM(handle)->push_data = NULL;
-	RAD_VM(handle)->pull_data = NULL;
-
 	return (handle);
 }
 
@@ -600,10 +606,6 @@ init_handle(struct radclock_handle *handle)
 
 	if (handle->run_mode == RADCLOCK_SYNC_LIVE) {
 
-		err = init_virtual_machine_mode(handle);
-		if (err)
-			return (1);
-
 		/* Initial status words */
 		// TODO there should be more of them set in here, some are for live and
 		// dead runs, but not all!
@@ -621,14 +623,16 @@ init_handle(struct radclock_handle *handle)
 	}
 
 	/* Open input file from which to read TS data */
-	stamp_source = create_source(handle);
-	if (!stamp_source) {
-		verbose(LOG_ERR, "Error creating stamp source, exiting");
-		exit(EXIT_FAILURE);
-	}
+	if (!VM_SLAVE(handle)) {
+		stamp_source = create_source(handle);
+		if (!stamp_source) {
+			verbose(LOG_ERR, "Error creating stamp source, exiting");
+			exit(EXIT_FAILURE);
+		}
 
-	/* Hang stamp source on the handler */
-	handle->stamp_source = (void *) stamp_source;
+		/* Hang stamp source on the handler */
+		handle->stamp_source = (void *) stamp_source;
+	}
 
 	/* Open output files */
 	open_output_stamp(handle);
@@ -667,9 +671,11 @@ start_live(struct radclock_handle *handle)
 	 * This thread triggers the processing of data. It could be a dummy sleeping
 	 * loop, an NTP client, a 1588 slave  ...
 	 */
-	err = start_thread_TRIGGER(handle);
-	if (err < 0)
-		return (1);
+	if (!VM_SLAVE(handle)) {
+		err = start_thread_TRIGGER(handle);
+		if (err < 0)
+			return (1);
+	}
 
 	/*
 	 * This thread is in charge of processing the raw data collected, magically
@@ -683,16 +689,39 @@ start_live(struct radclock_handle *handle)
 		 */
 		handle->unix_signal = 0;
 	}
-	else if(!VM_SLAVE(handle)) {
-		err = start_thread_DATA_PROC(handle);
-		if (err < 0)
-			return (1);
+	else {
+		if (VM_SLAVE(handle) || VM_MASTER(handle)) {
+			err = init_vm(handle);
+			if (err < 0){
+				verbose(LOG_ERR, "Failed to initialise VM communication");
+				return (1);
+			}
+		}
+		if (!VM_SLAVE(handle)) {
+			err = start_thread_DATA_PROC(handle);
+			if (err < 0)
+				return (1);
+		}
+	   
 	}
 
 	/* Are we running an NTP server for network clients ? */
 	switch (handle->conf->server_ntp) {
 	case BOOL_ON:
 		err = start_thread_NTP_SERV(handle);
+		if (err < 0)
+			return (1);
+		break;
+	case BOOL_OFF:
+	default:
+		/* do nothing */
+		break;
+	}
+
+	/* Are we running a VM UDP server for network guests ? */
+	switch (handle->conf->server_vm_udp) {
+	case BOOL_ON:
+		err = start_thread_VM_UDP_SERV(handle);
 		if (err < 0)
 			return (1);
 		break;

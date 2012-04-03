@@ -67,8 +67,10 @@ static struct _key keys[] = {
 	{ "synchronisation_type",	CONFIG_SYNCHRO_TYPE},
 	{ "ipc_server",				CONFIG_SERVER_IPC},
 	{ "ntp_server",				CONFIG_SERVER_NTP},
+	{ "vm_udp_server",			CONFIG_SERVER_VM_UDP},
+	{ "xen_server",				CONFIG_SERVER_XEN},
+	{ "vmware_server",			CONFIG_SERVER_VMWARE},
 	{ "adjust_system_clock",	CONFIG_ADJUST_SYSCLOCK},
-	{ "virtual_machine_mode",	CONFIG_VIRTUAL_MACHINE},
 	{ "polling_period", 		CONFIG_POLLPERIOD},
 	{ "temperature_quality", 	CONFIG_TEMPQUALITY},
 	{ "ts_limit",				CONFIG_TSLIMIT},
@@ -88,6 +90,7 @@ static struct _key keys[] = {
 	{ "sync_output_pcap",		CONFIG_SYNC_OUT_PCAP},
 	{ "sync_output_ascii",		CONFIG_SYNC_OUT_ASCII},
 	{ "clock_output_ascii",		CONFIG_CLOCK_OUT_ASCII},
+	{ "vm_udp_list",			CONFIG_VM_UDP_LIST},
 	{ "",			 			CONFIG_UNKNOWN} // Must be the last one
 };
 
@@ -95,10 +98,10 @@ static struct _key keys[] = {
  * Order matters !
  * TODO make this a bit more robust to bugs with enums already partly defined
  */
-static char* labels_bool[] 		= { "off", "on" };
-static char* labels_verb[] 		= { "quiet", "normal", "high" };
-static char* labels_sync[] 		= { "spy", "piggy", "ntp", "ieee1588", "pps" };
-static char* labels_vm[] 		= { "none", "xen-slave", "xen-master", "vbox-slave", "vbox-master","multicast-slave","multicast-master" };
+static char* labels_bool[] = { "off", "on" };
+static char* labels_verb[] = { "quiet", "normal", "high" };
+static char* labels_sync[] = { "spy", "piggy", "ntp", "ieee1588", "pps",
+	"vm_udp", "xen", "vmware" };
 
 
 
@@ -137,7 +140,9 @@ config_init(struct radclock_config *conf)
 	conf->adjust_sysclock		= DEFAULT_ADJUST_SYSCLOCK;
 	
 	/* Virtual Machine */
-	conf->virtual_machine		= DEFAULT_VIRTUAL_MACHINE;
+	conf->server_vm_udp 		= DEFAULT_SERVER_VM_UDP;
+	conf->server_xen 			= DEFAULT_SERVER_XEN;
+	conf->server_vmware 		= DEFAULT_SERVER_VMWARE;
 
 	/* Clock parameters */
 	conf->poll_period			= DEFAULT_NTP_POLL_PERIOD;
@@ -168,6 +173,7 @@ config_init(struct radclock_config *conf)
 	strcpy(conf->sync_out_pcap, "");
 	strcpy(conf->sync_out_ascii, "");
 	strcpy(conf->clock_out_ascii, "");
+	strcpy(conf->vm_udp_list, "");
 }
 
 
@@ -177,7 +183,8 @@ const char* find_key_label(struct _key *keys, int codekey)
 {
 	for (;;) {	
 		if (keys->keytype == CONFIG_UNKNOWN) {
-			verbose(LOG_ERR, "Did not find a key while creating the configuration file.");
+			verbose(LOG_ERR, "Did not find a key while creating the "
+					"configuration file.");
 			return NULL;
 		}
 		if (keys->keytype == codekey) {
@@ -221,7 +228,9 @@ int get_temperature_config(struct radclock_config *conf)
 
 
 /** Write a default configuration file */
-void write_config_file(FILE *fd, struct _key *keys, struct radclock_config *conf) {
+void
+write_config_file(FILE *fd, struct _key *keys, struct radclock_config *conf)
+{
 
 	fprintf(fd, "##\n");
 	fprintf(fd, "## This is the default configuration file for the RADclock\n");
@@ -254,17 +263,25 @@ void write_config_file(FILE *fd, struct _key *keys, struct radclock_config *conf
 
 	/* Specify the type of synchronisation to use*/
 	fprintf(fd, "# Specify the type of underlying synchronisation used.\n"
-				"# Note that piggybacking requires an ntp daemon running and is then\n"
-				"# incompatible with the RADclock serving clients over the network or \n"
-				"# adjusting the system clock. Piggybacking disables these functions.\n");
+			"# Note that piggybacking requires an ntp daemon running and is then\n"
+			"# incompatible with the RADclock serving clients over the network or \n"
+			"# adjusting the system clock. Piggybacking disables these functions.\n");
 	fprintf(fd, "#\tpiggy   : piggybacking on running ntp daemon\n");
 	fprintf(fd, "#\tntp     : RADclock uses NTP protocol\n");
 	fprintf(fd, "#\tieee1588: RADclock uses IEEE 1588 protocol - NOT IMPLEMENTED YET\n");
 	fprintf(fd, "#\tpps     : RADclock listens to PPS - NOT IMPLEMENTED YET\n");
+	fprintf(fd, "#\tvm_udp  : RADclock communicates with master radclock for "
+			"clock data over udp\n");
+	fprintf(fd, "#\txen     : RADclock communicates with master radclock for "
+			"clock data over xenstore\n");
+	fprintf(fd, "#\tvmware  : RADclock communicates with master radclock for "
+			"clock data over vmci\n");
 	if (conf == NULL)
-		fprintf(fd, "%s = %s\n\n", find_key_label(keys, CONFIG_SYNCHRO_TYPE), labels_sync[DEFAULT_SYNCHRO_TYPE]);
+		fprintf(fd, "%s = %s\n\n", find_key_label(keys, CONFIG_SYNCHRO_TYPE),
+				labels_sync[DEFAULT_SYNCHRO_TYPE]);
 	else
-		fprintf(fd, "%s = %s\n\n", find_key_label(keys, CONFIG_SYNCHRO_TYPE), labels_sync[conf->synchro_type]);
+		fprintf(fd, "%s = %s\n\n", find_key_label(keys, CONFIG_SYNCHRO_TYPE),
+				labels_sync[conf->synchro_type]);
 
 
 	/* Poll Period */
@@ -307,9 +324,59 @@ void write_config_file(FILE *fd, struct _key *keys, struct radclock_config *conf
 	fprintf(fd, "#\ton : Start service - makes the RADclock available to other programs\n");
 	fprintf(fd, "#\toff: Stop service  - useful when replaying traces\n");
 	if (conf == NULL)
-		fprintf(fd, "%s = %s\n\n", find_key_label(keys, CONFIG_SERVER_IPC), labels_bool[DEFAULT_SERVER_IPC]);
+		fprintf(fd, "%s = %s\n\n", find_key_label(keys, CONFIG_SERVER_IPC),
+				labels_bool[DEFAULT_SERVER_IPC]);
 	else
-		fprintf(fd, "%s = %s\n\n", find_key_label(keys, CONFIG_SERVER_IPC), labels_bool[conf->server_ipc]);
+		fprintf(fd, "%s = %s\n\n", find_key_label(keys, CONFIG_SERVER_IPC),
+				labels_bool[conf->server_ipc]);
+
+	/* *
+	 * Virtual Machine Servers 
+	 * */
+	fprintf(fd, "# VM UDP server.\n");
+	fprintf(fd, "# Serves clock data to radclock clients over the network.\n");
+	fprintf(fd, "#\ton : runs a VM UDP server for guests\n");
+	fprintf(fd, "#\toff: no server running\n");
+	if (conf == NULL)
+		fprintf(fd, "%s = %s\n\n", find_key_label(keys, CONFIG_SERVER_VM_UDP),
+				labels_bool[DEFAULT_SERVER_VM_UDP]);
+	else
+		fprintf(fd, "%s = %s\n\n", find_key_label(keys, CONFIG_SERVER_VM_UDP),
+				labels_bool[conf->server_vm_udp]);
+
+	// TODO rename this to something other than list.. since it is now multipurpose
+	fprintf(fd, "# File containing list of VM UDP clients in the case of "
+			"VM UDP server\n");
+	fprintf(fd, "# Name or IP address of master radclock in the case of "
+			"synctype = vm_udp\n");
+	if ( (conf) && (strlen(conf->vm_udp_list) > 0) )
+		fprintf(fd, "%s = %s\n\n", find_key_label(keys, CONFIG_VM_UDP_LIST),
+				conf->vm_udp_list);
+	else
+		fprintf(fd, "#%s = %s\n\n", find_key_label(keys, CONFIG_VM_UDP_LIST),
+				DEFAULT_VM_UDP_LIST);
+
+	fprintf(fd, "# XEN server.\n");
+	fprintf(fd, "# Serves clock data to radclock clients over the xenstore.\n");
+	fprintf(fd, "#\ton : runs a XEN server for guests\n");
+	fprintf(fd, "#\toff: no server running\n");
+	if (conf == NULL)
+		fprintf(fd, "%s = %s\n\n", find_key_label(keys, CONFIG_SERVER_XEN),
+				labels_bool[DEFAULT_SERVER_XEN]);
+	else
+		fprintf(fd, "%s = %s\n\n", find_key_label(keys, CONFIG_SERVER_XEN),
+				labels_bool[conf->server_xen]);
+
+	fprintf(fd, "# VMWARE server.\n");
+	fprintf(fd, "# Serves clock data to radclock clients over a VMCI socket.\n");
+	fprintf(fd, "#\ton : runs a VMWARE server for guests\n");
+	fprintf(fd, "#\toff: no server running\n");
+	if (conf == NULL)
+		fprintf(fd, "%s = %s\n\n", find_key_label(keys, CONFIG_SERVER_VMWARE),
+				labels_bool[DEFAULT_SERVER_VMWARE]);
+	else
+		fprintf(fd, "%s = %s\n\n", find_key_label(keys, CONFIG_SERVER_VMWARE),
+				labels_bool[conf->server_vmware]);
 
 
 	/* Specify the type of synchronisation server we run */
@@ -340,40 +407,13 @@ void write_config_file(FILE *fd, struct _key *keys, struct radclock_config *conf
 	else
 		fprintf(fd, "%s = %s\n\n", find_key_label(keys, CONFIG_ADJUST_SYSCLOCK), labels_bool[conf->adjust_sysclock]);
 
-	
-	
-	fprintf(fd, "\n\n\n");
-	fprintf(fd, "#----------------------------------------------------------------------------#\n");
-	fprintf(fd, "# Virtual Machine Environment parameters\n");
-	fprintf(fd, "#----------------------------------------------------------------------------#\n");
-	fprintf(fd, "\n");
 
-
-	/* Specify the vm mode radclock runs in */
-	fprintf(fd, "# The role of the radclock in a virtual machine environment (if any).\n"
-				"# It is usually better to give the master role to the radclock instance \n"
-				"# running in the host system, and the slave roles to the radclock running \n"
-				"# in the guest system.\n");
-	fprintf(fd, "# Possible values are:\n");
-	fprintf(fd, "#\tnone        : no virtual machine environment\n");
-	fprintf(fd, "#\txen-master  : radclock creates time for all Xen systems\n");
-	fprintf(fd, "#\txen-slave   : radclock gets its time from a Xen master\n");
-	fprintf(fd, "#\tvbox-master : radclock creates time for all Virtual Box systems\n");
-	fprintf(fd, "#\tvbox-slave  : radclock gets its time from a Virtual Box master\n");
-	fprintf(fd, "#\tmulticast-master : radclock creates time and sends over network\n");
-	fprintf(fd, "#\tmulticast-slave  : radclock gets its time from the network\n");
-	if (conf == NULL)
-		fprintf(fd, "%s = %s\n\n", find_key_label(keys, CONFIG_VIRTUAL_MACHINE), labels_vm[DEFAULT_VIRTUAL_MACHINE]);
-	else
-		fprintf(fd, "%s = %s\n\n", find_key_label(keys, CONFIG_VIRTUAL_MACHINE), labels_vm[conf->virtual_machine]);
-	
 
 	fprintf(fd, "\n\n\n");
 	fprintf(fd, "#----------------------------------------------------------------------------#\n");
 	fprintf(fd, "# Environment and Tuning parameters\n");
 	fprintf(fd, "#----------------------------------------------------------------------------#\n");
 	fprintf(fd, "\n");
-	
 
 	/* Temperature */
 	fprintf(fd, "# Temperature environment and hardware quality.\n");
@@ -671,7 +711,7 @@ switch (codekey) {
 		// If value specified on the command line
 		if ( HAS_UPDATE(*mask, UPDMASK_SYNCHRO_TYPE) ) 
 			break;
-		ival = check_valid_option(value, labels_sync, 5);
+		ival = check_valid_option(value, labels_sync, 8);
 		// Indicate changed value
 		if ( conf->synchro_type != ival )
 			SET_UPDATE(*mask, UPDMASK_SYNCHRO_TYPE);
@@ -699,39 +739,72 @@ switch (codekey) {
 		else
 			conf->server_ntp = ival;
 		break;
+	
+	case CONFIG_SERVER_VM_UDP:
+		// If value specified on the command line
+		if ( HAS_UPDATE(*mask, UPDMASK_SERVER_VM_UDP) ) 
+			break;
+		ival = check_valid_option(value, labels_bool, 2);
+		// Indicate changed value
+		if ( conf->server_vm_udp != ival )
+			SET_UPDATE(*mask, UPDMASK_SERVER_VM_UDP);
+		if ( ival < 0 ) {
+			verbose(LOG_WARNING, "vm_udp_server parameter incorrect. Fall back to default.");
+			conf->server_vm_udp = DEFAULT_SERVER_VM_UDP;
+		}
+		else
+			conf->server_vm_udp = ival;
+		break;
+
+	case CONFIG_SERVER_XEN:
+		// If value specified on the command line
+		if ( HAS_UPDATE(*mask, UPDMASK_SERVER_XEN) ) 
+			break;
+		ival = check_valid_option(value, labels_bool, 2);
+		// Indicate changed value
+		if ( conf->server_xen != ival )
+			SET_UPDATE(*mask, UPDMASK_SERVER_XEN);
+		if ( ival < 0 ) {
+			verbose(LOG_WARNING, "xen_server parameter incorrect. Fall back to default.");
+			conf->server_xen = DEFAULT_SERVER_XEN;
+		}
+		else
+			conf->server_xen = ival;
+		break;
+
+	case CONFIG_SERVER_VMWARE:
+		// If value specified on the command line
+		if ( HAS_UPDATE(*mask, UPDMASK_SERVER_VMWARE) ) 
+			break;
+		ival = check_valid_option(value, labels_bool, 2);
+		// Indicate changed value
+		if ( conf->server_vmware != ival )
+			SET_UPDATE(*mask, UPDMASK_SERVER_VMWARE);
+		if ( ival < 0 ) {
+			verbose(LOG_WARNING, "vmware_server parameter incorrect. Fall back to default.");
+			conf->server_vmware = DEFAULT_SERVER_VMWARE;
+		}
+		else
+			conf->server_vmware = ival;
+		break;
+
 
 
 	case CONFIG_ADJUST_SYSCLOCK:
 		// If value specified on the command line
-		if ( HAS_UPDATE(*mask, UPDMASK_ADJUST_SYSCLOCK) ) 
+		if (HAS_UPDATE(*mask, UPDMASK_ADJUST_SYSCLOCK)) 
 			break;
 		ival = check_valid_option(value, labels_bool, 2);
 		// Indicate changed value
-		if ( conf->adjust_sysclock != ival )
+		if (conf->adjust_sysclock != ival)
 			SET_UPDATE(*mask, UPDMASK_ADJUST_SYSCLOCK);
-		if ( ival < 0 ) {
-			verbose(LOG_WARNING, "adjust_system_clock parameter incorrect. Fall back to default.");
+		if (ival < 0) {
+			verbose(LOG_WARNING, "adjust_system_clock parameter incorrect."
+					"Fall back to default.");
 			conf->adjust_sysclock = DEFAULT_ADJUST_SYSCLOCK;
 		}
 		else
 			conf->adjust_sysclock = ival;
-		break;
-
-
-	case CONFIG_VIRTUAL_MACHINE:
-		// If value specified on the command line
-		if ( HAS_UPDATE(*mask, UPDMASK_VIRTUAL_MACHINE) ) 
-			break;
-		ival = check_valid_option(value, labels_vm, 5);
-		// Indicate changed value
-		if ( conf->virtual_machine != ival )
-			SET_UPDATE(*mask, UPDMASK_VIRTUAL_MACHINE);
-		if ( ival < 0 ) {
-			verbose(LOG_WARNING, "virtual_machine_mode parameter incorrect. Fall back to default.");
-			conf->virtual_machine = DEFAULT_VIRTUAL_MACHINE;
-		}
-		else
-			conf->virtual_machine = ival;
 		break;
 
 
@@ -1040,6 +1113,15 @@ switch (codekey) {
 		break;
 
 
+	case CONFIG_VM_UDP_LIST:
+		// If value specified on the command line
+		if ( HAS_UPDATE(*mask, UPDMASK_VM_UDP_LIST) ) 
+			break;
+		if ( strcmp(conf->vm_udp_list, value) != 0 )
+			SET_UPDATE(*mask, UPDMASK_VM_UDP_LIST);
+		strcpy(conf->vm_udp_list, value);
+		break;
+
 	default:
 		verbose(LOG_WARNING, "Unknown CONFIG_* symbol.");
 		break;
@@ -1186,10 +1268,12 @@ void config_print(int level, struct radclock_config *conf)
 	verbose(level, "Client sync          : %s", labels_sync[conf->synchro_type]);
 	verbose(level, "Server IPC           : %s", labels_bool[conf->server_ipc]);
 	verbose(level, "Server NTP           : %s", labels_bool[conf->server_ntp]);
+	verbose(level, "Server VM_UDP        : %s", labels_bool[conf->server_vm_udp]);
+	verbose(level, "Server XEN           : %s", labels_bool[conf->server_xen]);
+	verbose(level, "Server VMWARE        : %s", labels_bool[conf->server_vmware]);
 	verbose(level, "Upstream NTP port    : %d", conf->ntp_upstream_port);
 	verbose(level, "Downstream NTP port  : %d", conf->ntp_downstream_port);
 	verbose(level, "Adjust system clock  : %s", labels_bool[conf->adjust_sysclock]);
-	verbose(level, "Virtual Machine mode : %s", labels_vm[conf->virtual_machine]);
 	verbose(level, "Polling period       : %d", conf->poll_period);
 	verbose(level, "TSLIMIT              : %.9lf", conf->phyparam.TSLIMIT);
 	verbose(level, "SKM_SCALE            : %.9lf", conf->phyparam.SKM_SCALE);

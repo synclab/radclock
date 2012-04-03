@@ -250,6 +250,12 @@ capture_raw_data(struct radclock_handle *handle)
 			err = -1;
 			break;
 
+		case SYNCTYPE_VM_UDP:
+		case SYNCTYPE_XEN:
+		case SYNCTYPE_VMWARE:
+			err = receive_loop_vm(handle);
+			break;
+
 		default:
 			break;
 		}

@@ -258,6 +258,23 @@ start_thread_NTP_SERV(struct radclock_handle *handle)
 
 
 int
+start_thread_VM_UDP_SERV(struct radclock_handle *handle) 
+{
+	int err;
+	pthread_attr_t thread_attr;
+	pthread_attr_init(&thread_attr);
+	pthread_attr_setdetachstate(&thread_attr, PTHREAD_CREATE_JOINABLE);
+
+	verbose(LOG_NOTICE, "Starting VM UDP server thread");
+	err = pthread_create(&(handle->threads[PTH_VM_UDP_SERV]), &thread_attr, 
+			thread_vm_udp_server, (void *)(handle));
+	if (err) 
+		verbose(LOG_ERR, "pthread_create() returned error number %d", err);
+	 return (err);
+}
+
+
+int
 start_thread_DATA_PROC(struct radclock_handle *handle)
 {
 	int err;
