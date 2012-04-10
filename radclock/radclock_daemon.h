@@ -133,9 +133,14 @@ struct radclock_handle {
 	/* Protol related stuff (NTP, 1588, ...) */
 	struct radclock_ntp_server		*ntp_server;
 	
-	/* Raw data capture buffer */
-	struct raw_data_bundle *rdb_start;
-	struct raw_data_bundle *rdb_end;
+	/* Raw data capture buffer for libpcap */
+//	struct raw_data_bundle *rdb_start;
+//	struct raw_data_bundle *rdb_end;
+//	pthread_mutex_t rdb_mutex;
+	struct raw_data_queue *pcap_queue;
+
+	/* Raw data capture buffer for 1588 error queue */
+	struct raw_data_queue *ieee1588eq_queue;
 
 	/* Common data for the daemon */
 	int is_daemon;
@@ -155,11 +160,6 @@ struct radclock_handle {
 	int wakeup_data_ready;
 	pthread_mutex_t wakeup_mutex;
 	pthread_cond_t wakeup_cond;
-	pthread_mutex_t rdb_mutex;	// XXX arbiter between insert_rdb_in_list
-								// and free_and_cherry_pick
-   								// XXX Should not need a lock, but there is
-								// XXX quite some messing around if hammering
-								// XXX NTP control packets	
 
 	/* Configuration */
 	struct radclock_config *conf;

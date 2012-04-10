@@ -480,11 +480,6 @@ create_handle(struct radclock_config *conf, int is_daemon)
 	pthread_mutex_init(&(handle->globaldata_mutex), NULL);
 	pthread_mutex_init(&(handle->wakeup_mutex), NULL);
 	pthread_cond_init(&(handle->wakeup_cond), NULL);
-	pthread_mutex_init(&(handle->rdb_mutex), NULL);
-
-	/* Raw data buffer */
-	handle->rdb_start = NULL;
-	handle->rdb_end = NULL;
 
 	handle->syncalgo_mode = RADCLOCK_BIDIR;
 	handle->stamp_source = NULL;
@@ -524,6 +519,21 @@ create_handle(struct radclock_config *conf, int is_daemon)
 	/* Initialise with unspect stratum */
 	NTP_SERVER(handle)->stratum = STRATUM_UNSPEC;
 
+
+	/* Raw data queues */
+	handle->pcap_queue = (void*) malloc(sizeof(struct raw_data_bundle));
+	JDEBUG_MEMORY(JDBG_MALLOC, handle->pcap_queue);
+	memset(handle->pcap_queue, 0, sizeof(struct raw_data_queue));
+	pthread_mutex_init(&(handle->pcap_queue->rdb_mutex), NULL);
+	handle->pcap_queue->rdb_start = NULL;
+	handle->pcap_queue->rdb_end = NULL;
+
+	handle->ieee1588eq_queue = (void*) malloc(sizeof(struct raw_data_bundle));
+	JDEBUG_MEMORY(JDBG_MALLOC, handle->ieee1588eq_queue);
+	memset(handle->ieee1588eq_queue, 0, sizeof(struct raw_data_queue));
+	pthread_mutex_init(&(handle->ieee1588eq_queue->rdb_mutex), NULL);
+	handle->ieee1588eq_queue->rdb_start = NULL;
+	handle->ieee1588eq_queue->rdb_end = NULL;
 
 	/* Sync algo output data */
 	handle->algo_output = (void*) malloc(sizeof(struct bidir_output));
@@ -1212,13 +1222,16 @@ main(int argc, char *argv[])
 	pthread_mutex_destroy(&(handle->globaldata_mutex));
 	pthread_mutex_destroy(&(handle->wakeup_mutex));
 	pthread_cond_destroy(&(handle->wakeup_cond));
-	pthread_mutex_destroy(&(handle->rdb_mutex));
 
 	/* Detach IPC shared memory if were running as IPC server. */
 	if (handle->conf->server_ipc == BOOL_ON)
 		shm_detach(handle->clock);
 
 	/* Free the clock structure. All done. */
+	pthread_mutex_destroy(&(handle->pcap_queue->rdb_mutex));
+	pthread_mutex_destroy(&(handle->ieee1588eq_queue->rdb_mutex));
+	free(handle->pcap_queue);
+	free(handle->ieee1588eq_queue);
 	free(handle);
 	handle = NULL;
 	clock_handle = NULL;

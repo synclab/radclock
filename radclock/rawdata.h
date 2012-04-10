@@ -46,9 +46,10 @@
 
 typedef enum { 
 	RD_UNKNOWN,
-	RD_SPY_STAMP,
-	RD_NTP_PACKET,		/* Handed by libpcap */
-	RD_PPS,
+	RD_TYPE_SPY,
+	RD_TYPE_NTP,		/* Handed by libpcap */
+	RD_TYPE_1588,
+	RD_TYPE_PPS,
 } rawdata_type_t;
 
 
@@ -68,7 +69,7 @@ struct rd_spy_stamp {
  * Raw data structure specific to NTP and PIGGY capture modes.
  * Very libpacp oriented.
  */
-struct rd_ntp_pkt {
+struct rd_pcap_pkt {
 	vcounter_t vcount;				/* vcount stamp for this buddy */
 	struct pcap_pkthdr pcap_hdr;	/* The PCAP header */
 	void* buf;						/* Actual data, contains packet */
@@ -84,13 +85,22 @@ struct raw_data_bundle {
 	int read;						/* Have I been read? i.e. ready to be freed? */
 	rawdata_type_t type;			/* If we know the type, let's put it there */
 	union rd_t {
-		struct rd_ntp_pkt rd_ntp;
+		struct rd_pcap_pkt rd_pkt;
 		struct rd_spy_stamp rd_spy;
 	} rd;
 };
 
+struct raw_data_queue {
+	struct raw_data_bundle *rdb_start;
+	struct raw_data_bundle *rdb_end;
 
-#define RD_NTP(x) (&((x)->rd.rd_ntp))
+	// XXX arbiter between insert_rdb_in_list and free_and_cherry_pick.	Should
+	// not need a lock, but there is quite some messing around if hammering NTP
+	// control packets
+	pthread_mutex_t rdb_mutex;
+};
+
+#define RD_PKT(x) (&((x)->rd.rd_pkt))
 #define RD_SPY(x) (&((x)->rd.rd_spy))
 
 
