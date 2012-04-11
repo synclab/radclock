@@ -1,0 +1,404 @@
+---
+ sys/kern/kern_tc.c |  129 ++++++++++++++++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 128 insertions(+), 1 deletion(-)
+
+Index: 7.4.0/sys/kern/kern_tc.c
+===================================================================
+--- 7.4.0.orig/sys/kern/kern_tc.c	2012-04-11 23:56:28.000000000 +1000
++++ 7.4.0/sys/kern/kern_tc.c	2012-04-18 00:19:17.000000000 +1000
+@@ -4,20 +4,21 @@
+  * <phk@FreeBSD.ORG> wrote this file.  As long as you retain this notice you
+  * can do whatever you want with this stuff. If we meet some day, and you think
+  * this stuff is worth it, you can buy me a beer in return.   Poul-Henning Kamp
+  * ----------------------------------------------------------------------------
+  */
+ 
+ #include <sys/cdefs.h>
+ __FBSDID("$FreeBSD: release/7.4.0/sys/kern/kern_tc.c 189891 2009-03-16 17:30:38Z rwatson $");
+ 
+ #include "opt_ntp.h"
++#include "opt_radclock.h"
+ 
+ #include <sys/param.h>
+ #include <sys/kernel.h>
+ #include <sys/sysctl.h>
+ #include <sys/syslog.h>
+ #include <sys/systm.h>
+ #include <sys/timepps.h>
+ #include <sys/timetc.h>
+ #include <sys/timex.h>
+ 
+@@ -46,28 +47,57 @@ dummy_get_timecount(struct timecounter *
+ static struct timecounter dummy_timecounter = {
+ 	dummy_get_timecount, 0, ~0u, 1000000, "dummy", -1000000
+ };
+ 
+ struct timehands {
+ 	/* These fields must be initialized by the driver. */
+ 	struct timecounter	*th_counter;
+ 	int64_t			th_adjustment;
+ 	u_int64_t		th_scale;
+ 	u_int	 		th_offset_count;
++
++#ifdef RADCLOCK
++	vcounter_t		vcounter_record;
++#endif
++
+ 	struct bintime		th_offset;
+ 	struct timeval		th_microtime;
+ 	struct timespec		th_nanotime;
+ 	/* Fields not to be copied in tc_windup start with th_generation. */
+ 	volatile u_int		th_generation;
+ 	struct timehands	*th_next;
+ };
+ 
++#ifdef RADCLOCK
++static struct timehands th0;
++static struct timehands th9 = { NULL, 0, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th0};
++static struct timehands th8 = { NULL, 0, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th9};
++static struct timehands th7 = { NULL, 0, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th8};
++static struct timehands th6 = { NULL, 0, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th7};
++static struct timehands th5 = { NULL, 0, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th6};
++static struct timehands th4 = { NULL, 0, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th5};
++static struct timehands th3 = { NULL, 0, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th4};
++static struct timehands th2 = { NULL, 0, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th3};
++static struct timehands th1 = { NULL, 0, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th2};
++static struct timehands th0 = {
++	&dummy_timecounter,
++	0,
++	(uint64_t)-1 / 1000000,
++	0,
++	0,
++	{1, 0},
++	{0, 0},
++	{0, 0},
++	1,
++	&th1
++};
++#else
+ static struct timehands th0;
+ static struct timehands th9 = { NULL, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th0};
+ static struct timehands th8 = { NULL, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th9};
+ static struct timehands th7 = { NULL, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th8};
+ static struct timehands th6 = { NULL, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th7};
+ static struct timehands th5 = { NULL, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th6};
+ static struct timehands th4 = { NULL, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th5};
+ static struct timehands th3 = { NULL, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th4};
+ static struct timehands th2 = { NULL, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th3};
+ static struct timehands th1 = { NULL, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0, &th2};
+@@ -75,20 +105,21 @@ static struct timehands th0 = {
+ 	&dummy_timecounter,
+ 	0,
+ 	(uint64_t)-1 / 1000000,
+ 	0,
+ 	{1, 0},
+ 	{0, 0},
+ 	{0, 0},
+ 	1,
+ 	&th1
+ };
++#endif	/* RADCLOCK */
+ 
+ static struct timehands *volatile timehands = &th0;
+ struct timecounter *timecounter = &dummy_timecounter;
+ static struct timecounter *timecounters = &dummy_timecounter;
+ 
+ time_t time_second = 1;
+ time_t time_uptime = 1;
+ 
+ static struct bintime boottimebin;
+ struct timeval boottime;
+@@ -172,20 +203,61 @@ tc_delta(struct timehands *th)
+ 	return ((tc->tc_get_timecount(tc) - th->th_offset_count) &
+ 	    tc->tc_counter_mask);
+ }
+ 
+ /*
+  * Functions for reading the time.  We have to loop until we are sure that
+  * the timehands that we operated on was not updated under our feet.  See
+  * the comment in <sys/time.h> for a description of these 12 functions.
+  */
+ 
++#ifdef RADCLOCK
++static int sysctl_kern_timecounter_passthrough = 0;
++SYSCTL_INT(_kern_timecounter, OID_AUTO, passthrough, CTLFLAG_RW,
++	&sysctl_kern_timecounter_passthrough, 0,
++	"Select universal Feed-Forward timecounter for OS virtualization");
++
++
++static __inline uint64_t
++tc_get_timecount_fake64(struct timecounter *tc)
++{
++	u_int count;
++	count = tc->tc_get_timecount(tc);
++	return (uint64_t) count;
++}
++
++vcounter_t
++read_vcounter(void)
++{
++	struct timecounter *tc;
++	struct timehands *th;
++	u_int gen, delta;
++	vcounter_t vcount;
++
++	if ( sysctl_kern_timecounter_passthrough )
++	{
++		tc = timehands->th_counter;
++		return tc->tc_get_timecount_64(tc);
++	}
++	else {
++		do{
++			th = timehands;
++			gen = th->th_generation;
++			delta = tc_delta(th);
++			vcount = th->vcounter_record;
++		} while ( gen == 0 || gen != th->th_generation);
++
++		return(vcount + delta);
++	}
++}
++#endif	/* RADCLOCK */
++
+ void
+ binuptime(struct bintime *bt)
+ {
+ 	struct timehands *th;
+ 	u_int gen;
+ 
+ 	TC_COUNT(nbinuptime);
+ 	do {
+ 		th = timehands;
+ 		gen = th->th_generation;
+@@ -346,21 +418,27 @@ tc_init(struct timecounter *tc)
+ 		if (bootverbose) {
+ 			printf("Timecounter \"%s\" frequency %ju Hz",
+ 			    tc->tc_name, (uintmax_t)tc->tc_frequency);
+ 			printf(" -- Insufficient hz, needs at least %u\n", u);
+ 		}
+ 	} else if (tc->tc_quality >= 0 || bootverbose) {
+ 		printf("Timecounter \"%s\" frequency %ju Hz quality %d\n",
+ 		    tc->tc_name, (uintmax_t)tc->tc_frequency,
+ 		    tc->tc_quality);
+ 	}
+-
++#ifdef RADCLOCK
++	/* XXX this is a very ugly but good enough to cover my back */
++	if ( (strcmp(tc->tc_name, "TSC") != 0) && (strcmp(tc->tc_name, "ixen") != 0) )
++	{
++		tc->tc_get_timecount_64 = &tc_get_timecount_fake64;
++	}
++#endif
+ 	tc->tc_next = timecounters;
+ 	timecounters = tc;
+ 	/*
+ 	 * Set up sysctl tree for this counter.
+ 	 */
+ 	tc_root = SYSCTL_ADD_NODE(NULL,
+ 	    SYSCTL_STATIC_CHILDREN(_kern_timecounter_tc), OID_AUTO, tc->tc_name,
+ 	    CTLFLAG_RW, 0, "timecounter description");
+ 	SYSCTL_ADD_UINT(NULL, SYSCTL_CHILDREN(tc_root), OID_AUTO,
+ 	    "mask", CTLFLAG_RD, &(tc->tc_counter_mask), 0,
+@@ -462,20 +540,25 @@ tc_windup(void)
+ 	/*
+ 	 * Capture a timecounter delta on the current timecounter and if
+ 	 * changing timecounters, a counter value from the new timecounter.
+ 	 * Update the offset fields accordingly.
+ 	 */
+ 	delta = tc_delta(th);
+ 	if (th->th_counter != timecounter)
+ 		ncount = timecounter->tc_get_timecount(timecounter);
+ 	else
+ 		ncount = 0;
++
++#ifdef RADCLOCK
++	th->vcounter_record += delta;
++#endif
++
+ 	th->th_offset_count += delta;
+ 	th->th_offset_count &= th->th_counter->tc_counter_mask;
+ 	bintime_addx(&th->th_offset, th->th_scale * delta);
+ 
+ 	/*
+ 	 * Hardware latching timecounters may not generate interrupts on
+ 	 * PPS events, so instead we poll them.  There is a finite risk that
+ 	 * the hardware might capture a count which is later than the one we
+ 	 * got above, and therefore possibly in the next NTP second which might
+ 	 * have a different rate than the current NTP second.  It doesn't
+@@ -506,20 +589,23 @@ tc_windup(void)
+ 	}
+ 	/* Update the UTC timestamps used by the get*() functions. */
+ 	/* XXX shouldn't do this here.  Should force non-`get' versions. */
+ 	bintime2timeval(&bt, &th->th_microtime);
+ 	bintime2timespec(&bt, &th->th_nanotime);
+ 
+ 	/* Now is a good time to change timecounters. */
+ 	if (th->th_counter != timecounter) {
+ 		th->th_counter = timecounter;
+ 		th->th_offset_count = ncount;
++		#ifdef RADCLOCK
++		th->vcounter_record = 0;
++		#endif
+ 	}
+ 
+ 	/*-
+ 	 * Recalculate the scaling factor.  We want the number of 1/2^64
+ 	 * fractions of a second per period of the hardware counter, taking
+ 	 * into account the th_adjustment factor which the NTP PLL/adjtime(2)
+ 	 * processing provides us with.
+ 	 *
+ 	 * The th_adjustment is nanoseconds per second with 32 bit binary
+ 	 * fraction and we want 64 bit binary fraction of second:
+@@ -614,20 +700,24 @@ SYSCTL_PROC(_kern_timecounter, OID_AUTO,
+ 
+ /*
+  * RFC 2783 PPS-API implementation.
+  */
+ 
+ int
+ pps_ioctl(u_long cmd, caddr_t data, struct pps_state *pps)
+ {
+ 	pps_params_t *app;
+ 	struct pps_fetch_args *fapi;
++#ifdef RADCLOCK
++	struct radclock_pps_fetch_args *radclock_fapi;
++#endif
++
+ #ifdef PPS_SYNC
+ 	struct pps_kcbind_args *kapi;
+ #endif
+ 
+ 	KASSERT(pps != NULL, ("NULL pps pointer in pps_ioctl"));
+ 	switch (cmd) {
+ 	case PPS_IOC_CREATE:
+ 		return (0);
+ 	case PPS_IOC_DESTROY:
+ 		return (0);
+@@ -647,20 +737,33 @@ pps_ioctl(u_long cmd, caddr_t data, stru
+ 		return (0);
+ 	case PPS_IOC_FETCH:
+ 		fapi = (struct pps_fetch_args *)data;
+ 		if (fapi->tsformat && fapi->tsformat != PPS_TSFMT_TSPEC)
+ 			return (EINVAL);
+ 		if (fapi->timeout.tv_sec || fapi->timeout.tv_nsec)
+ 			return (EOPNOTSUPP);
+ 		pps->ppsinfo.current_mode = pps->ppsparam.mode;
+ 		fapi->pps_info_buf = pps->ppsinfo;
+ 		return (0);
++
++#ifdef RADCLOCK
++	case RADCLOCK_PPS_IOC_FETCH:
++		radclock_fapi = (struct radclock_pps_fetch_args *)data;
++		if (radclock_fapi->tsformat && radclock_fapi->tsformat != PPS_TSFMT_TSPEC)
++			return (EINVAL);
++		if (radclock_fapi->timeout.tv_sec || radclock_fapi->timeout.tv_nsec)
++			return (EOPNOTSUPP);
++		pps->ppsinfo.current_mode = pps->ppsparam.mode;
++		radclock_fapi->pps_info_buf = pps->radclock_ppsinfo;
++		return (0);
++#endif 	/* RADCLOCK */
++
+ 	case PPS_IOC_KCBIND:
+ #ifdef PPS_SYNC
+ 		kapi = (struct pps_kcbind_args *)data;
+ 		/* XXX Only root should be able to do this */
+ 		if (kapi->tsformat && kapi->tsformat != PPS_TSFMT_TSPEC)
+ 			return (EINVAL);
+ 		if (kapi->kernel_consumer != PPS_KC_HARDPPS)
+ 			return (EINVAL);
+ 		if (kapi->edge & ~pps->ppscap)
+ 			return (EINVAL);
+@@ -699,69 +802,93 @@ pps_capture(struct pps_state *pps)
+ }
+ 
+ void
+ pps_event(struct pps_state *pps, int event)
+ {
+ 	struct bintime bt;
+ 	struct timespec ts, *tsp, *osp;
+ 	u_int tcount, *pcount;
+ 	int foff, fhard;
+ 	pps_seq_t *pseq;
++#ifdef RADCLOCK
++	struct timespec *radclock_tsp;
++	pps_seq_t *radclock_pseq;
++	vcounter_t *vcount;
++	vcounter_t vcounter_record;
++#endif
+ 
+ 	KASSERT(pps != NULL, ("NULL pps pointer in pps_event"));
+ 	/* If the timecounter was wound up underneath us, bail out. */
+ 	if (pps->capgen == 0 || pps->capgen != pps->capth->th_generation)
+ 		return;
+ 
+ 	/* Things would be easier with arrays. */
+ 	if (event == PPS_CAPTUREASSERT) {
+ 		tsp = &pps->ppsinfo.assert_timestamp;
+ 		osp = &pps->ppsparam.assert_offset;
+ 		foff = pps->ppsparam.mode & PPS_OFFSETASSERT;
+ 		fhard = pps->kcmode & PPS_CAPTUREASSERT;
+ 		pcount = &pps->ppscount[0];
+ 		pseq = &pps->ppsinfo.assert_sequence;
++#ifdef RADCLOCK
++		vcount = &pps->radclock_ppsinfo.assert_vcount;
++		radclock_tsp = &pps->radclock_ppsinfo.assert_timestamp;
++		radclock_pseq = &pps->radclock_ppsinfo.assert_sequence;
++#endif
+ 	} else {
+ 		tsp = &pps->ppsinfo.clear_timestamp;
+ 		osp = &pps->ppsparam.clear_offset;
+ 		foff = pps->ppsparam.mode & PPS_OFFSETCLEAR;
+ 		fhard = pps->kcmode & PPS_CAPTURECLEAR;
+ 		pcount = &pps->ppscount[1];
+ 		pseq = &pps->ppsinfo.clear_sequence;
++#ifdef RADCLOCK
++		vcount = &pps->radclock_ppsinfo.clear_vcount;
++		radclock_tsp = &pps->radclock_ppsinfo.clear_timestamp;
++		radclock_pseq = &pps->radclock_ppsinfo.clear_sequence;
++#endif
+ 	}
+ 
+ 	/*
+ 	 * If the timecounter changed, we cannot compare the count values, so
+ 	 * we have to drop the rest of the PPS-stuff until the next event.
+ 	 */
+ 	if (pps->ppstc != pps->capth->th_counter) {
+ 		pps->ppstc = pps->capth->th_counter;
+ 		*pcount = pps->capcount;
+ 		pps->ppscount[2] = pps->capcount;
+ 		return;
+ 	}
+ 
+ 	/* Convert the count to a timespec. */
+ 	tcount = pps->capcount - pps->capth->th_offset_count;
+ 	tcount &= pps->capth->th_counter->tc_counter_mask;
++#ifdef RADCLOCK
++	vcounter_record = pps->capth->vcounter_record;
++#endif
+ 	bt = pps->capth->th_offset;
+ 	bintime_addx(&bt, pps->capth->th_scale * tcount);
+ 	bintime_add(&bt, &boottimebin);
+ 	bintime2timespec(&bt, &ts);
+ 
+ 	/* If the timecounter was wound up underneath us, bail out. */
+ 	if (pps->capgen != pps->capth->th_generation)
+ 		return;
+ 
+ 	*pcount = pps->capcount;
+ 	(*pseq)++;
+ 	*tsp = ts;
++#ifdef RADCLOCK
++	(*radclock_pseq)++;
++	*radclock_tsp = ts;
++	*vcount = (vcounter_record + tcount);
++#endif
+ 
+ 	if (foff) {
+ 		timespecadd(tsp, osp);
+ 		if (tsp->tv_nsec < 0) {
+ 			tsp->tv_nsec += 1000000000;
+ 			tsp->tv_sec -= 1;
+ 		}
+ 	}
+ #ifdef PPS_SYNC
+ 	if (fhard) {

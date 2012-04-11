@@ -1,0 +1,951 @@
+---
+ sys/net/bpf.c          |  290 +++++++++++++++++++++++++++++++++++++++++++++++++
+ sys/net/bpf.h          |  116 +++++++++++++++++++
+ sys/net/bpfdesc.h      |    3 
+ sys/net/if_ethersubr.c |   25 ++++
+ 4 files changed, 434 insertions(+)
+
+Index: 7.4.0/sys/net/bpf.c
+===================================================================
+--- 7.4.0.orig/sys/net/bpf.c	2012-04-18 00:30:51.000000000 +1000
++++ 7.4.0/sys/net/bpf.c	2012-04-18 01:38:56.000000000 +1000
+@@ -99,23 +99,30 @@ static void	bpf_allocbufs(struct bpf_d *
+ static void	bpf_attachd(struct bpf_d *, struct bpf_if *);
+ static void	bpf_detachd(struct bpf_d *);
+ static void	bpf_freed(struct bpf_d *);
+ static void	bpf_mcopy(const void *, void *, size_t);
+ static int	bpf_movein(struct uio *, int, struct ifnet *, struct mbuf **,
+ 		    struct sockaddr *, int *, struct bpf_insn *);
+ static int	bpf_setif(struct bpf_d *, struct ifreq *);
+ static void	bpf_timed_out(void *);
+ static __inline void
+ 		bpf_wakeup(struct bpf_d *);
++#ifdef RADCLOCK
++static void radclock_fill_timeval(vcounter_t vcounter, struct timeval *time);
++static void	catchpacket(struct bpf_d *, u_char *, u_int,
++		    u_int, void (*)(const void *, void *, size_t),
++			struct timeval *, vcounter_t *);
++#else
+ static void	catchpacket(struct bpf_d *, u_char *, u_int,
+ 		    u_int, void (*)(const void *, void *, size_t),
+ 		    struct timeval *);
++#endif
+ static void	reset_d(struct bpf_d *);
+ static int	 bpf_setf(struct bpf_d *, struct bpf_program *, u_long cmd);
+ static int	bpf_getdltlist(struct bpf_d *, struct bpf_dltlist *);
+ static int	bpf_setdlt(struct bpf_d *, u_int);
+ static void	filt_bpfdetach(struct knote *);
+ static int	filt_bpfread(struct knote *, long);
+ static void	bpf_drvinit(void *);
+ static void	bpf_clone(void *, struct ucred *, char *, int, struct cdev **);
+ static int	bpf_stats_sysctl(SYSCTL_HANDLER_ARGS);
+ 
+@@ -124,20 +131,25 @@ static int bpf_bufsize = 4096;
+ SYSCTL_INT(_net_bpf, OID_AUTO, bufsize, CTLFLAG_RW,
+     &bpf_bufsize, 0, "Default bpf buffer size");
+ static int bpf_maxbufsize = BPF_MAXBUFSIZE;
+ SYSCTL_INT(_net_bpf, OID_AUTO, maxbufsize, CTLFLAG_RW,
+     &bpf_maxbufsize, 0, "Maximum bpf buffer size");
+ static int bpf_maxinsns = BPF_MAXINSNS;
+ SYSCTL_INT(_net_bpf, OID_AUTO, maxinsns, CTLFLAG_RW,
+     &bpf_maxinsns, 0, "Maximum bpf program instructions");
+ SYSCTL_NODE(_net_bpf, OID_AUTO, stats, CTLFLAG_MPSAFE | CTLFLAG_RW,
+     bpf_stats_sysctl, "bpf statistics portal");
++#ifdef RADCLOCK
++static int bpf_radclock_tsmode = RADCLOCK_TSMODE_SYSCLOCK;
++SYSCTL_INT(_net_bpf, OID_AUTO, bpf_radclock_tsmode, CTLFLAG_RW,
++	&bpf_radclock_tsmode, 0, "Default RADclock timestamping mode");
++#endif /* RADCLOCK */
+ 
+ static	d_open_t	bpfopen;
+ static	d_close_t	bpfclose;
+ static	d_read_t	bpfread;
+ static	d_write_t	bpfwrite;
+ static	d_ioctl_t	bpfioctl;
+ static	d_poll_t	bpfpoll;
+ static	d_kqfilter_t	bpfkqfilter;
+ 
+ static struct cdevsw bpf_cdevsw = {
+@@ -149,20 +161,28 @@ static struct cdevsw bpf_cdevsw = {
+ 	.d_write =	bpfwrite,
+ 	.d_ioctl =	bpfioctl,
+ 	.d_poll =	bpfpoll,
+ 	.d_name =	"bpf",
+ 	.d_kqfilter =	bpfkqfilter,
+ };
+ 
+ static struct filterops bpfread_filtops =
+ 	{ 1, NULL, filt_bpfdetach, filt_bpfread };
+ 
++#ifdef RADCLOCK
++/* Global data structure containing clock calibration data
++ * rough guess of 1Ghz beats zero
++ */
++static struct radclock_data radclock = {1e-9,0,0,0,0,0,0,0,0};
++static struct radclock_fixedpoint radclock_fp = {0,0,0,0,0,0};
++#endif /* RADCLOCK */
++
+ static int
+ bpf_movein(struct uio *uio, int linktype, struct ifnet *ifp, struct mbuf **mp,
+     struct sockaddr *sockp, int *hdrlen, struct bpf_insn *wfilter)
+ {
+ 	const struct ieee80211_bpf_params *p;
+ 	struct ether_header *eh;
+ 	struct mbuf *m;
+ 	int error;
+ 	int len;
+ 	int hlen;
+@@ -420,20 +440,25 @@ bpfopen(struct cdev *dev, int flags, int
+ 	d->bd_direction = BPF_D_INOUT;
+ 	d->bd_pid = td->td_proc->p_pid;
+ #ifdef MAC
+ 	mac_init_bpfdesc(d);
+ 	mac_create_bpfdesc(td->td_ucred, d);
+ #endif
+ 	mtx_init(&d->bd_mtx, devtoname(dev), "bpf cdev lock", MTX_DEF);
+ 	callout_init_mtx(&d->bd_callout, &d->bd_mtx, 0);
+ 	knlist_init_mtx(&d->bd_sel.si_note, &d->bd_mtx);
+ 
++#ifdef RADCLOCK
++	/* Timestamping mode for this device, default is use SYSCLOCK */
++	d->radclock_tsmode = bpf_radclock_tsmode;
++#endif /* RADCLOCK */
++
+ 	return (0);
+ }
+ 
+ /*
+  * Close the descriptor by detaching it from its interface,
+  * deallocating its buffers, and marking it free.
+  */
+ /* ARGSUSED */
+ static	int
+ bpfclose(struct cdev *dev, int flags, int fmt, struct thread *td)
+@@ -1065,20 +1090,63 @@ bpfioctl(struct cdev *dev, u_long cmd, c
+ 
+ 			if (sig >= NSIG)
+ 				error = EINVAL;
+ 			else
+ 				d->bd_sig = sig;
+ 			break;
+ 		}
+ 	case BIOCGRSIG:
+ 		*(u_int *)addr = d->bd_sig;
+ 		break;
++
++#ifdef RADCLOCK
++	/* Set RADclock data */
++	case BIOCSRADCLOCKDATA:
++		{
++			BPFD_LOCK(d);
++			radclock = *(struct radclock_data *)addr;
++			BPFD_UNLOCK(d);
++			break;
++		}
++	/* Get RADclock data */
++	case BIOCGRADCLOCKDATA:
++		{
++			BPFD_LOCK(d);
++			*(struct radclock_data *)addr = radclock;
++			BPFD_UNLOCK(d);
++			break;
++		}
++	/* Set RADclock timestamping mode for this device) */
++	case BIOCSRADCLOCKTSMODE:
++		{
++			BPFD_LOCK(d);
++			d->radclock_tsmode = *(int8_t *)addr;
++			BPFD_UNLOCK(d);
++			break;
++		}
++	/* Get RADclock timestamping mode for this device) */
++	case BIOCGRADCLOCKTSMODE:
++		{
++			BPFD_LOCK(d);
++			*(int8_t *)addr = d->radclock_tsmode;
++			BPFD_UNLOCK(d);
++			break;
++		}
++	/* Set RADclock fixedpoint data */
++	case BIOCSRADCLOCKFIXED:
++		{
++			BPFD_LOCK(d);
++			radclock_fp = *(struct radclock_fixedpoint *)addr;
++			BPFD_UNLOCK(d);
++			break;
++		}
++#endif /* RADCLOCK */
+ 	}
+ 	return (error);
+ }
+ 
+ /*
+  * Set d's packet filter program to fp.  If this file already has a filter,
+  * free it and replace it.  Returns EINVAL for bogus requests.
+  */
+ static int
+ bpf_setf(struct bpf_d *d, struct bpf_program *fp, u_long cmd)
+@@ -1299,43 +1367,53 @@ filt_bpfread(struct knote *kn, long hint
+ void
+ bpf_tap(struct bpf_if *bp, u_char *pkt, u_int pktlen)
+ {
+ 	struct bpf_d *d;
+ #ifdef BPF_JITTER
+ 	bpf_jit_filter *bf;
+ #endif
+ 	u_int slen;
+ 	int gottime;
+ 	struct timeval tv;
++#ifdef RADCLOCK
++	vcounter_t vcount;
++#endif
+ 
+ 	gottime = 0;
+ 	BPFIF_LOCK(bp);
+ 	LIST_FOREACH(d, &bp->bif_dlist, bd_next) {
+ 		BPFD_LOCK(d);
+ 		++d->bd_rcount;
+ #ifdef BPF_JITTER
+ 		bf = bpf_jitter_enable != 0 ? d->bd_bfilter : NULL;
+ 		if (bf != NULL)
+ 			slen = (*(bf->func))(pkt, pktlen, pktlen);
+ 		else
+ #endif
+ 		slen = bpf_filter(d->bd_rfilter, pkt, pktlen, pktlen);
+ 		if (slen != 0) {
+ 			d->bd_fcount++;
+ 			if (!gottime) {
+ 				microtime(&tv);
++#ifdef RADCLOCK
++				vcount = read_vcounter();
++#endif
+ 				gottime = 1;
+ 			}
+ #ifdef MAC
+ 			if (mac_check_bpfdesc_receive(d, bp->bif_ifp) == 0)
+ #endif
++#ifdef RADCLOCK
++				catchpacket(d, pkt, pktlen, slen, bcopy, &tv, &vcount);
++#else
+ 				catchpacket(d, pkt, pktlen, slen, bcopy, &tv);
++#endif
+ 		}
+ 		BPFD_UNLOCK(d);
+ 	}
+ 	BPFIF_UNLOCK(bp);
+ }
+ 
+ /*
+  * Copy data from an mbuf chain into a buffer.  This code is derived
+  * from m_copydata in sys/uipc_mbuf.c.
+  */
+@@ -1370,20 +1448,24 @@ void
+ bpf_mtap(struct bpf_if *bp, struct mbuf *m)
+ {
+ 	struct bpf_d *d;
+ #ifdef BPF_JITTER
+ 	bpf_jit_filter *bf;
+ #endif
+ 	u_int pktlen, slen;
+ 	int gottime;
+ 	struct timeval tv;
+ 
++#ifdef RADCLOCK
++	vcounter_t vcount;
++#endif
++
+ 	/* Skip outgoing duplicate packets. */
+ 	if ((m->m_flags & M_PROMISC) != 0 && m->m_pkthdr.rcvif == NULL) {
+ 		m->m_flags &= ~M_PROMISC;
+ 		return;
+ 	}
+ 
+ 	gottime = 0;
+ 
+ 	pktlen = m_length(m, NULL);
+ 
+@@ -1398,46 +1480,60 @@ bpf_mtap(struct bpf_if *bp, struct mbuf 
+ 		/* XXX We cannot handle multiple mbufs. */
+ 		if (bf != NULL && m->m_next == NULL)
+ 			slen = (*(bf->func))(mtod(m, u_char *), pktlen, pktlen);
+ 		else
+ #endif
+ 		slen = bpf_filter(d->bd_rfilter, (u_char *)m, pktlen, 0);
+ 		if (slen != 0) {
+ 			d->bd_fcount++;
+ 			if (!gottime) {
+ 				microtime(&tv);
++
++#ifdef RADCLOCK
++				vcount = read_vcounter();
++#endif
+ 				gottime = 1;
+ 			}
+ #ifdef MAC
+ 			if (mac_check_bpfdesc_receive(d, bp->bif_ifp) == 0)
+ #endif
++
++#ifdef RADCLOCK
++				catchpacket(d, (u_char *)m, pktlen, slen,
++				    bpf_mcopy, &tv, &vcount);
++#else
+ 				catchpacket(d, (u_char *)m, pktlen, slen,
+ 				    bpf_mcopy, &tv);
++#endif 	/* RADCLOCK */
+ 		}
+ 		BPFD_UNLOCK(d);
+ 	}
+ 	BPFIF_UNLOCK(bp);
+ }
+ 
+ /*
+  * Incoming linkage from device drivers, when packet is in
+  * an mbuf chain and to be prepended by a contiguous header.
+  */
+ void
+ bpf_mtap2(struct bpf_if *bp, void *data, u_int dlen, struct mbuf *m)
+ {
+ 	struct mbuf mb;
+ 	struct bpf_d *d;
+ 	u_int pktlen, slen;
+ 	int gottime;
+ 	struct timeval tv;
+ 
++#ifdef RADCLOCK
++	vcounter_t vcount;
++#endif 	/* RADCLOCK */
++
+ 	/* Skip outgoing duplicate packets. */
+ 	if ((m->m_flags & M_PROMISC) != 0 && m->m_pkthdr.rcvif == NULL) {
+ 		m->m_flags &= ~M_PROMISC;
+ 		return;
+ 	}
+ 
+ 	gottime = 0;
+ 
+ 	pktlen = m_length(m, NULL);
+ 	/*
+@@ -1454,45 +1550,196 @@ bpf_mtap2(struct bpf_if *bp, void *data,
+ 	LIST_FOREACH(d, &bp->bif_dlist, bd_next) {
+ 		if (BPF_CHECK_DIRECTION(d, m->m_pkthdr.rcvif, bp->bif_ifp))
+ 			continue;
+ 		BPFD_LOCK(d);
+ 		++d->bd_rcount;
+ 		slen = bpf_filter(d->bd_rfilter, (u_char *)&mb, pktlen, 0);
+ 		if (slen != 0) {
+ 			d->bd_fcount++;
+ 			if (!gottime) {
+ 				microtime(&tv);
++
++#ifdef RADCLOCK
++				vcount = read_vcounter();
++#endif 	/* RADCLOCK */
+ 				gottime = 1;
+ 			}
+ #ifdef MAC
+ 			if (mac_check_bpfdesc_receive(d, bp->bif_ifp) == 0)
+ #endif
++
++#ifdef RADCLOCK
++				catchpacket(d, (u_char *)&mb, pktlen, slen,
++				    bpf_mcopy, &tv, &vcount);
++#else
+ 				catchpacket(d, (u_char *)&mb, pktlen, slen,
+ 				    bpf_mcopy, &tv);
++#endif	/* RADCLOCK */
++		}
++		BPFD_UNLOCK(d);
++	}
++	BPFIF_UNLOCK(bp);
++}
++
++
++#ifdef RADCLOCK
++/*
++ * Incoming linkage from device drivers, when packet is in an mbuf chain.
++ * RADCLOCK version
++ */
++void
++bpf_mtap_radclock_rcv(struct bpf_if *bp, struct mbuf *m, struct timeval *tv,
++		vcounter_t *vcount)
++{
++	struct bpf_d *d;
++	u_int pktlen, slen;
++	int gottime;
++	/* RADCLOCK: memory allocated before on the receiving side */
++	/*	struct timeval tv; */
++
++	/* Skip outgoing duplicate packets. */
++	if ((m->m_flags & M_PROMISC) != 0 && m->m_pkthdr.rcvif == NULL) {
++		m->m_flags &= ~M_PROMISC;
++		return;
++	}
++
++	gottime = 0;
++
++	pktlen = m_length(m, NULL);
++
++	BPFIF_LOCK(bp);
++	LIST_FOREACH(d, &bp->bif_dlist, bd_next) {
++		if (BPF_CHECK_DIRECTION(d, m->m_pkthdr.rcvif, bp->bif_ifp))
++			continue;
++		BPFD_LOCK(d);
++		++d->bd_rcount;
++#ifdef BPF_JITTER
++		/* XXX We cannot handle multiple mbufs. */
++		if (bpf_jitter_enable != 0 && d->bd_bfilter != NULL &&
++		    m->m_next == NULL)
++			slen = (*(d->bd_bfilter->func))(mtod(m, u_char *),
++			    pktlen, pktlen);
++		else
++#endif
++		slen = bpf_filter(d->bd_rfilter, (u_char *)m, pktlen, 0);
++		if (slen != 0) {
++			d->bd_fcount++;
++
++			/* RADCLOCK
++			 * If SYSCLOCK mode, no reason for us to improve microtime()
++			 */
++			switch (d->radclock_tsmode) {
++				case RADCLOCK_TSMODE_SYSCLOCK:
++				case RADCLOCK_TSMODE_RADCLOCK:
++					gottime = 0;
++					break;
++				case RADCLOCK_TSMODE_FAIRCOMPARE:
++					gottime = 1;
++					break;
++				default:
++					panic("bpf_mtap_radclock_rcv - Unknown RADclock timestamping mode");
++			}
++
++			if (!gottime) {
++				/* RADCLOCK
++				 * microtime(&tv);
++				 */
++				microtime(tv);
++				gottime = 1;
++			}
++#ifdef MAC
++			if (mac_check_bpfdesc_receive(d, bp->bif_ifp) == 0)
++#endif
++				/* RADCLOCK
++				 * Passes tval and tc directly to catchpacket() on receiving
++				 */
++				catchpacket(d, (u_char *)m, pktlen, slen,
++				    bpf_mcopy, tv, vcount);
+ 		}
+ 		BPFD_UNLOCK(d);
+ 	}
+ 	BPFIF_UNLOCK(bp);
+ }
++#endif /* RADCLOCK */
++
+ 
+ #undef	BPF_CHECK_DIRECTION
+ 
++
++#ifdef RADCLOCK
++static void
++radclock_fill_timeval(vcounter_t vcounter, struct timeval *time)
++{
++	vcounter_t countdiff;
++	struct timeval tval;
++	uint64_t time_f;
++	uint64_t frac;
++
++	/* Synchronization algorithm (userland) should update the fixed point data
++	 * often enough to make sure the timeval does not overflow. If no sync algo
++	 * updates the data, we loose precision, but in that case, nobody is tracking
++	 * the clock drift anyway ... so send warning and stop worrying.
++	 */
++
++	/* XXX: So far we are called from catchpacket() only, that ia called from
++	 * one of the *tap functions, each of them holding the BPFD_LOCK(bd) lock.
++	 * ioctl ops are conditioned by the same lock, ensuring the consistency of
++	 * the fixedpoint data. If we move away from the BPF code (and we should),
++	 * we should lock in here.
++	 */
++
++	countdiff = vcounter - radclock_fp.vcount;
++	if (countdiff & ~((1ll << (radclock_fp.countdiff_maxbits +1)) -1))
++		printf("RADclock: warning stamp may overflow timeval at %llu!\n",
++				(long long unsigned) vcounter);
++
++	/* Add the counter delta in second to the recorded fixed point time */
++	time_f 	= radclock_fp.time_int
++			  + ((radclock_fp.phat_int * countdiff) >> (radclock_fp.phat_shift -
++			  radclock_fp.time_shift)) ;
++
++	tval.tv_sec = time_f >> radclock_fp.time_shift;
++
++	frac = (time_f - ((uint64_t)tval.tv_sec << radclock_fp.time_shift));
++	tval.tv_usec = (frac * 1000000LL)  >> radclock_fp.time_shift;
++	/* tv.tv_usec truncates at the nano-second digit, so check for next digit rounding */
++	if ( ((frac * 10000000LL) >> radclock_fp.time_shift) >= (tval.tv_usec * 10LL + 5) )
++	{
++		tval.tv_usec++;
++	}
++
++	/* Push the built timeval */
++	*time = tval;
++
++	/* XXX: If not called with BPFD_LOCK(bd), then should release the fixedpoint data
++	 * lock in here
++	 */
++}
++#endif	/* RADCLOCK */
++
++
+ /*
+  * Move the packet data from interface memory (pkt) into the
+  * store buffer.  "cpfn" is the routine called to do the actual data
+  * transfer.  bcopy is passed in to copy contiguous chunks, while
+  * bpf_mcopy is passed in to copy mbuf chains.  In the latter case,
+  * pkt is really an mbuf.
+  */
++#ifdef RADCLOCK
++static void
++catchpacket(struct bpf_d *d, u_char *pkt, u_int pktlen, u_int snaplen,
++	void (*cpfn)(const void *, void *, size_t), struct timeval *tv, vcounter_t *vcount)
++#else
+ static void
+ catchpacket(struct bpf_d *d, u_char *pkt, u_int pktlen, u_int snaplen,
+     void (*cpfn)(const void *, void *, size_t), struct timeval *tv)
++#endif
+ {
+ 	struct bpf_hdr *hp;
+ 	int totlen, curlen;
+ 	int hdrlen = d->bd_bif->bif_hdrlen;
+ 	int do_wakeup = 0;
+ 
+ 	BPFD_LOCK_ASSERT(d);
+ 	/*
+ 	 * Figure out how many bytes to move.  If the packet is
+ 	 * greater or equal to the snapshot length, transfer that
+@@ -1530,21 +1777,64 @@ catchpacket(struct bpf_d *d, u_char *pkt
+ 		 * Immediate mode is set, or the read timeout has
+ 		 * already expired during a select call.  A packet
+ 		 * arrived, so the reader should be woken up.
+ 		 */
+ 		do_wakeup = 1;
+ 
+ 	/*
+ 	 * Append the bpf header.
+ 	 */
+ 	hp = (struct bpf_hdr *)(d->bd_sbuf + curlen);
++
++	#ifdef RADCLOCK
++	if (vcount == NULL) {
++		/* We have been called by a non-RADCLOCK function so
++		 * default to normal behaviour. Note: receiving side will
++		 * never passes in here because of BPF_MTAP_RADCLOCK_RCV().
++		 */
++		hp->bh_tstamp = *tv;
++		hp->vcount_stamp = 0;
++	}
++	else {
++		/* We have been called with valid tv and tc values
++		 * from a RADCLOCK aware function
++		 */
++		hp->vcount_stamp = *vcount;  // In all cases, store the vcount read previously
++		switch (d->radclock_tsmode) {
++			case RADCLOCK_TSMODE_SYSCLOCK:
++				/* Return SYSCLOCK timeval as normal.
++				 * Note: any incoming packet of non-RADCLOCK application
++				 * should be seen here (tcpdump for example) since default.
++				 */
++				hp->bh_tstamp = *tv;
++				break;
++			case RADCLOCK_TSMODE_RADCLOCK:
++				/* Return timeval based on RADCLOCK clock.
++				 * Use fixed point arithmetic
++				 */
++				radclock_fill_timeval( *vcount, &(hp->bh_tstamp) );
++				break;
++			case RADCLOCK_TSMODE_FAIRCOMPARE:
++				/* Copy the timeval read back to back to the vcounter earlier, there
++				 * isn't much difference with NORMAL mode anymore except in the
++				 * receive direction
++				 */
++				hp->bh_tstamp = *tv;
++				break;
++			default:
++				panic("Unknown RADclock timestamping mode");
++		}
++	}
++	#else
+ 	hp->bh_tstamp = *tv;
++	#endif  /* end of RADCLOCK modification */
++
+ 	hp->bh_datalen = pktlen;
+ 	hp->bh_hdrlen = hdrlen;
+ 	/*
+ 	 * Copy the packet data into the store buffer and update its length.
+ 	 */
+ 	(*cpfn)(pkt, (u_char *)hp + hdrlen, (hp->bh_caplen = totlen - hdrlen));
+ 	d->bd_slen = curlen + totlen;
+ 
+ 	if (do_wakeup)
+ 		bpf_wakeup(d);
+Index: 7.4.0/sys/net/bpf.h
+===================================================================
+--- 7.4.0.orig/sys/net/bpf.h	2012-04-18 00:30:51.000000000 +1000
++++ 7.4.0/sys/net/bpf.h	2012-04-18 01:37:45.000000000 +1000
+@@ -30,23 +30,77 @@
+  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+  * SUCH DAMAGE.
+  *
+  *      @(#)bpf.h	8.1 (Berkeley) 6/10/93
+  *	@(#)bpf.h	1.34 (LBL)     6/16/96
+  *
+  * $FreeBSD: release/7.4.0/sys/net/bpf.h 181783 2008-08-16 11:48:10Z dwmalone $
+  */
+ 
++
++#include "opt_radclock.h"
++
+ #ifndef _NET_BPF_H_
+ #define _NET_BPF_H_
+ 
++
++#ifdef RADCLOCK
++/* RADclock synchronisation structure.
++ * TODO: this should not be defined in here and not stored on the BPF device
++ * but historically, we use the BPF device to set/get timestamping modes and
++ * RADclock data
++ */
++
++#include <sys/time.h>
++
++struct radclock_data {
++	double 		phat;
++	double 		phat_err;
++	double 		phat_local;
++	double 		phat_local_err;
++	long double	ca;
++	double 		ca_err;
++	uint32_t	status;
++	vcounter_t	last_changed;
++	vcounter_t	valid_till;
++};
++
++struct radclock_fixedpoint
++{
++	/* phat as an int shifted phat_shift to the left */
++	uint64_t phat_int;
++	/* Record of last time update from synchronization algorithm as an int */
++	uint64_t time_int;
++	/* The counter value to convert in seconds */
++	vcounter_t vcount;
++	/* the shift amount for phat_int */
++	uint8_t phat_shift;
++	/* the shift amount for time_int */
++	uint8_t time_shift;
++	/* Warn if stamp is over this many bits */
++	uint8_t countdiff_maxbits;
++};
++
++/* RADclock timestamping modes */
++#define RADCLOCK_TSMODE_SYSCLOCK		0x0001  /* return SW timeval (normal
++												 *  behavior) and raw vcounter
++												 */
++#define RADCLOCK_TSMODE_RADCLOCK		0x0002  /* return timeval based on
++												 * RADclock and raw vcounter
++												 */
++#define RADCLOCK_TSMODE_FAIRCOMPARE 	0x0003  /* return SW timeval and raw
++												 * vcounter read back to back
++												 */
++#endif /* RADCLOCK */
++
++
+ /* BSD style release date */
+ #define	BPF_RELEASE 199606
+ 
+ typedef	int32_t	  bpf_int32;
+ typedef	u_int32_t bpf_u_int32;
+ 
+ /*
+  * Alignment macros.  BPF_WORDALIGN rounds up to the next
+  * even multiple of BPF_ALIGNMENT.
+  */
+@@ -115,47 +169,90 @@ struct bpf_version {
+ #define	BIOCGDLTLIST	_IOWR('B',121, struct bpf_dltlist)
+ #define	BIOCLOCK	_IO('B', 122)
+ #define	BIOCSETWF	_IOW('B',123, struct bpf_program)
+ #define	BIOCFEEDBACK	_IOW('B',124, u_int)
+ #define	BIOCSETFNR	_IOW('B',130, struct bpf_program)
+ 
+ /* Obsolete */
+ #define	BIOCGSEESENT	BIOCGDIRECTION
+ #define	BIOCSSEESENT	BIOCSDIRECTION
+ 
++#ifdef RADCLOCK
++/* Set / Get Radclock data */
++#define BIOCSRADCLOCKDATA	_IOW('B',125, struct radclock_data)
++#define BIOCGRADCLOCKDATA	_IOR('B',126, struct radclock_data)
++/* Set / Get timestamping mode for this device) */
++#define BIOCSRADCLOCKTSMODE	_IOW('B',127, int8_t)
++#define BIOCGRADCLOCKTSMODE	_IOR('B',128, int8_t)
++/* Set RADclock fixedpoint data */
++#define BIOCSRADCLOCKFIXED	_IOW('B',129, struct radclock_fixedpoint)
++#endif /* RADCLOCK */
++
+ /* Packet directions */
+ enum bpf_direction {
+ 	BPF_D_IN,	/* See incoming packets */
+ 	BPF_D_INOUT,	/* See incoming and outgoing packets */
+ 	BPF_D_OUT	/* See outgoing packets */
+ };
+ 
++#ifdef RADCLOCK
++/*
++ * Structure prepended to each packet.
++ * For the RADclock, need to embed the raw vcounter value with
++ * each packet
++ */
++struct bpf_hdr {
++	struct timeval	bh_tstamp;	/* time stamp */
++	bpf_u_int32	bh_caplen;	/* length of captured portion */
++	bpf_u_int32	bh_datalen;	/* original length of packet */
++	u_short		bh_hdrlen;	/* length of bpf header (this struct
++					   plus alignment padding) */
++	u_short		padding;		/* padding to align the fields */
++	vcounter_t	vcount_stamp;	/* raw virtual timecounter timestamp for this packet */
++};
++/*
++ * Because the structure above is not a multiple of 4 bytes, some compilers
++ * will insist on inserting padding; hence, sizeof(struct bpf_hdr) won't work.
++ * Only the kernel needs to know about it; applications use bh_hdrlen.
++ * The value of bpf_if->bif_hdrlen should then be ok, when set by bpfattach2
++ * Force the value to avoid problems with padding.
++ */
++#ifdef _KERNEL
++#define	SIZEOF_BPF_HDR	(sizeof(struct bpf_hdr) <= 28 ? 28 : \
++    sizeof(struct bpf_hdr))
++#endif
++
++#else   /* No RADCLOCK */
+ /*
+  * Structure prepended to each packet.
+  */
+ struct bpf_hdr {
+ 	struct timeval	bh_tstamp;	/* time stamp */
+ 	bpf_u_int32	bh_caplen;	/* length of captured portion */
+ 	bpf_u_int32	bh_datalen;	/* original length of packet */
+ 	u_short		bh_hdrlen;	/* length of bpf header (this struct
+ 					   plus alignment padding) */
+ };
+ /*
+  * Because the structure above is not a multiple of 4 bytes, some compilers
+  * will insist on inserting padding; hence, sizeof(struct bpf_hdr) won't work.
+  * Only the kernel needs to know about it; applications use bh_hdrlen.
+  */
+ #ifdef _KERNEL
+ #define	SIZEOF_BPF_HDR	(sizeof(struct bpf_hdr) <= 20 ? 18 : \
+     sizeof(struct bpf_hdr))
+ #endif
+ 
++#endif /* RADCLOCK */
++
++
++
+ /*
+  * Data-link level type codes.
+  */
+ #define DLT_NULL	0	/* BSD loopback encapsulation */
+ #define DLT_EN10MB	1	/* Ethernet (10Mb) */
+ #define DLT_EN3MB	2	/* Experimental Ethernet (3Mb) */
+ #define DLT_AX25	3	/* Amateur Radio AX.25 */
+ #define DLT_PRONET	4	/* Proteon ProNET Token Ring */
+ #define DLT_CHAOS	5	/* Chaos */
+ #define DLT_IEEE802	6	/* IEEE 802 Networks */
+@@ -770,37 +867,56 @@ struct bpf_if {
+ 	LIST_HEAD(, bpf_d)	bif_dlist;	/* descriptor list */
+ 	u_int bif_dlt;				/* link layer type */
+ 	u_int bif_hdrlen;		/* length of header (with padding) */
+ 	struct ifnet *bif_ifp;		/* corresponding interface */
+ 	struct mtx	bif_mtx;	/* mutex for interface */
+ };
+ 
+ int	 bpf_validate(const struct bpf_insn *, int);
+ void	 bpf_tap(struct bpf_if *, u_char *, u_int);
+ void	 bpf_mtap(struct bpf_if *, struct mbuf *);
++#ifdef RADCLOCK
++void	 bpf_mtap_radclock_rcv(struct bpf_if *, struct mbuf *, struct timeval *,
++		uint64_t *);
++#endif /* RADCLOCK */
+ void	 bpf_mtap2(struct bpf_if *, void *, u_int, struct mbuf *);
+ void	 bpfattach(struct ifnet *, u_int, u_int);
+ void	 bpfattach2(struct ifnet *, u_int, u_int, struct bpf_if **);
+ void	 bpfdetach(struct ifnet *);
+ 
+ void	 bpfilterattach(int);
+ u_int	 bpf_filter(const struct bpf_insn *, u_char *, u_int, u_int);
+ 
+ static __inline int
+ bpf_peers_present(struct bpf_if *bpf)
+ {
+ 
+ 	if (!LIST_EMPTY(&bpf->bif_dlist))
+ 		return (1);
+ 	return (0);
+ }
+ 
++#ifdef RADCLOCK
++/* The receiving direction is common to all NIC drivers.
++ * This macro is called from ether_input() in if_ethersubr.c
++ * This macro is needed because we create the timestamps in ether_input()
++ * and the tap function prototype is then different.
++ * In the sending direction, the function prototype is the same.
++ */
++#define	BPF_MTAP_RADCLOCK_RCV(_ifp,_m,tv,vcount) do {	\
++	if (bpf_peers_present((_ifp)->if_bpf)) {			\
++		M_ASSERTVALID(_m);				 				\
++		bpf_mtap_radclock_rcv((_ifp)->if_bpf, (_m), tv, vcount);	\
++	}	\
++} while (0)
++#endif    /* RADCLOCK */
++
+ #define	BPF_TAP(_ifp,_pkt,_pktlen) do {				\
+ 	if (bpf_peers_present((_ifp)->if_bpf))			\
+ 		bpf_tap((_ifp)->if_bpf, (_pkt), (_pktlen));	\
+ } while (0)
+ #define	BPF_MTAP(_ifp,_m) do {					\
+ 	if (bpf_peers_present((_ifp)->if_bpf)) {		\
+ 		M_ASSERTVALID(_m);				\
+ 		bpf_mtap((_ifp)->if_bpf, (_m));			\
+ 	}							\
+ } while (0)
+Index: 7.4.0/sys/net/bpfdesc.h
+===================================================================
+--- 7.4.0.orig/sys/net/bpfdesc.h	2012-04-18 00:30:51.000000000 +1000
++++ 7.4.0/sys/net/bpfdesc.h	2012-04-18 01:36:07.000000000 +1000
+@@ -84,20 +84,23 @@ struct bpf_d {
+ 	int		bd_async;	/* non-zero if packet reception should generate signal */
+ 	int		bd_sig;		/* signal to send upon packet reception */
+ 	struct sigio *	bd_sigio;	/* information for async I/O */
+ 	struct selinfo	bd_sel;		/* bsd select info */
+ 	struct mtx	bd_mtx;		/* mutex for this descriptor */
+ 	struct callout	bd_callout;	/* for BPF timeouts with select */
+ 	struct label	*bd_label;	/* MAC label for descriptor */
+ 	u_long		bd_fcount;	/* number of packets which matched filter */
+ 	pid_t		bd_pid;		/* PID which created descriptor */
+ 	int		bd_locked;	/* true if descriptor is locked */
++#ifdef RADCLOCK
++	int8_t	radclock_tsmode;	/* Timestamping mode for the RADclock */
++#endif /* RADCLOCK */
+ };
+ 
+ /* Values for bd_state */
+ #define BPF_IDLE	0		/* no select in progress */
+ #define BPF_WAITING	1		/* waiting for read timeout in select */
+ #define BPF_TIMED_OUT	2		/* read timeout has expired in select */
+ 
+ #define BPFD_LOCK(bd)		mtx_lock(&(bd)->bd_mtx)
+ #define BPFD_UNLOCK(bd)		mtx_unlock(&(bd)->bd_mtx)
+ #define BPFD_LOCK_ASSERT(bd)	mtx_assert(&(bd)->bd_mtx, MA_OWNED)
+Index: 7.4.0/sys/net/if_ethersubr.c
+===================================================================
+--- 7.4.0.orig/sys/net/if_ethersubr.c	2012-04-18 00:30:51.000000000 +1000
++++ 7.4.0/sys/net/if_ethersubr.c	2012-04-18 01:36:07.000000000 +1000
+@@ -30,31 +30,35 @@
+  * $FreeBSD: release/7.4.0/sys/net/if_ethersubr.c 181001 2008-07-30 17:27:10Z rwatson $
+  */
+ 
+ #include "opt_atalk.h"
+ #include "opt_inet.h"
+ #include "opt_inet6.h"
+ #include "opt_ipx.h"
+ #include "opt_mac.h"
+ #include "opt_netgraph.h"
+ #include "opt_carp.h"
++#include "opt_radclock.h"
+ 
+ #include <sys/param.h>
+ #include <sys/systm.h>
+ #include <sys/kernel.h>
+ #include <sys/malloc.h>
+ #include <sys/module.h>
+ #include <sys/mbuf.h>
+ #include <sys/random.h>
+ #include <sys/socket.h>
+ #include <sys/sockio.h>
+ #include <sys/sysctl.h>
++#ifdef RADCLOCK
++#include <sys/time.h>
++#endif
+ 
+ #include <net/if.h>
+ #include <net/if_arp.h>
+ #include <net/netisr.h>
+ #include <net/route.h>
+ #include <net/if_llc.h>
+ #include <net/if_dl.h>
+ #include <net/if_types.h>
+ #include <net/bpf.h>
+ #include <net/ethernet.h>
+@@ -505,20 +509,28 @@ ether_ipfw_chk(struct mbuf **m0, struct 
+ /*
+  * Process a received Ethernet packet; the packet is in the
+  * mbuf chain m with the ethernet header at the front.
+  */
+ static void
+ ether_input(struct ifnet *ifp, struct mbuf *m)
+ {
+ 	struct ether_header *eh;
+ 	u_short etype;
+ 
++#ifdef RADCLOCK
++	vcounter_t vcount;
++	struct timeval tv;
++
++	vcount = read_vcounter();	/* Read the vcounter as early as possible */
++	microtime(&tv);
++#endif  /* RADCLOCK */
++
+ 	if ((ifp->if_flags & IFF_UP) == 0) {
+ 		m_freem(m);
+ 		return;
+ 	}
+ #ifdef DIAGNOSTIC
+ 	if ((ifp->if_drv_flags & IFF_DRV_RUNNING) == 0) {
+ 		if_printf(ifp, "discard frame at !IFF_DRV_RUNNING\n");
+ 		m_freem(m);
+ 		return;
+ 	}
+@@ -569,21 +581,34 @@ ether_input(struct ifnet *ifp, struct mb
+ 	/*
+ 	 * Tag the mbuf with an appropriate MAC label before any other
+ 	 * consumers can get to it.
+ 	 */
+ 	mac_create_mbuf_from_ifnet(ifp, m);
+ #endif
+ 
+ 	/*
+ 	 * Give bpf a chance at the packet.
+ 	 */
++/* XXX TODO XXX
++ * jrid - July 22nd 2008
++ * This new ETHER_BPF_MTAP macro in 6.3 takes vlans into account.
++ * We should modify the underlying function to timestamp packets early as in
++ * our BPF_MTAP_RADCLOCK_RCV macro while supporting vlans instead of bypassing it.
++ * Just do not have time right now ...
++ * NOTE: it's ok in the sending direction since it only delays the timestamp
++ * creation, so that is just fine like that.
++ */
++#ifdef RADCLOCK
++	BPF_MTAP_RADCLOCK_RCV(ifp, m, &tv, &vcount);
++#else
+ 	ETHER_BPF_MTAP(ifp, m);
++#endif /* RADCLOCK */
+ 
+ 	/*
+ 	 * If the CRC is still on the packet, trim it off. We do this once
+ 	 * and once only in case we are re-entered. Nothing else on the
+ 	 * Ethernet receive path expects to see the FCS.
+ 	 */
+ 	if (m->m_flags & M_HASFCS) {
+ 		m_adj(m, -ETHER_CRC_LEN);
+ 		m->m_flags &= ~M_HASFCS;
+ 	}

@@ -1,0 +1,194 @@
+
+
+---
+ sys/amd64/amd64/tsc.c |   21 +++++++++++++++++++++
+ sys/i386/i386/tsc.c   |   21 +++++++++++++++++++++
+ sys/sys/timetc.h      |   10 ++++++++++
+ 3 files changed, 52 insertions(+)
+
+Index: 7.4.0/sys/amd64/amd64/tsc.c
+===================================================================
+--- 7.4.0.orig/sys/amd64/amd64/tsc.c	2012-04-02 20:52:36.000000000 +1000
++++ 7.4.0/sys/amd64/amd64/tsc.c	2012-04-11 23:12:23.000000000 +1000
+@@ -67,28 +67,41 @@ SYSCTL_INT(_kern_timecounter, OID_AUTO, 
+ TUNABLE_INT("kern.timecounter.smp_tsc", &smp_tsc);
+ #endif
+ 
+ static void tsc_freq_changed(void *arg, const struct cf_level *level,
+     int status);
+ static void tsc_freq_changing(void *arg, const struct cf_level *level,
+     int *status);
+ static	unsigned tsc_get_timecount(struct timecounter *tc);
+ static void tsc_levels_changed(void *arg, int unit);
+ 
++#ifdef RADCLOCK
++static uint64_t tsc_get_timecount_64(struct timecounter *tc);
++static struct timecounter tsc_timecounter = {
++	.tc_get_timecount = tsc_get_timecount,
++	.tc_poll_pps = 0,
++	.tc_counter_mask = ~0u,
++	.tc_frequency = 0,
++	.tc_name = "TSC",
++	.tc_quality = 800,
++	.tc_get_timecount_64 = &tsc_get_timecount_64
++};
++#else
+ static struct timecounter tsc_timecounter = {
+ 	tsc_get_timecount,	/* get_timecount */
+ 	0,			/* no poll_pps */
+ 	~0u,			/* counter_mask */
+ 	0,			/* frequency */
+ 	"TSC",			/* name */
+ 	800,			/* quality (adjusted in code) */
+ };
++#endif
+ 
+ void
+ init_TSC(void)
+ {
+ 	u_int64_t tscval[2];
+ 
+ 	if (bootverbose)
+ 	        printf("Calibrating TSC clock ... ");
+ 
+ 	tscval[0] = rdtsc();
+@@ -230,10 +243,18 @@ sysctl_machdep_tsc_freq(SYSCTL_HANDLER_A
+ }
+ 
+ SYSCTL_PROC(_machdep, OID_AUTO, tsc_freq, CTLTYPE_QUAD | CTLFLAG_RW,
+     0, sizeof(u_int), sysctl_machdep_tsc_freq, "QU", "");
+ 
+ static unsigned
+ tsc_get_timecount(struct timecounter *tc)
+ {
+ 	return (rdtsc());
+ }
++
++#ifdef RADCLOCK
++static uint64_t
++tsc_get_timecount_64(struct timecounter *tc)
++{
++	return (rdtsc());
++}
++#endif
+Index: 7.4.0/sys/i386/i386/tsc.c
+===================================================================
+--- 7.4.0.orig/sys/i386/i386/tsc.c	2012-04-02 20:52:25.000000000 +1000
++++ 7.4.0/sys/i386/i386/tsc.c	2012-04-11 23:12:23.000000000 +1000
+@@ -63,28 +63,41 @@ SYSCTL_INT(_kern_timecounter, OID_AUTO, 
+ TUNABLE_INT("kern.timecounter.smp_tsc", &smp_tsc);
+ #endif
+ 
+ static void tsc_freq_changed(void *arg, const struct cf_level *level,
+     int status);
+ static void tsc_freq_changing(void *arg, const struct cf_level *level,
+     int *status);
+ static	unsigned tsc_get_timecount(struct timecounter *tc);
+ static void tsc_levels_changed(void *arg, int unit);
+ 
++#ifdef RADCLOCK
++static uint64_t tsc_get_timecount_64(struct timecounter *tc);
++static struct timecounter tsc_timecounter = {
++	.tc_get_timecount = tsc_get_timecount,
++	.tc_poll_pps = 0,
++	.tc_counter_mask = ~0u,
++	.tc_frequency = 0,
++	.tc_name = "TSC",
++	.tc_quality = 800,
++	.tc_get_timecount_64 = &tsc_get_timecount_64
++};
++#else
+ static struct timecounter tsc_timecounter = {
+ 	tsc_get_timecount,	/* get_timecount */
+ 	0,			/* no poll_pps */
+ 	~0u,			/* counter_mask */
+ 	0,			/* frequency */
+ 	"TSC",			/* name */
+ 	800,			/* quality (adjusted in code) */
+ };
++#endif
+ 
+ void
+ init_TSC(void)
+ {
+ 	u_int64_t tscval[2];
+ 
+ 	if (cpu_feature & CPUID_TSC)
+ 		tsc_present = 1;
+ 	else
+ 		tsc_present = 0;
+@@ -249,10 +262,18 @@ sysctl_machdep_tsc_freq(SYSCTL_HANDLER_A
+ }
+ 
+ SYSCTL_PROC(_machdep, OID_AUTO, tsc_freq, CTLTYPE_QUAD | CTLFLAG_RW,
+     0, sizeof(u_int), sysctl_machdep_tsc_freq, "QU", "");
+ 
+ static unsigned
+ tsc_get_timecount(struct timecounter *tc)
+ {
+ 	return (rdtsc());
+ }
++
++#ifdef RADCLOCK
++static uint64_t
++tsc_get_timecount_64(struct timecounter *tc)
++{
++	return (rdtsc());
++}
++#endif
+Index: 7.4.0/sys/sys/timetc.h
+===================================================================
+--- 7.4.0.orig/sys/sys/timetc.h	2012-04-02 20:52:38.000000000 +1000
++++ 7.4.0/sys/sys/timetc.h	2012-04-11 23:12:23.000000000 +1000
+@@ -9,20 +9,22 @@
+  * $FreeBSD: release/7.4.0/sys/sys/timetc.h 118987 2003-08-16 08:23:53Z phk $
+  */
+ 
+ #ifndef _SYS_TIMETC_H_
+ #define	_SYS_TIMETC_H_
+ 
+ #ifndef _KERNEL
+ #error "no user-serviceable parts inside"
+ #endif
+ 
++#include "opt_radclock.h"
++
+ /*-
+  * `struct timecounter' is the interface between the hardware which implements
+  * a timecounter and the MI code which uses this to keep track of time.
+  *
+  * A timecounter is a binary counter which has two properties:
+  *    * it runs at a fixed, known frequency.
+  *    * it has sufficient bits to not roll over in less than approximately
+  *      max(2 msec, 2/HZ seconds).  (The value 2 here is really 1 + delta,
+  *      for some indeterminate value of delta.)
+  */
+@@ -55,20 +57,28 @@ struct timecounter {
+ 		/*
+ 		 * Used to determine if this timecounter is better than
+ 		 * another timecounter higher means better.  Negative
+ 		 * means "only use at explicit request".
+ 		 */
+ 
+ 	void			*tc_priv;
+ 		/* Pointer to the timecounter's private parts. */
+ 	struct timecounter	*tc_next;
+ 		/* Pointer to the next timecounter. */
++#ifdef RADCLOCK
++	uint64_t (*tc_get_timecount_64) (struct timecounter *);
++		/*
++		 * This function reads the counter and return a 64 bit unsigned int.
++		 * It is used for the passthrough mode, required by feed-forward
++		 * clocks in a virtual system (eg. Xen)
++		 */
++#endif
+ };
+ 
+ extern struct timecounter *timecounter;
+ 
+ u_int64_t tc_getfrequency(void);
+ void	tc_init(struct timecounter *tc);
+ void	tc_setclock(struct timespec *ts);
+ void	tc_ticktock(void);
+ 
+ #ifdef SYSCTL_DECL
