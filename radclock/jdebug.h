@@ -41,17 +41,24 @@
 #include <sys/types.h>
 #include <sys/time.h>
 #include <sys/resource.h>
+
+#include <netinet/in.h>
+
 #include <pthread.h>
 #include "radclock-private.h"
+#include "radclock_daemon.h"
 #include "pthread_mgr.h"
 
-extern struct radclock *clock_handle;
+extern struct radclock_handle *clock_handle;
 
 static inline char *
 pthread_id()
 {
 	pthread_t pth_id;
 	pth_id = pthread_self();
+
+	if (!clock_handle)
+		return "Thread Undefined";
 
 	if (clock_handle->threads[PTH_DATA_PROC] == pth_id)
 	   return "Thread DATA";	
