@@ -43,7 +43,9 @@
 #include "jdebug.h"
 
 
-#define SO_RCV_TIMEOUT 800000
+/* Inflate timeout and do not make several attempts to contact slow server */ 
+//#define SO_RCV_TIMEOUT 800000
+#define SO_RCV_TIMEOUT 995000
 
 // TODO: Ok, there are issues on how things should be implemented in here. A
 // clean way would be to have the functions ops stored in the client_data struct of
@@ -271,11 +273,19 @@ int ntp_client(struct radclock * clock_handle)
 	 * exceeds the poll period or we end up in unnecessary complex situation. Of
 	 * course it doesn't help us in case RTT > RAD_MINPOLL.
 	 */ 
+	/*
 	if ( attempt > adjusted_period / (SO_RCV_TIMEOUT * 1e-6) )
 	{
 		attempt = MAX(1, (int) adjusted_period / (SO_RCV_TIMEOUT * 1e-6));	
-	}
 
+	}
+	*/
+
+	/* April 12th, 2012
+	 * This version of RADclock does not have the ability to manage out of order
+	 * packets correctly. Inflate socket timeout and make only a single attempt
+	 */
+	attempt = 1;
 
 	/* Timer will hiccup in the 1-2 ms range if reset */
 	assess_ptimer(ntpclient_timerid, adjusted_period);	
