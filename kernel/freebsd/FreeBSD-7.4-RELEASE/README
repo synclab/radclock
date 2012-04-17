@@ -1,0 +1,12 @@
+
+FreeBSD 7.4-RELEASE - kernel patching instructions
+
+The kernel patches come with a series file to apply patches using quilt.
+
+Another options is to use the patch command as follows (assuming sources have
+been installed in /usr/src):
+
+cd /usr/src
+patch -Np1 < PATH/TO/radclock/kernel-patches/freebsd/FreeBSD-7.4-RELEASE/*.patch
+
+

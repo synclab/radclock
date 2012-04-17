@@ -1,0 +1,69 @@
+---
+ sys/amd64/conf/RADCLOCK |    7 +++++++
+ sys/conf/options.amd64  |    4 ++++
+ sys/conf/options.i386   |    4 ++++
+ sys/i386/conf/RADCLOCK  |    7 +++++++
+ 4 files changed, 22 insertions(+)
+
+Index: 7.4.0/sys/amd64/conf/RADCLOCK
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ 7.4.0/sys/amd64/conf/RADCLOCK	2012-04-11 22:55:42.000000000 +1000
+@@ -0,0 +1,7 @@
++# RADCLOCK -- Generic kernel configuration file for FreeBSD/amd64 RADCLOCK
++#
++
++include 	GENERIC
++ident 		RADCLOCK
++
++options 	RADCLOCK
+Index: 7.4.0/sys/conf/options.amd64
+===================================================================
+--- 7.4.0.orig/sys/conf/options.amd64	2012-04-02 20:51:47.000000000 +1000
++++ 7.4.0/sys/conf/options.amd64	2012-04-11 22:55:42.000000000 +1000
+@@ -61,10 +61,14 @@ PSM_HOOKRESUME		opt_psm.h
+ PSM_RESETAFTERSUSPEND	opt_psm.h
+ PSM_DEBUG		opt_psm.h
+ DEV_ATPIC		opt_atpic.h
+ 
+ # Debugging
+ STOP_NMI		opt_cpu.h
+ KDTRACE_FRAME		opt_kdtrace.h
+ 
+ # BPF just-in-time compiler
+ BPF_JITTER		opt_bpf.h
++
++# RADclock support
++RADCLOCK		opt_radclock.h
++
+Index: 7.4.0/sys/conf/options.i386
+===================================================================
+--- 7.4.0.orig/sys/conf/options.i386	2012-04-02 20:51:47.000000000 +1000
++++ 7.4.0/sys/conf/options.i386	2012-04-11 22:55:42.000000000 +1000
+@@ -142,10 +142,14 @@ I4B_SMP_WORKAROUND	opt_i4b.h
+ DEV_APIC		opt_apic.h
+ DEV_NPX			opt_npx.h
+ ASR_COMPAT		opt_asr.h
+ 
+ # Debugging
+ NPX_DEBUG		opt_npx.h
+ STOP_NMI		opt_cpu.h
+ 
+ # BPF just-in-time compiler
+ BPF_JITTER		opt_bpf.h
++
++# RADclock support
++RADCLOCK		opt_radclock.h
++
+Index: 7.4.0/sys/i386/conf/RADCLOCK
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ 7.4.0/sys/i386/conf/RADCLOCK	2012-04-11 22:55:42.000000000 +1000
+@@ -0,0 +1,7 @@
++# RADCLOCK -- Generic kernel configuration file for FreeBSD/amd64 RADCLOCK
++#
++
++include 	GENERIC
++ident 		RADCLOCK
++
++options 	RADCLOCK
