@@ -53,15 +53,13 @@ dist-hook:
 	mkdir $(distdir)/kernel-patches/freebsd
 	for d in `ls $(srcdir)/kernel/freebsd`; do \
 		mkdir $(distdir)/kernel-patches/freebsd/$$d; \
-		cp -p $(srcdir)/kernel/freebsd/$$d/*.patch $(distdir)/kernel-patches/freebsd/$$d/ ; \
+		cp -p $(srcdir)/kernel/freebsd/$$d/* $(distdir)/kernel-patches/freebsd/$$d/ ; \
 	done
 	mkdir $(distdir)/kernel-patches/linux
 	for d in `ls $(srcdir)/kernel/linux`; do \
 		mkdir $(distdir)/kernel-patches/linux/$$d; \
-		cp -p $(srcdir)/kernel/linux/$$d/*.patch $(distdir)/kernel-patches/linux/$$d/ ; \
+		cp $(srcdir)/kernel/linux/$$d/* $(distdir)/kernel-patches/linux/$$d/ ; \
 	done
-	@echo "Cleaning release from svn infos"
-	find $(distdir) -type d -name ".svn" | xargs rm -rf
 	@echo "Pushing version number in packaging scripts" 
 	sed -i -e 's/_RADCLOCK_VERSION_/$(PACKAGE_VERSION)/' $(distdir)/debian/changelog
 	sed -i -e 's/_RADCLOCK_VERSION_/$(PACKAGE_VERSION)/' $(distdir)/redhat/radclock.spec
