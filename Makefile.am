@@ -62,12 +62,12 @@ dist-hook:
 	mkdir $(distdir)/kernel-patches/freebsd
 	for d in `ls $(srcdir)/kernel/freebsd`; do \
 		mkdir $(distdir)/kernel-patches/freebsd/$$d; \
-		cp -p $(srcdir)/kernel/freebsd/$$d/*.patch $(distdir)/kernel-patches/freebsd/$$d/ ; \
+		cp $(srcdir)/kernel/freebsd/$$d/* $(distdir)/kernel-patches/freebsd/$$d/ ; \
 	done
 	mkdir $(distdir)/kernel-patches/linux
 	for d in `ls $(srcdir)/kernel/linux`; do \
 		mkdir $(distdir)/kernel-patches/linux/$$d; \
-		cp -p $(srcdir)/kernel/linux/$$d/*.patch $(distdir)/kernel-patches/linux/$$d/ ; \
+		cp $(srcdir)/kernel/linux/$$d/* $(distdir)/kernel-patches/linux/$$d/ ; \
 	done
 	@echo "Pushing version number in packaging scripts" 
 	sed -i -e 's/_RADCLOCK_VERSION_/$(PACKAGE_VERSION)/' $(distdir)/debian/changelog
