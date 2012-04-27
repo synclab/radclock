@@ -53,10 +53,10 @@ AC_CONFIG_FILES([Makefile libradclock/Makefile radclock/Makefile
 				 examples/Makefile man/Makefile tests/Makefile])
 
 dnl Conditional for the autotools that are not shipped away 
-if test -d autotools; then
-	AM_CONDITIONAL([HAVE_AUTOTOOLS_DIR], [test 1 = 1])
+if test -e version.sh; then
+	AM_CONDITIONAL([IS_UPSTREAM], [test 1 = 1])
 else
-	AM_CONDITIONAL([HAVE_AUTOTOOLS_DIR], [test 0 = 1])
+	AM_CONDITIONAL([IS_UPSTREAM], [test 0 = 1])
 fi
 
 

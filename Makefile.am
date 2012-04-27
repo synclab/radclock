@@ -51,9 +51,8 @@ cscope-clean:
 
 
 
-if HAVE_AUTOTOOLS_DIR
+if IS_UPSTREAM
 dist-hook:
-	rm $(distdir)/radclock/sync_bidir.c.clean
 	@echo "Copying the python module and wall clock into the tarball"
 	cp $(srcdir)/python-gui/tscclock_wallclock.py $(distdir)/python-module/
 	cp -R $(srcdir)/python-gui/img $(distdir)/python-module/
@@ -81,7 +80,7 @@ dist-hook:
 	@echo "* Things you should check:"
 	@echo "*   Package name : $(PACKAGE_NAME)"
 	@echo "*   Package version : $(PACKAGE_VERSION)"
-	@echo "*   Did you tag the SVN repository?"
+	@echo "*   Did you tag the git repository?"
 	@echo "*   Did you run make distcheck?"
 	@echo "*   Are the kernel patches up-to-date?"
 	@echo "*   Are the kernel patches set to the right version?"
