@@ -88,11 +88,13 @@ open_output_stamp(struct radclock_handle *handle)
 	} else {
 		/* TODO: turn off buffering? */
 		setvbuf(handle->stampout_fd, (char *)NULL, _IONBF, 0);
-		fprintf(handle->stampout_fd, "%% column 1 - Ta [vcount]\n");
-		fprintf(handle->stampout_fd, "%% column 2 - Tb [sec]\n");
-		fprintf(handle->stampout_fd, "%% column 3 - Te [sec]\n");
-		fprintf(handle->stampout_fd, "%% column 4 - Tf [vcount]\n");
-		fprintf(handle->stampout_fd, "%% column 5 - OUT src port\n");
+		fprintf(handle->stampout_fd, "%% BEGIN_HEADER\n");
+		fprintf(handle->stampout_fd, "%% description: radclock local FFcounter "
+				"and NTP server stamps\n");
+		fprintf(handle->stampout_fd, "%% type: NTP_rad\n");
+		fprintf(handle->stampout_fd, "%% version: 3\n");
+		fprintf(handle->stampout_fd, "%% fields: Ta Tb Te Tf NTP_keystamp\n");
+		fprintf(handle->stampout_fd, "%% END_HEADER\n");
 	}
 	return (0);
 }
