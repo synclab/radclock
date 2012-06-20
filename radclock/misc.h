@@ -39,4 +39,28 @@ timeld_to_timeval(long double *time, struct timeval *tv)
 	tv->tv_usec = (uint32_t) (1000000*(*time - tv->tv_sec) + 0.5);
 }
 
+/* Subtract two timeval */
+static inline void
+subtract_tv(struct timeval *delta, struct timeval tv1, struct timeval tv2)
+{
+	int nsec;
+
+	/* Perform the carry */
+	if (tv1.tv_usec < tv2.tv_usec) {
+		nsec = (tv2.tv_usec - tv1.tv_usec) / 1000000 + 1;
+		tv2.tv_usec -= 1000000 * nsec;
+		tv2.tv_sec += nsec;
+	}
+	if (tv1.tv_usec - tv2.tv_usec > 1000000) {
+		nsec = (tv1.tv_usec - tv2.tv_usec) / 1000000;
+		tv2.tv_usec += 1000000 * nsec;
+		tv2.tv_sec -= nsec;
+	}
+
+	/* Subtract */
+	delta->tv_sec = tv1.tv_sec - tv2.tv_sec;
+	delta->tv_usec = tv1.tv_usec - tv2.tv_usec;
+}
+
+
 #endif

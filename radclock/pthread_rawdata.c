@@ -162,29 +162,6 @@ read_clocks(struct radclock_handle *handle, struct timeval *sys_tv,
 }
 
 
-/* Subtract two timeval */
-void
-subtract_tv(struct timeval *delta, struct timeval tv1, struct timeval tv2)
-{
-	int nsec;
-
-	/* Perform the carry */
-	if (tv1.tv_usec < tv2.tv_usec) {
-		nsec = (tv2.tv_usec - tv1.tv_usec) / 1000000 + 1;
-		tv2.tv_usec -= 1000000 * nsec;
-		tv2.tv_sec += nsec;
-	}
-	if (tv1.tv_usec - tv2.tv_usec > 1000000) {
-		nsec = (tv1.tv_usec - tv2.tv_usec) / 1000000;
-		tv2.tv_usec += 1000000 * nsec;
-		tv2.tv_sec -= nsec;
-	}
-
-	/* Subtract */
-	delta->tv_sec = tv1.tv_sec - tv2.tv_sec;
-	delta->tv_usec = tv1.tv_usec - tv2.tv_usec;
-}
-
 
 /* There are a few assumptions on the kernel capabilities, i.e. RFC1589
  * compatible. Should be fairly safe with recent systems these days.  The code
