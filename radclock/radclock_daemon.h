@@ -196,5 +196,7 @@ struct radclock_handle {
 int init_vm(struct radclock_handle *handle);
 int push_data_vm(struct radclock_handle *handle);
 int receive_loop_vm(struct radclock_handle *handle);
-
+int update_ipc_shared_memory(struct radclock_handle *handle);
+void read_clocks(struct radclock_handle *handle, struct timeval *sys_tv,
+	struct timeval *rad_tv, vcounter_t *counter);
 #endif

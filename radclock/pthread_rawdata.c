@@ -56,7 +56,7 @@
 
 #ifdef WITH_RADKERNEL_NONE
 int update_system_clock(struct radclock_handle *handle) { return (0); }
-static int update_ipc_shared_memory(struct radclock_handle *handle) { return (0); };
+int update_ipc_shared_memory(struct radclock_handle *handle) { return (0); };
 #else
 
 #ifdef WITH_RADKERNEL_FBSD
@@ -91,7 +91,7 @@ static int update_ipc_shared_memory(struct radclock_handle *handle) { return (0)
  * Update IPC shared memory segment.
  * Swap pointers and bump generation number to ensure consistency.
  */
-static int
+int
 update_ipc_shared_memory(struct radclock_handle *handle)
 {
 	struct radclock_shm *shm;
@@ -123,13 +123,16 @@ update_ipc_shared_memory(struct radclock_handle *handle)
 		generation = 1;
 	shm->gen = generation;
 
+	verbose(LOG_INFO, "Updated IPC Shared memory");
 	return (0);
 }
 
 
-
+// FIXME: used to be static and inline. But virtual machine loop needed
+// it to adjust system clock. This is a worse hack built on top of a bad
+// hack and all this mess should be cleaned up.
 /* Report back to back timestamps of RADclock and system clock */
-static inline void
+void
 read_clocks(struct radclock_handle *handle, struct timeval *sys_tv,
 	struct timeval *rad_tv, vcounter_t *counter)
 {
@@ -586,6 +589,7 @@ process_rawdata(struct radclock_handle *handle, struct bidir_peer *peer)
 		} else {
 
 // XXX Out of whack, need cleaning when make next version linux support
+// FIXME
 #ifdef WITH_RADKERNEL_FBSD
 			/* If hardware counter has changed, restart over again */
 			size_ctl = sizeof(hw_counter);
