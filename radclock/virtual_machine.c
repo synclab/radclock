@@ -26,29 +26,59 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+
+#include <netdb.h>
+
 #include <errno.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <syslog.h>
-#include <sys/stat.h>
 #include <unistd.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netdb.h>
 
 #include "../config.h"
 #include "radclock.h"
 #include "radclock-private.h"
+#include "kclock.h"
 
 #include "radclock_daemon.h"
+#include "fixedpoint.h"
 #include "verbose.h"
 #include "sync_history.h"
 #include "sync_algo.h"
 #include "pthread_mgr.h"
 #include "config_mgr.h"
+#include "misc.h"
 #include "jdebug.h"
+
+// FIXME: only needed for system clock adjustments, this is a quick hack that
+// should disappear as soon as possible
+#ifdef WITH_RADKERNEL_FBSD
+#include <sys/timex.h>
+#define NTP_ADJTIME(x)	ntp_adjtime(x)
+#endif
+
+#ifdef WITH_RADKERNEL_LINUX
+#include <sys/timex.h>
+#define NTP_ADJTIME(x)	adjtimex(x)
+#endif
+
+/* Make TIME_CONSTANT smaller for faster convergence but keep diff between nano
+ * and not nano = 4
+ */
+#ifdef STA_NANO
+#define KERN_RES	1e9
+#define TIME_CONSTANT	6
+#define TX_MODES	( MOD_OFFSET | MOD_STATUS | MOD_NANO )
+#else
+#define KERN_RES	1e6
+#define TIME_CONSTANT	2
+#define TX_MODES	( MOD_OFFSET | MOD_STATUS )
+#endif
 
 
 // Not sure where to put this at the moment or a cleaner way
@@ -360,6 +390,10 @@ push_data_vm(struct radclock_handle *handle)
 int
 receive_loop_vm(struct radclock_handle *handle)
 {
+	struct ffclock_estimate cest;
+	int sysclock_firstadj;
+
+	sysclock_firstadj = 0;
 
 	while (1) {
 
@@ -381,6 +415,125 @@ receive_loop_vm(struct radclock_handle *handle)
 			verbose(LOG_ERR, "Tried to get virtual client data, but not a "
 					"known virtual client type.");
 			break;
+		}
+
+		/*
+		 * Update IPC shared memory segment for all processes to get accurate
+		 * clock parameters
+		 */
+		if ((handle->run_mode == RADCLOCK_SYNC_LIVE) &&
+				(handle->conf->server_ipc == BOOL_ON)) {
+			if (!HAS_STATUS(handle, STARAD_UNSYNC))
+				update_ipc_shared_memory(handle);
+		}
+
+		// FIXME: get rid of most of this once Linux kernel support is rewritten
+		/*
+		 * To improve data accuracy, we kick a fixed point data update just
+		 * after we have preocessed a new stamp. Locking is handled by the
+		 * kernel so we should not have concurrency issue with the two threads
+		 * updating the data.  If we are starting (or restarting), the last
+		 * estimate in the kernel may be better than ours after the very first
+		 * stamp. Let's make sure we do not push something too stupid, too
+		 * quickly
+		 */
+		if (handle->run_mode == RADCLOCK_SYNC_LIVE &&
+				handle->conf->adjust_sysclock == BOOL_ON &&
+				!HAS_STATUS(handle, STARAD_UNSYNC)) {
+
+			if (handle->clock->kernel_version < 2) {
+				update_kernel_fixed(handle);
+				verbose(VERB_DEBUG, "Sync pthread updated fixed point data "
+						"to kernel.");
+				verbose(LOG_INFO, "Sync pthread updated fixed point data "
+						"to kernel.");
+			} else {
+
+// XXX Out of whack, need cleaning when make next version linux support
+// FIXME
+#ifdef WITH_RADKERNEL_FBSD
+				/* If hardware counter has changed, restart over again */
+				size_ctl = sizeof(hw_counter);
+				err = sysctlbyname("kern.timecounter.hardware", &hw_counter[0],
+						&size_ctl, NULL, 0);
+				if (err == -1) {
+					verbose(LOG_ERR, "Cannot find kern.timecounter.hardware "
+							"in sysctl");
+					return (-1);
+				}
+				
+				if (strcmp(handle->clock->hw_counter, hw_counter) != 0) {
+					verbose(LOG_WARNING, "Hardware counter has changed (%s -> %s)."
+						" Reinitialising radclock.", handle->clock->hw_counter,
+						hw_counter);
+					OUTPUT(handle, n_stamps) = 0;
+					peer->stamp_i = 0;
+					handle->server_data->burst = NTP_BURST;
+					strcpy(handle->clock->hw_counter, hw_counter);
+	// XXX TODO: Reinitialise the stats structure as well?
+					return (0);
+				}
+#endif
+				fill_ffclock_estimate(&handle->rad_data, &handle->rad_error, &cest);
+				set_kernel_ffclock(handle->clock, &cest);
+				verbose(VERB_DEBUG, "Feed-forward kernel clock has been set.");
+			}
+		}
+
+		// FIXME: get rid of most of this once Linux kernel support is rewritten
+		/* 
+		 * Adjust the system clock, we only pass in here if we are not
+		 * piggybacking on ntp daemon.
+		 */
+		if ((handle->run_mode == RADCLOCK_SYNC_LIVE) &&
+				(handle->conf->adjust_sysclock == BOOL_ON)) {
+			// TODO: catch errors
+			//update_system_clock(handle);
+			
+			// FIXME : ugly ugly stuff
+			// Extract bits of update_system_clock that did not need a notion of
+			// received packets	
+			// Would be better to get rid of all this
+			vcounter_t vcount;
+			struct timeval sys_tv, rad_tv, delta_tv;
+			struct timex tx;
+			double offset;
+
+			read_clocks(handle, &sys_tv, &rad_tv, &vcount);
+
+			if (sysclock_firstadj == 0) {
+				settimeofday(&rad_tv, NULL);
+				sysclock_firstadj++;
+			}
+				
+			subtract_tv(&delta_tv, rad_tv, sys_tv);
+			offset = delta_tv.tv_sec + (double)delta_tv.tv_usec / 1e6;
+
+			tx.modes = TX_MODES | MOD_MAXERROR | MOD_ESTERROR | MOD_TIMECONST;
+			tx.offset = (int32_t) (offset * KERN_RES);
+			tx.status = STA_PLL;
+			tx.maxerror = (long) ((SERVER_DATA(handle)->rootdelay/2 +
+					SERVER_DATA(handle)->rootdispersion) * 1e6);
+			/* TODO: not the right estimate !! */
+			tx.esterror = (long) (RAD_DATA(handle)->phat * 1e6);
+			
+			/* Play slightly with the rate of convergence of the PLL in the kernel. Try
+			 * to converge faster when it is further away
+			 * Also set a the status of the sysclock when it gets very good.
+			 */
+			if (offset < 0)
+				offset = -offset;
+			if (offset > 100e-6) {
+				tx.constant = TIME_CONSTANT - 2;
+				DEL_STATUS(handle, STARAD_SYSCLOCK);
+			} else {
+				ADD_STATUS(handle, STARAD_SYSCLOCK);
+				if (offset > 40e-6)
+					tx.constant = TIME_CONSTANT - 1;
+				else
+					tx.constant = TIME_CONSTANT;
+			}
+			NTP_ADJTIME(&tx);
 		}
 	}
 
