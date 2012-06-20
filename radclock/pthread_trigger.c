@@ -246,7 +246,7 @@ ntp_client(struct radclock_handle *handle)
 
 	JDEBUG
 
-	peer = handle->active_peer;
+	peer = (struct bidir_peer *)handle->active_peer;
 	starve_ratio = 1.0;
 	attempt = 3;
 	socklen = sizeof(struct sockaddr_in);
@@ -354,19 +354,23 @@ ntp_client(struct radclock_handle *handle)
 	 * may be large, the jitter is usually fairly low (< 1ms). Give an extra 5ms
 	 * to cover ugly cases. Make sure we never go below the minimum socket
 	 * timeout value, and bound upper values.
+	 * FIXME: peer should be initialised at this stage, but seems that has not
+	 * been the case
 	 */
-	timeout = peer->RTThat * RAD_DATA(handle)->phat + 5e-3;
-	if (timeout * 1e6 < MIN_SO_TIMEOUT)
-		timeout = MIN_SO_TIMEOUT * 1e-6;
-	if (timeout > adjusted_period / 3)
-		timeout = adjusted_period / 3;
+	if (peer) {
+		timeout = peer->RTThat * RAD_DATA(handle)->phat + 5e-3;
+		if (timeout * 1e6 < MIN_SO_TIMEOUT)
+			timeout = MIN_SO_TIMEOUT * 1e-6;
+		if (timeout > adjusted_period / 3)
+			timeout = adjusted_period / 3;
 
-	tv.tv_sec = (time_t)timeout;
-	tv.tv_usec = (useconds_t)(1e6 * timeout - (time_t)timeout);
-	setsockopt(CLIENT_DATA(handle)->socket, SOL_SOCKET, SO_RCVTIMEO,
-			(void *)(&tv), tvlen);
-	verbose(VERB_DEBUG, "Adjusting NTP client socket timeout to %.3f [ms]",
-			1e3 * timeout);
+		tv.tv_sec = (time_t)timeout;
+		tv.tv_usec = (useconds_t)(1e6 * timeout - (time_t)timeout);
+		setsockopt(CLIENT_DATA(handle)->socket, SOL_SOCKET, SO_RCVTIMEO,
+				(void *)(&tv), tvlen);
+		verbose(VERB_DEBUG, "Adjusting NTP client socket timeout to %.3f [ms]",
+				1e3 * timeout);
+	}
 
 	return (0);
 }
