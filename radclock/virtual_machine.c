@@ -57,12 +57,19 @@
 
 // FIXME: only needed for system clock adjustments, this is a quick hack that
 // should disappear as soon as possible
-#ifdef WITH_RADKERNEL_FBSD
-#include <sys/timex.h>
-#define NTP_ADJTIME(x)	ntp_adjtime(x)
-#endif
 
-#ifdef WITH_RADKERNEL_LINUX
+#ifdef WITH_RADKERNEL_NONE
+int init_vm(struct radclock_handle *handle) { return (-ENOENT); }
+int push_data_vm(struct radclock_handle *handle) { return (-ENOENT); }
+int receive_loop_vm(struct radclock_handle *handle) { return (-ENOENT); }
+void * thread_vm_udp_server(void *c_handle) { return (-ENOENT); }
+#else
+
+#include <sys/timex.h>
+
+#ifdef WITH_RADKERNEL_FBSD
+#define NTP_ADJTIME(x)	ntp_adjtime(x)
+#else
 #include <sys/timex.h>
 #define NTP_ADJTIME(x)	adjtimex(x)
 #endif
@@ -93,7 +100,7 @@
 
 #define VM_UDP_PORT		5001
 
-int
+static int
 init_xen(struct radclock_handle *handle)
 {
 	JDEBUG
@@ -142,7 +149,7 @@ init_xen(struct radclock_handle *handle)
 }
 
 
-int
+static int
 push_data_xen(struct radclock_handle *handle)
 {
 	JDEBUG
@@ -160,7 +167,7 @@ push_data_xen(struct radclock_handle *handle)
 }
 
 
-int
+static int
 receive_xen(struct radclock_handle *handle)
 {
 	JDEBUG
@@ -195,7 +202,7 @@ receive_xen(struct radclock_handle *handle)
 }
 
 
-int
+static int
 init_vm_udp(struct radclock_handle *handle)
 {
 	int err;
@@ -225,7 +232,7 @@ init_vm_udp(struct radclock_handle *handle)
 	return (0);
 }
 
-int
+static int
 receive_vm_udp(struct radclock_handle *handle)
 {
 	unsigned addr_len;
@@ -297,7 +304,7 @@ receive_vm_udp(struct radclock_handle *handle)
 }
 
 
-int
+static int
 push_data_vm_udp(struct radclock_handle *handle)
 {
 	struct hostent *host;
@@ -317,7 +324,7 @@ push_data_vm_udp(struct radclock_handle *handle)
 }
 
 
-int
+static int
 init_vmware(struct radclock_handle *handle)
 {
 	JDEBUG
@@ -325,7 +332,7 @@ init_vmware(struct radclock_handle *handle)
 	return (0);
 }
 
-int
+static int
 push_data_vmware(struct radclock_handle *handle)
 {
 	JDEBUG
@@ -333,7 +340,7 @@ push_data_vmware(struct radclock_handle *handle)
 	return (0);
 }
 
-int
+static int
 receive_vmware(struct radclock_handle *handle)
 {
 	JDEBUG
@@ -661,3 +668,4 @@ thread_vm_udp_server(void *c_handle)
 	pthread_exit(NULL);
 }
 
+#endif	/* WITH_RADKERNEL_NONE */
