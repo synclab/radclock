@@ -1,0 +1,156 @@
+Fix a performance degradation when computing timestamp error in
+sysclock_getsnapshot.
+
+The timestamp error computed in the kernel is made of an offset and rate error
+components. The rate error component is computed over the interval defined by 
+the current timestamp and the last feed-forward clock estimate update. If the
+feed-forward clock daemon is not running, this interval and its counter
+representation grows very large, leading to many unnecessary loops in
+ffcounter_convert_delta.
+This patches adds tracking of time error on every kernel tick by adding a new
+member to fftimehands. This implementation largely improve the performance of
+the previous implementation.
+
+
+---
+ sys/kern/kern_tc.c |   29 +++++++++++++++++++++--------
+ 1 file changed, 21 insertions(+), 8 deletions(-)
+
+Index: 9.0.0/sys/kern/kern_tc.c
+===================================================================
+--- 9.0.0.orig/sys/kern/kern_tc.c	2012-07-04 02:35:29.000000000 +1000
++++ 9.0.0/sys/kern/kern_tc.c	2012-07-04 03:12:00.000000000 +1000
+@@ -463,20 +463,21 @@ getmicrotime(struct timeval *tvp)
+ struct ffclock_estimate ffclock_estimate;
+ struct bintime ffclock_boottime;	/* Feed-forward boot time estimate. */
+ uint32_t ffclock_status;		/* Feed-forward clock status. */
+ int8_t ffclock_updated;			/* New estimates are available. */
+ struct mtx ffclock_mtx;			/* Mutex on ffclock_estimate. */
+ 
+ struct fftimehands {
+ 	struct ffclock_estimate	cest;
+ 	struct bintime		tick_time;
+ 	struct bintime		tick_time_lerp;
++	struct bintime		tick_error;
+ 	ffcounter		tick_ffcount;
+ 	uint64_t		period_lerp;
+ 	volatile uint8_t	gen;
+ 	struct fftimehands	*next;
+ };
+ 
+ #define	NUM_ELEMENTS(x) (sizeof(x) / sizeof(*x))
+ 
+ static struct fftimehands ffth[10];
+ static struct fftimehands *volatile fftimehands = ffth;
+@@ -599,20 +600,25 @@ ffclock_windup(unsigned int delta)
+ 	ffth->tick_time = fftimehands->tick_time;
+ 	ffclock_convert_delta(ffdelta, cest->period, &bt);
+ 	bintime_add(&ffth->tick_time, &bt);
+ 
+ 	ffth->tick_time_lerp = fftimehands->tick_time_lerp;
+ 	ffclock_convert_delta(ffdelta, ffth->period_lerp, &bt);
+ 	bintime_add(&ffth->tick_time_lerp, &bt);
+ 
+ 	ffth->tick_ffcount = fftimehands->tick_ffcount + ffdelta;
+ 
++	ffclock_convert_delta(ffdelta, cest->period, &bt);
++	/* 18446744073709 = int(2^64/1e12), err_bound_rate in [ps/s]. */
++	bintime_mul(&bt, cest->errb_rate * (uint64_t)18446744073709ULL);
++	bintime_add(&ffth->tick_error, &bt);
++
+ 	/*
+ 	 * Assess the status of the clock, if the last update is too old, it is
+ 	 * likely the synchronisation daemon is dead and the clock is free
+ 	 * running.
+ 	 */
+ 	if (ffclock_updated == 0) {
+ 		ffdelta = ffth->tick_ffcount - cest->update_ffcount;
+ 		ffclock_convert_delta(ffdelta, cest->period, &bt);
+ 		if (bt.sec > 2 * FFCLOCK_SKM_SCALE)
+ 			ffclock_status |= FFCLOCK_STA_UNSYNC;
+@@ -627,20 +633,28 @@ ffclock_windup(unsigned int delta)
+ 	 * synchronisation algo polling period that ensures monotonicity for the
+ 	 * clock ids requesting it.
+ 	 */
+ 	if (ffclock_updated > 0) {
+ 		bcopy(&ffclock_estimate, cest, sizeof(struct ffclock_estimate));
+ 		ffdelta = ffth->tick_ffcount - cest->update_ffcount;
+ 		ffth->tick_time = cest->update_time;
+ 		ffclock_convert_delta(ffdelta, cest->period, &bt);
+ 		bintime_add(&ffth->tick_time, &bt);
+ 
++		/* Update estimate of clock error for this tick. */
++		ffclock_convert_delta(ffdelta, cest->period, &bt);
++		/* 18446744073709 = int(2^64/1e12), err_bound_rate in [ps/s]. */
++		bintime_mul(&bt, cest->errb_rate * (uint64_t)18446744073709ULL);
++		/* 18446744073 = int(2^64 / 1e9), since err_abs in [ns]. */
++		bintime_addx(&bt, cest->errb_abs * (uint64_t)18446744073ULL);
++		ffth->tick_error = bt;
++
+ 		/* ffclock_reset sets ffclock_updated to INT8_MAX */
+ 		if (ffclock_updated == INT8_MAX)
+ 			ffth->tick_time_lerp = ffth->tick_time;
+ 
+ 		if (bintime_cmp(&ffth->tick_time, &ffth->tick_time_lerp, >))
+ 			forward_jump = 1;
+ 		else
+ 			forward_jump = 0;
+ 
+ 		bintime_clear(&gap_lerp);
+@@ -970,21 +984,20 @@ extern long time_esterror;
+  * and generate timestamps after the fact.
+  */
+ void
+ sysclock_getsnapshot(struct sysclock_snap *clock_snap, int fast)
+ {
+ 	struct fbclock_info *fbi;
+ 	struct timehands *th;
+ 	struct bintime bt;
+ 	unsigned int delta, gen;
+ #ifdef FFCLOCK
+-	ffcounter ffcount;
+ 	struct fftimehands *ffth;
+ 	struct ffclock_info *ffi;
+ 	struct ffclock_estimate cest;
+ 
+ 	ffi = &clock_snap->ff_info;
+ #endif
+ 
+ 	fbi = &clock_snap->fb_info;
+ 	delta = 0;
+ 
+@@ -1021,27 +1034,27 @@ sysclock_getsnapshot(struct sysclock_sna
+ 	if (!fast)
+ 		clock_snap->ffcount += delta;
+ 
+ 	/* Record feed-forward clock leap second adjustment. */
+ 	ffi->leapsec_adjustment = cest.leapsec_total;
+ 	if (clock_snap->ffcount > cest.leapsec_next)
+ 		ffi->leapsec_adjustment -= cest.leapsec;
+ 
+ 	/* Record feed-forward clock status and error. */
+ 	clock_snap->ff_info.status = cest.status;
+-	ffcount = clock_snap->ffcount - cest.update_ffcount;
+-	ffclock_convert_delta(ffcount, cest.period, &bt);
+-	/* 18446744073709 = int(2^64/1e12), err_bound_rate in [ps/s]. */
+-	bintime_mul(&bt, cest.errb_rate * (uint64_t)18446744073709ULL);
+-	/* 18446744073 = int(2^64 / 1e9), since err_abs in [ns]. */
+-	bintime_addx(&bt, cest.errb_abs * (uint64_t)18446744073ULL);
+-	clock_snap->ff_info.error = bt;
++	clock_snap->ff_info.error = ffth->tick_error;
++	if (!fast) {
++		ffclock_convert_delta(delta, cest.period, &bt);
++		/* 18446744073709 = int(2^64/1e12), err_bound_rate in [ps/s]. */
++		bintime_mul(&bt, cest.errb_rate * (uint64_t)18446744073709ULL);
++		bintime_add(&clock_snap->ff_info.error, &bt);
++	}
+ #endif
+ }
+ 
+ /*
+  * Convert a sysclock snapshot into a struct bintime based on the specified
+  * clock source and flags.
+  */
+ int
+ sysclock_snap2bintime(struct sysclock_snap *cs, struct bintime *bt,
+     int whichclock, uint32_t flags)
