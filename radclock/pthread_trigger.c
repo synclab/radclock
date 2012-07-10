@@ -191,6 +191,10 @@ create_ntp_request(struct radclock_handle *handle, struct ntp_pkt *pkt,
 		return (1);
 	counter_to_time(&handle->rad_data, &vcount, &time);
 
+	// FIXME : this test is on long double, but the conversion to NTP timestamps
+	// below is based on timeval. It is then possible to pass the test but
+	// convert to the same NTP key if counters read within the same micro-sec.
+	// Need to remove the timeval conversion step
 	if (time == last_xmt) {
 		verbose (LOG_ERR, "xmt and last_xmt are the same !! vcount= %llu",
 				(long long unsigned) vcount);
