@@ -341,7 +341,7 @@ ntp_client(struct radclock_handle *handle)
 			if (unmatched_ntp_pair(&spkt, &rpkt))
 				verbose(LOG_WARNING, "NTP client got a non matching pair. "
 						"Increase socket timeout?");
-				break;
+			break;
 		}
 		else
 			verbose(VERB_DEBUG, "No reply after 800ms. Socket timed out");
