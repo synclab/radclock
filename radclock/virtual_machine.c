@@ -26,9 +26,13 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "../config.h"
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#ifdef WITH_RADKERNEL_FBSD
+#include <sys/sysctl.h>
+#endif
 
 #include <netdb.h>
 
@@ -40,7 +44,6 @@
 #include <syslog.h>
 #include <unistd.h>
 
-#include "../config.h"
 #include "radclock.h"
 #include "radclock-private.h"
 #include "kclock.h"
@@ -460,6 +463,9 @@ receive_loop_vm(struct radclock_handle *handle)
 // FIXME
 #ifdef WITH_RADKERNEL_FBSD
 				/* If hardware counter has changed, restart over again */
+				size_t size_ctl;
+				char hw_counter[32];
+				int err;
 				size_ctl = sizeof(hw_counter);
 				err = sysctlbyname("kern.timecounter.hardware", &hw_counter[0],
 						&size_ctl, NULL, 0);
@@ -474,8 +480,9 @@ receive_loop_vm(struct radclock_handle *handle)
 						" Reinitialising radclock.", handle->clock->hw_counter,
 						hw_counter);
 					OUTPUT(handle, n_stamps) = 0;
-					peer->stamp_i = 0;
-					handle->server_data->burst = NTP_BURST;
+					((struct bidir_peer *)handle->active_peer)->stamp_i = 0;
+					//handle->server_data->burst = NTP_BURST;
+					handle->server_data->burst = 8;
 					strcpy(handle->clock->hw_counter, hw_counter);
 	// XXX TODO: Reinitialise the stats structure as well?
 					return (0);
