@@ -216,6 +216,28 @@ dnl need AC_CHECK_LIB beforehand
 AC_CHECK_FUNCS(pcap_activate)
 
 
+
+dnl ===========================================================================
+dnl Check for librt and POSIX timers
+dnl ===========================================================================
+AC_CHECK_LIB([rt],
+			 [clock_gettime],
+			 [AM_CONDITIONAL([MAKE_HAVE_LIBRT], [test 1 = 1])
+			  [librt_ok=1]
+			  AC_DEFINE([HAVE_CLOCK_GETTIME],
+						 [1],
+						 [Define if clock_gettime is available (rt library)])],
+			 [AM_CONDITIONAL([MAKE_HAVE_LIBRT], [test 1 = 0])] [librt_ok=0])
+
+AC_CHECK_LIB([rt],
+			 [timer_create],
+			 AC_DEFINE([HAVE_POSIX_TIMER],
+						 [1],
+						 [Define if POSIX timer available (rt library)]),
+			[])
+
+
+
 dnl ===========================================================================
 dnl pps api ? Freebsd only so far
 dnl ===========================================================================
