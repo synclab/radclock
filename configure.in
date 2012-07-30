@@ -44,6 +44,8 @@ dnl Init and check for automake version
 AM_INIT_AUTOMAKE(1.8)
 
 dnl Init libtool magic
+dnl XXX TODO: see if we need to activate this or not
+dnl AC_CONFIG_MACRO_DIR([m4])
 AC_PROG_LIBTOOL
 
 
