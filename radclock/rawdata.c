@@ -25,6 +25,11 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "../config.h"
+#ifndef HAVE_POSIX_TIMER
+#include <sys/time.h>
+#endif
+
 #include <arpa/inet.h>
 
 #include <assert.h>
@@ -37,7 +42,6 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "../config.h"
 #include "radclock.h"
 #include "radclock-private.h"
 #include "radclock_daemon.h"
@@ -53,7 +57,9 @@
 /* Needed for the spy capture ... cannot pass the handle to the signal catcher */
 extern struct radclock_handle *clock_handle;
 
+#ifdef HAVE_POSIX_TIMER
 timer_t spy_timerid;
+#endif
 
 
 /*
@@ -172,7 +178,11 @@ fill_rawdata_spy(int sig)
 int
 spy_loop(struct radclock_handle *handle)
 {
+#ifdef HAVE_POSIX_TIMER
 	struct itimerspec itimer_ts;
+#else
+	struct itimerval itimer_tv;
+#endif
 
 	/* Signal catching */
 	struct sigaction sig_struct;
@@ -188,6 +198,7 @@ spy_loop(struct radclock_handle *handle)
 	sig_struct.sa_flags = 0;
 	sigaction(SIGALRM,  &sig_struct, NULL);
 
+#ifdef HAVE_POSIX_TIMER
 	if (timer_create (CLOCK_REALTIME, NULL, &spy_timerid) < 0) {
 		verbose(LOG_ERR, "spy_loop: creation of POSIX timer failed: %s", strerror(errno));
 		return (-1);
@@ -202,6 +213,17 @@ spy_loop(struct radclock_handle *handle)
 		verbose(LOG_ERR, "spy_loop: POSIX timer cannot be set: %s", strerror(errno));
 		return (-1);
 	}
+#else
+	itimer_tv.it_value.tv_sec = 0;
+	itimer_tv.it_value.tv_usec = 5e5;
+	itimer_tv.it_interval.tv_sec = (int) handle->conf->poll_period;
+	itimer_tv.it_interval.tv_usec = 0;
+
+	if (setitimer (ITIMER_REAL, &itimer_tv, NULL) < 0) {
+		verbose(LOG_ERR, "spy_loop: creation of timer failed: %s", strerror(errno));
+		return (-1);
+	}
+#endif
 
 	while ((handle->unix_signal != SIGHUP) && (handle->unix_signal != SIGTERM)) {
 		/* Check every second if need to quit */
