@@ -27,7 +27,7 @@
  */
 
 #include "../config.h"
-#ifdef WITH_RADKERNEL_LINUX
+#ifdef WITH_FFKERNEL_LINUX
 
 #include <asm/types.h>
 #include <sys/ioctl.h>

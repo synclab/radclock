@@ -54,17 +54,17 @@
 							// specific code
 
 
-#ifdef WITH_RADKERNEL_NONE
+#ifdef WITH_FFKERNEL_NONE
 int update_system_clock(struct radclock_handle *handle) { return (0); }
 int update_ipc_shared_memory(struct radclock_handle *handle) { return (0); };
 #else
 
-#ifdef WITH_RADKERNEL_FBSD
+#ifdef WITH_FFKERNEL_FBSD
 #include <sys/timex.h>
 #define NTP_ADJTIME(x)	ntp_adjtime(x)
 #endif
 
-#ifdef WITH_RADKERNEL_LINUX
+#ifdef WITH_FFKERNEL_LINUX
 #include <sys/timex.h>
 #define NTP_ADJTIME(x)	adjtimex(x)
 #endif
@@ -493,7 +493,7 @@ process_rawdata(struct radclock_handle *handle, struct bidir_peer *peer)
 	
 	/* Check hardware counter has not changed */
 	// XXX TODO this is freebsd specific, should be put with arch specific code
-#ifdef WITH_RADKERNEL_FBSD
+#ifdef WITH_FFKERNEL_FBSD
 	char hw_counter[32];
 	size_t size_ctl;
 #endif
@@ -590,7 +590,7 @@ process_rawdata(struct radclock_handle *handle, struct bidir_peer *peer)
 
 // XXX Out of whack, need cleaning when make next version linux support
 // FIXME
-#ifdef WITH_RADKERNEL_FBSD
+#ifdef WITH_FFKERNEL_FBSD
 			/* If hardware counter has changed, restart over again */
 			size_ctl = sizeof(hw_counter);
 			err = sysctlbyname("kern.timecounter.hardware", &hw_counter[0],

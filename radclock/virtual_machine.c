@@ -30,7 +30,7 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#ifdef WITH_RADKERNEL_FBSD
+#ifdef WITH_FFKERNEL_FBSD
 #include <sys/sysctl.h>
 #endif
 
@@ -61,7 +61,7 @@
 // FIXME: only needed for system clock adjustments, this is a quick hack that
 // should disappear as soon as possible
 
-#ifdef WITH_RADKERNEL_NONE
+#ifdef WITH_FFKERNEL_NONE
 int init_vm(struct radclock_handle *handle) { return (-ENOENT); }
 int push_data_vm(struct radclock_handle *handle) { return (-ENOENT); }
 int receive_loop_vm(struct radclock_handle *handle) { return (-ENOENT); }
@@ -70,7 +70,7 @@ void * thread_vm_udp_server(void *c_handle) { return (-ENOENT); }
 
 #include <sys/timex.h>
 
-#ifdef WITH_RADKERNEL_FBSD
+#ifdef WITH_FFKERNEL_FBSD
 #define NTP_ADJTIME(x)	ntp_adjtime(x)
 #else
 #include <sys/timex.h>
@@ -461,7 +461,7 @@ receive_loop_vm(struct radclock_handle *handle)
 
 // XXX Out of whack, need cleaning when make next version linux support
 // FIXME
-#ifdef WITH_RADKERNEL_FBSD
+#ifdef WITH_FFKERNEL_FBSD
 				/* If hardware counter has changed, restart over again */
 				size_t size_ctl;
 				char hw_counter[32];
@@ -675,4 +675,4 @@ thread_vm_udp_server(void *c_handle)
 	pthread_exit(NULL);
 }
 
-#endif	/* WITH_RADKERNEL_NONE */
+#endif	/* WITH_FFKERNEL_NONE */

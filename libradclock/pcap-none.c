@@ -26,7 +26,7 @@
  */
 
 #include "../config.h"
-#ifdef WITH_RADKERNEL_NONE
+#ifdef WITH_FFKERNEL_NONE
 
 #include <errno.h>
 

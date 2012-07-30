@@ -282,7 +282,7 @@ get_packet_livepcap(struct radclock_handle *handle, void *userdata,
 	assert(get_vcount(packet, &vcount_debug) == 0);
 	assert(vcount == vcount_debug);
 
-#ifdef WITH_RADKERNEL_FBSD
+#ifdef WITH_FFKERNEL_FBSD
 	// TODO: messy stuff again, should actually test if the timestamp format is
 	// RAW_COUNTER, that would clean things up pretty well
 	if (handle->clock->kernel_version == 2) {
@@ -676,7 +676,7 @@ livepcapstamp_init(struct radclock_handle *handle, struct stampsource *source)
 	// Distinguish between clock and format, v2 in BSD makes timestamps be a
 	// mess
 	// TODO this is messy
-#ifdef WITH_RADKERNEL_FBSD
+#ifdef WITH_FFKERNEL_FBSD
 	if (handle->clock->kernel_version == 2)
 		err = radclock_set_tsmode(handle->clock, LIVEPCAP_DATA(source)->live_input,
 			RADCLOCK_TSMODE_RADCLOCK);

@@ -26,7 +26,7 @@
  */
 
 #include "../config.h"
-#ifdef WITH_RADKERNEL_FBSD
+#ifdef WITH_FFKERNEL_FBSD
 
 #include <sys/types.h>
 #include <sys/ioctl.h>

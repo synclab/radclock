@@ -27,7 +27,7 @@
  */
 
 #include "../config.h"
-#ifdef WITH_RADKERNEL_LINUX
+#ifdef WITH_FFKERNEL_LINUX
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
