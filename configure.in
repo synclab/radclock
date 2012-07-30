@@ -236,6 +236,9 @@ AC_CHECK_LIB([rt],
 						 [Define if POSIX timer available (rt library)]),
 			[])
 
+rt_ok = 1
+AC_CHECK_LIB([rt], [sched_setscheduler], [], [rt_ok=0])
+
 
 
 dnl ===========================================================================

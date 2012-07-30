@@ -437,9 +437,11 @@ daemonize(const char* lockfile, int *daemon_pid_fd)
 	/* Boost our scheduler priority. Here I assume we have access to the
 	 * Posix scheduling API ... and if not?
 	 */
+#ifdef HAVE_LIBRT
 	sched.sched_priority = sched_get_priority_max(SCHED_FIFO);
-	if ( sched_setscheduler(0, SCHED_FIFO, &sched) == -1 )
+	if (sched_setscheduler(0, SCHED_FIFO, &sched) == -1)
 		verbose(LOG_ERR, "Could not set scheduler priority");
+#endif
 
 	JDEBUG_MEMORY(JDBG_FREE, str);
 	free(str);
