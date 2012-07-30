@@ -289,10 +289,14 @@ case $target_os in
 		AC_CHECK_HEADERS([linux/genetlink.h], [], [netlink=no], [#include <sys/socket.h>])
 		AC_CHECK_LIB(nl,nl_handle_alloc,, netlink=no)
 		AC_MSG_CHECKING([nl_recv for four or three params])
-		AC_COMPILE_IFELSE( AC_LANG_PROGRAM([#include <sys/socket.h>
-							 #include <linux/netlink.h>
-							 #include <netlink/netlink.h>],
-							 [nl_recv(NULL,NULL,NULL,NULL);]), nl_recv=four, nl_recv=unknown)
+		AC_COMPILE_IFELSE(
+			[AC_LANG_PROGRAM([
+				[#include <sys/socket.h>
+				 #include <linux/netlink.h>
+				 #include <netlink/netlink.h>
+				]],
+				[[nl_recv(NULL,NULL,NULL,NULL);]])],
+			nl_recv=four, nl_recv=unknown)
 		if test "${nl_recv}" = "four"; then
 			AC_DEFINE([WITH_NL_RECV_FOUR_PARM],[],[nl_recv takes 4 params])
 			AC_MSG_RESULT([four])
