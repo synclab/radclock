@@ -263,6 +263,7 @@ AC_CHECK_LIB([xenstore],
 dnl ===========================================================================
 dnl OS version, RADclock patched? and version
 dnl ===========================================================================
+ffsupportversion=none
 if test "$tscexts" = "no"; then
 case "$target_os" in
 	linux*)
@@ -350,9 +351,7 @@ case $target_os in
 					  [1],
 					  [Define to 1 if NOT detected patched radclock kernel])
 			AM_CONDITIONAL([MK_FFKERNEL_NONE], [test 1 = 1])
-			kernel_channel="no"
 		else
-			kernel_channel="yes"
 			if test "$tscexts" = "yes"; then
 				LIBRADCLOCK_LIBS="${LIBRADCLOCK_LIBS} -lnl"
 				AC_DEFINE([WITH_RADKERNEL_LINUX],
@@ -376,13 +375,11 @@ case $target_os in
 				  [1],
 				  [Define to 1 if detected patched radclock kernel])
 		AM_CONDITIONAL([MK_FFKERNEL_FBSD], [test 1 = 1])
-		kernel_channel="yes"
 	else
 		AC_DEFINE([WITH_RADKERNEL_NONE],
 				  [1],
 				  [Define to 1 if NOT detected patched radclock kernel])
 		AM_CONDITIONAL([MK_FFKERNEL_NONE], [test 1 = 1])
-		kernel_channel="no"
 	fi
 	;;
 
@@ -392,7 +389,6 @@ case $target_os in
 				  [1],
 				  [Define to 1 if NOT detected patched radclock kernel])
 		AM_CONDITIONAL([MK_FFKERNEL_NONE], [test 1 = 1])
-		kernel_channel="no"
 	;;
 esac
 
@@ -582,7 +578,6 @@ AC_MSG_NOTICE([RADClock version $PACKAGE_VERSION])
 AC_MSG_NOTICE([Found target arch: $target_cpu])
 AC_MSG_NOTICE([Compiling for $target_os])
 AC_MSG_NOTICE([Feed-forward kernel: $tscexts (version: $ffsupportversion)])
-AC_MSG_NOTICE([Detected kernel access channel: $kernel_channel])
 
 case $target_os in
 	
