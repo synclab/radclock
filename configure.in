@@ -59,15 +59,15 @@ AC_CONFIG_FILES([Makefile libradclock/Makefile radclock/Makefile
 
 dnl Conditional for the autotools that are not shipped away
 if test -e version.sh; then
-	AM_CONDITIONAL([IS_UPSTREAM], [test 1 = 1])
+	AM_CONDITIONAL([MK_UPSTREAM], [test 1 = 1])
 else
-	AM_CONDITIONAL([IS_UPSTREAM], [test 0 = 1])
+	AM_CONDITIONAL([MK_UPSTREAM], [test 0 = 1])
 fi
 
 
 AC_CHECK_HEADER([_ffcounter.h],
-	[AM_CONDITIONAL([HAVE__FFCOUNTER_H], [test 1 = 1])],
-	[AM_CONDITIONAL([HAVE__FFCOUNTER_H], [test 1 = 0])])
+	[AM_CONDITIONAL([MK__FFCOUNTER_H], [test 1 = 1])],
+	[AM_CONDITIONAL([MK__FFCOUNTER_H], [test 1 = 0])])
 
 AM_CONFIG_HEADER(config.h)
 
@@ -222,12 +222,12 @@ dnl Check for librt and POSIX timers
 dnl ===========================================================================
 AC_CHECK_LIB([rt],
 			 [clock_gettime],
-			 [AM_CONDITIONAL([MAKE_HAVE_LIBRT], [test 1 = 1])
+			 [AM_CONDITIONAL([MK_LIBRT], [test 1 = 1])
 			  [librt_ok=1]
 			  AC_DEFINE([HAVE_CLOCK_GETTIME],
 						 [1],
 						 [Define if clock_gettime is available (rt library)])],
-			 [AM_CONDITIONAL([MAKE_HAVE_LIBRT], [test 1 = 0])] [librt_ok=0])
+			 [AM_CONDITIONAL([MK_LIBRT], [test 1 = 0])] [librt_ok=0])
 
 AC_CHECK_LIB([rt],
 			 [timer_create],
@@ -242,8 +242,8 @@ dnl ===========================================================================
 dnl pps api ? Freebsd only so far
 dnl ===========================================================================
 AC_CHECK_HEADER([sys/timepps.h],
-				[AM_CONDITIONAL([HAVE_PPS_API], [test 1 = 1])],
-				[AM_CONDITIONAL([HAVE_PPS_API], [test 0 = 1])])
+				[AM_CONDITIONAL([MK_PPSAPI], [test 1 = 1])],
+				[AM_CONDITIONAL([MK_PPSAPI], [test 0 = 1])])
 
 
 dnl ===========================================================================
@@ -251,11 +251,11 @@ dnl Xen??
 dnl ===========================================================================
 AC_CHECK_LIB([xenstore],
 			 [xs_domain_open],
-			 [AM_CONDITIONAL([HAVE_XEN_API], [test 1 = 1])
+			 [AM_CONDITIONAL([MK_XEN], [test 1 = 1])
 			  AC_DEFINE([WITH_XENSTORE],
 						[1],
 						[Define to 1 if compiling with xenstore])],
-			 [AM_CONDITIONAL([HAVE_XEN_API], [test 0 = 1])])
+			 [AM_CONDITIONAL([MK_XEN], [test 0 = 1])])
 
 
 
@@ -263,7 +263,7 @@ AC_CHECK_LIB([xenstore],
 dnl ===========================================================================
 dnl OS version, RADclock patched? and version
 dnl ===========================================================================
-if test "$tscexts" = "no"; then	
+if test "$tscexts" = "no"; then
 case "$target_os" in
 	linux*)
 		osversion=$(uname -r | sed -e 's/\([0-9]*.[0-9]*.[0-9]*\)-.*/\1/')
@@ -302,7 +302,7 @@ case "$target_os" in
 esac
 fi
 
-AM_CONDITIONAL([HAVE_FFKERNEL], [test "x$tscexts" = "xyes"])
+AM_CONDITIONAL([MK_FFKERNEL], [test "x$tscexts" = "xyes"])
 
 
 
@@ -310,9 +310,9 @@ AM_CONDITIONAL([HAVE_FFKERNEL], [test "x$tscexts" = "xyes"])
 dnl ===========================================================================
 dnl Detect kernel channel
 dnl ===========================================================================
-AM_CONDITIONAL([MAKE_RADKERNEL_NONE], [test 1 = 0])
-AM_CONDITIONAL([MAKE_RADKERNEL_LINUX], [test 1 = 0])
-AM_CONDITIONAL([MAKE_RADKERNEL_FBSD], [test 1 = 0])
+AM_CONDITIONAL([MK_FFKERNEL_NONE], [test 1 = 0])
+AM_CONDITIONAL([MK_FFKERNEL_LINUX], [test 1 = 0])
+AM_CONDITIONAL([MK_FFKERNEL_FBSD], [test 1 = 0])
 case $target_os in
 
 	linux*)
@@ -349,7 +349,7 @@ case $target_os in
 			AC_DEFINE([WITH_RADKERNEL_NONE],
 					  [1],
 					  [Define to 1 if NOT detected patched radclock kernel])
-			AM_CONDITIONAL([MAKE_RADKERNEL_NONE], [test 1 = 1])
+			AM_CONDITIONAL([MK_FFKERNEL_NONE], [test 1 = 1])
 			kernel_channel="no"
 		else
 			kernel_channel="yes"
@@ -358,12 +358,12 @@ case $target_os in
 				AC_DEFINE([WITH_RADKERNEL_LINUX],
 						  [1],
 						  [Define to 1 if detected patched radclock kernel])
-				AM_CONDITIONAL([MAKE_RADKERNEL_LINUX], [test 1 = 1])
+				AM_CONDITIONAL([MK_FFKERNEL_LINUX], [test 1 = 1])
 			else
-				AC_DEFINE([WITH_RADKERNEL_NONE],
+				AC_DEFINE([WITH_FFKERNEL_NONE],
 						  [1],
 						  [Define to 1 if NOT detected patched radclock kernel])
-				AM_CONDITIONAL([MAKE_RADKERNEL_NONE], [test 1 = 1])
+				AM_CONDITIONAL([MK_FFKERNEL_NONE], [test 1 = 1])
 			fi
 		fi
 		;;
@@ -375,13 +375,13 @@ case $target_os in
 		AC_DEFINE([WITH_RADKERNEL_FBSD],
 				  [1],
 				  [Define to 1 if detected patched radclock kernel])
-		AM_CONDITIONAL([MAKE_RADKERNEL_FBSD], [test 1 = 1])
+		AM_CONDITIONAL([MK_FFKERNEL_FBSD], [test 1 = 1])
 		kernel_channel="yes"
 	else
 		AC_DEFINE([WITH_RADKERNEL_NONE],
 				  [1],
 				  [Define to 1 if NOT detected patched radclock kernel])
-		AM_CONDITIONAL([MAKE_RADKERNEL_NONE], [test 1 = 1])
+		AM_CONDITIONAL([MK_FFKERNEL_NONE], [test 1 = 1])
 		kernel_channel="no"
 	fi
 	;;
@@ -391,7 +391,7 @@ case $target_os in
 		AC_DEFINE([WITH_RADKERNEL_NONE],
 				  [1],
 				  [Define to 1 if NOT detected patched radclock kernel])
-		AM_CONDITIONAL([MAKE_RADKERNEL_NONE], [test 1 = 1])
+		AM_CONDITIONAL([MK_FFKERNEL_NONE], [test 1 = 1])
 		kernel_channel="no"
 	;;
 esac

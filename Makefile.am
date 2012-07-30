@@ -1,4 +1,4 @@
-# 
+#
 # Copyright (C) 2006-2012, Julien Ridoux <julien@synclab.org>
 # All rights reserved.
 #
@@ -30,7 +30,7 @@ DIST_SUBDIRS = libradclock radclock examples man
 EXTRA_DIST = python-module debian redhat
 
 
-SUBDIRS = $(DIST_SUBDIRS) 
+SUBDIRS = $(DIST_SUBDIRS)
 SUBDIRS += tests
 
 # Extra cscope target
@@ -51,7 +51,7 @@ cscope-clean:
 
 
 
-if IS_UPSTREAM
+if MK_UPSTREAM
 dist-hook:
 	@echo "Copying the python module and wall clock into the tarball"
 	cp $(srcdir)/python-gui/tscclock_wallclock.py $(distdir)/python-module/

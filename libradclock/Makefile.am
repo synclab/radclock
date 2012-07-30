@@ -1,4 +1,4 @@
-# 
+#
 # Copyright (C) 2006-2012, Julien Ridoux <julien@synclab.org>
 # All rights reserved.
 #
@@ -37,19 +37,19 @@ libradclock_la_SOURCES = \
 		logger.c \
 		local-genetlink.h
 
-if MAKE_RADKERNEL_FBSD
+if MK_FFKERNEL_FBSD
 libradclock_la_SOURCES += \
 		ffkernel-fbsd.c \
 		kclock-fbsd.c \
 		pcap-fbsd.c
 else
-if MAKE_RADKERNEL_LINUX
+if MK_FFKERNEL_LINUX
 libradclock_la_SOURCES += \
 		ffkernel-linux.c \
 		kclock-linux.c \
 		pcap-linux.c
 else
-if MAKE_RADKERNEL_NONE
+if MK_FFKERNEL_NONE
 libradclock_la_SOURCES += \
 		ffkernel-none.c \
 		kclock-none.c \

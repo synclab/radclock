@@ -1,4 +1,4 @@
-# 
+#
 # Copyright (C) 2006-2012, Julien Ridoux <julien@synclab.org>
 # All rights reserved.
 #
@@ -40,9 +40,7 @@ noinst_HEADERS = ntohll.h \
 		 sync_history.h \
 		 jdebug.h
 
-
 bin_PROGRAMS = radclock
-
 
 radclock_SOURCES = sync_bidir.c \
 		   sync_history.c \
@@ -73,10 +71,12 @@ radclock_SOURCES = sync_bidir.c \
 radclock_LDFLAGS = -static -pthread
 
 # We want librt for an accurate NTP packet sender
-radclock_LDADD = -lrt -lpcap -lm @LIBRADCLOCK_LIBS@ 
+radclock_LDADD = -lpcap -lm @LIBRADCLOCK_LIBS@
 
-if HAVE_XEN_API 
+if MK_LIBRT
+radclock_LDADD += -lrt
+endif
+
+if MK_XEN
 radclock_LDADD += -lxenstore
-else
-radclock_LDADD +=
 endif
