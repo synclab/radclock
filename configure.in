@@ -370,26 +370,27 @@ case $target_os in
 
 	freebsd*)
 
-	if test "$tscexts" = yes; then
-		AC_DEFINE([WITH_FFKERNEL_FBSD],
-				  [1],
-				  [Define to 1 if detected patched radclock kernel])
-		AM_CONDITIONAL([MK_FFKERNEL_FBSD], [test 1 = 1])
-	else
-		AC_DEFINE([WITH_FFKERNEL_NONE],
-				  [1],
-				  [Define to 1 if NOT detected patched radclock kernel])
-		AM_CONDITIONAL([MK_FFKERNEL_NONE], [test 1 = 1])
-	fi
-	;;
+		if test "$tscexts" = yes; then
+			AC_DEFINE([WITH_FFKERNEL_FBSD],
+					  [1],
+					  [Define to 1 if detected patched radclock kernel])
+			AM_CONDITIONAL([MK_FFKERNEL_FBSD], [test 1 = 1])
+		else
+			AC_DEFINE([WITH_FFKERNEL_NONE],
+					  [1],
+					  [Define to 1 if NOT detected patched radclock kernel])
+			AM_CONDITIONAL([MK_FFKERNEL_NONE], [test 1 = 1])
+		fi
+		;;
 
-	# Darwin* and other OS without kernel extensions
-	unknown*)
+dnl	 Darwin* and other OS without kernel extensions
+dnl	darwin*|unknown*)
+	*)
 		AC_DEFINE([WITH_FFKERNEL_NONE],
 				  [1],
 				  [Define to 1 if NOT detected patched radclock kernel])
 		AM_CONDITIONAL([MK_FFKERNEL_NONE], [test 1 = 1])
-	;;
+		;;
 esac
 
 
@@ -398,9 +399,9 @@ AC_SUBST([LIBRADCLOCK_LIBS])
 
 
 
-dnl ===========================================================================
-dnl Initialise IOCTLs
-dnl ===========================================================================
+	dnl ===========================================================================
+	dnl Initialise IOCTLs
+	dnl ===========================================================================
 
 ioctlcount=0
 syscall_get_vcounter_number=0
