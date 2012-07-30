@@ -25,8 +25,13 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/types.h>
+#include "../config.h"
+
 #include <sys/socket.h>
+#include <sys/types.h>
+#ifdef HAVE_POSIX_TIMER
+#include <sys/time.h>
+#endif
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -40,7 +45,6 @@
 #include <unistd.h>
 #include <time.h>
 
-#include "../config.h"
 #include "radclock.h"
 #include "radclock-private.h"
 #include "radclock_daemon.h"
@@ -69,7 +73,9 @@
  * Also, sigsuspend does not work on Linux in a multi-thread environment
  * (apparently) so use pthread condition wait to sync the thread to SIGALRM
  */
+#ifdef HAVE_POSIX_TIMER
 timer_t ntpclient_timerid;
+#endif
 pthread_mutex_t alarm_mutex;
 pthread_cond_t alarm_cwait;
 
@@ -98,9 +104,9 @@ void catch_alarm(int sig)
 }
 
 
-// TODO why inline?
 /* (re)set and arm the POSIX timer */
-inline int
+#ifdef HAVE_POSIX_TIMER
+static int
 set_ptimer(timer_t timer, float next, float period)
 {
 	struct itimerspec itimer_ts;
@@ -113,32 +119,67 @@ set_ptimer(timer_t timer, float next, float period)
 	return (timer_settime(timer, 0 /*!TIMER_ABSTIME*/, &itimer_ts, NULL));
 }
 
-
 /* Is there a need for change? */
-int
+static int
 assess_ptimer(timer_t timer, float period)
 {
+	struct itimerspec its;
+	float ptnext;
+	float ptperiod;
 	int err;
-	struct itimerspec itimer_ts;
-	float timer_next;
-	float timer_period;
 
 	JDEBUG
 
-	err = timer_gettime(timer, &itimer_ts);
-	if ( err < 0 )
+	err = timer_gettime(timer, &its);
+	if (err < 0)
 		return (err);
 
-	timer_next = itimer_ts.it_value.tv_sec +
-		(float)itimer_ts.it_value.tv_nsec / 1e9;
-	timer_period = itimer_ts.it_interval.tv_sec +
-		(float) itimer_ts.it_interval.tv_nsec / 1e9;
+	ptnext   = its.it_value.tv_sec + (float)its.it_value.tv_nsec / 1e9;
+	ptperiod = its.it_interval.tv_sec + (float)its.it_interval.tv_nsec / 1e9;
 
 	if (timer_period != period)
 		err = set_ptimer(timer, timer_next, period);
 
 	return (err);
 }
+#else /* ! HAVE_POSIX_TIMER */
+static int
+set_itimer(float next, float period)
+{
+	struct itimerval itv;
+
+	itv.it_value.tv_sec = (int) next;
+	itv.it_value.tv_usec = 1e6 * (next - (int) next);
+	itv.it_interval.tv_sec = (int) period;
+	itv.it_interval.tv_usec = 1e6 * (period - (int) period);
+	return (setitimer(ITIMER_REAL, &itv, NULL));
+}
+
+static int
+assess_itimer(float period)
+{
+	struct itimerval itv;
+	float itperiod;
+	float itnext;
+	int err;
+
+	JDEBUG
+
+	err = getitimer(ITIMER_REAL, &itv);
+	if (err < 0)
+		return (err);
+
+	itnext   = itv.it_value.tv_sec + (float)itv.it_value.tv_usec / 1e6;
+	itperiod = itv.it_interval.tv_sec + (float)itv.it_interval.tv_usec / 1e6;
+
+	if (itperiod != period)
+		return (set_itimer(itnext, itperiod));
+
+	return (0);
+}
+#endif /* HAVE_POSIX_TIMER */
+
+
 
 
 // TODO Ugly as hell
@@ -287,7 +328,11 @@ ntp_client(struct radclock_handle *handle)
 	}
 
 	/* Timer will hiccup in the 1-2 ms range if reset */
+#ifdef HAVE_POSIX_TIMER
 	assess_ptimer(ntpclient_timerid, adjusted_period);
+#else
+	assess_itimer(adjusted_period);
+#endif
 
 	/* Sleep until next grid point. Try to do as less as possible in between
 	 * here and the actual sendto()
@@ -487,6 +532,7 @@ ntp_init(struct radclock_handle *handle)
 	pthread_mutex_init(&alarm_mutex, NULL);
 	pthread_cond_init (&alarm_cwait, NULL);
 
+#ifdef HAVE_POSIX_TIMER
 	 /* CLOCK_REALTIME_HR does not exist on FreeBSD */
 	if (timer_create (CLOCK_REALTIME, NULL, &ntpclient_timerid) < 0) {
 		verbose(LOG_ERR, "ntp_init: POSIX timer create failed");
@@ -497,6 +543,12 @@ ntp_init(struct radclock_handle *handle)
 		verbose(LOG_ERR, "ntp_init: POSIX timer cannot be set");
 		return (1);
 	}
+#else
+	if (set_itimer(0.5 /* !0 */, (float) handle->conf->poll_period) < 0) {
+		verbose(LOG_ERR, "ntp_init: POSIX timer cannot be set");
+		return (1);
+	}
+#endif
 	return (0);
 }
 
