@@ -204,10 +204,10 @@ esac
 dnl ===========================================================================
 dnl Check for correct version of libpcap
 dnl ===========================================================================
-pcap_ok=1
-AC_CHECK_HEADER([pcap.h], [], [pcap_ok=0])
-AC_CHECK_LIB([pcap], [pcap_next_ex], [], [pcap_ok=0])
-AC_CHECK_LIB([pcap], [pcap_dump_flush], [], [pcap_ok=0])
+libpcap_ok=1
+AC_CHECK_HEADER([pcap.h], [], [libpcap_ok=0])
+AC_CHECK_LIB([pcap], [pcap_next_ex], [], [libpcap_ok=0])
+AC_CHECK_LIB([pcap], [pcap_dump_flush], [], [libpcap_ok=0])
 
 dnl check if we have libpcap version >= 1.0.0.
 dnl It is essential for Linux MMAP support
@@ -220,10 +220,10 @@ AC_CHECK_FUNCS(pcap_activate)
 dnl ===========================================================================
 dnl Check for librt and POSIX timers
 dnl ===========================================================================
+librt_ok=1
 AC_CHECK_LIB([rt],
 			 [clock_gettime],
 			 [AM_CONDITIONAL([MK_LIBRT], [test 1 = 1])
-			  [librt_ok=1]
 			  AC_DEFINE([HAVE_CLOCK_GETTIME],
 						 [1],
 						 [Define if clock_gettime is available (rt library)])],
@@ -236,8 +236,7 @@ AC_CHECK_LIB([rt],
 						 [Define if POSIX timer available (rt library)]),
 			[])
 
-rt_ok = 1
-AC_CHECK_LIB([rt], [sched_setscheduler], [], [rt_ok=0])
+AC_CHECK_LIB([rt], [sched_setscheduler], [], [librt_ok=0])
 
 
 
@@ -612,7 +611,7 @@ esac
 
 
 
-if test $pcap_ok -lt 1
+if test $libpcap_ok -lt 1
 then
 	AC_MSG_NOTICE([**ERROR** - Libpcap not found or version too old])
 	AC_MSG_NOTICE([**ERROR** - Require libpcap 0.8 or higher)])
