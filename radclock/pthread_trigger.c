@@ -137,8 +137,8 @@ assess_ptimer(timer_t timer, float period)
 	ptnext   = its.it_value.tv_sec + (float)its.it_value.tv_nsec / 1e9;
 	ptperiod = its.it_interval.tv_sec + (float)its.it_interval.tv_nsec / 1e9;
 
-	if (timer_period != period)
-		err = set_ptimer(timer, timer_next, period);
+	if (ptperiod != period)
+		err = set_ptimer(timer, ptnext, period);
 
 	return (err);
 }
