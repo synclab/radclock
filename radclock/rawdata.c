@@ -426,12 +426,12 @@ deliver_rawdata_ntp(struct radclock_handle *handle, struct radpcap_packet_t *pkt
 
 	/* Check we have something to do */
 	if (rdb == NULL)
-		return (-1);
+		return (1);
 
 	if (rdb->type != RD_NTP_PACKET) {
 		verbose(LOG_ERR, "!! Asked to deliver NTP packet from rawdata but "
 				"parsing other type !!");
-		return (-1);
+		return (1);
 	}
 
 	/* Copy pcap header and packet payload back-to-back.

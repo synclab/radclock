@@ -254,7 +254,7 @@ get_packet_livepcap(struct radclock_handle *handle, void *userdata,
 	vcounter_t vcount;
 	vcounter_t vcount_debug;
 	long double time;
-	int ret;
+	int err;
 
 	JDEBUG
 
@@ -265,10 +265,10 @@ get_packet_livepcap(struct radclock_handle *handle, void *userdata,
 	packet = *packet_p;
 
 	/* Retrieve the next packet from the raw data buffer */
-	ret = deliver_rawdata_ntp(handle, packet, &vcount);
-	if (ret < 0) {
+	err = deliver_rawdata_ntp(handle, packet, &vcount);
+	if (err) {
 		/* Raw data buffer is empty */
-		return (ret);
+		return (1);
 	}
 
 	/* Replace the link layer header by the Linux SLL header for generic
@@ -309,7 +309,7 @@ get_packet_livepcap(struct radclock_handle *handle, void *userdata,
 	*packet_p = packet;
 
 	/* Return packet quality */
-	return (ret);
+	return (0);
 }
 
 

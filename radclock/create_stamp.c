@@ -947,14 +947,10 @@ get_network_stamp(struct radclock_handle *handle, void *userdata,
 			 * -1: read live and raw data buffer is empty
 			 */
 			err = get_packet(handle, userdata, &packet);
-
-			if (err == -2)
-				return (-1);
-			if (err < 0) {
+			if (err) {
 				if (attempt == 0) {
 					verbose(VERB_DEBUG, "Empty raw data buffer after all attempts "
 							"(%.3f [ms])", attempt_wait / 1000.0);
-					err = 1;
 					break;
 				} else {
 					usleep(attempt_wait);
