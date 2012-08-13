@@ -890,59 +890,117 @@ get_network_stamp(struct radclock_handle *handle, void *userdata,
 	err = 0;
 	packet = create_radpcap_packet();
 
-	for (attempt=12; attempt>=0; attempt--) {
+
+	/*
+	 * Used to have both live and dead PCAP inputs dealt the same way. But extra
+	 * processing to give a chance to out-of-order packets make it too hard to
+	 * keep the same path. Cases are decoupled below, the dead input does not
+	 * need to sleep when reading PCAP file.
+	 */
+	switch(handle->run_mode) {
+
+	/* Read packet from pcap tracefile. */
+	case RADCLOCK_SYNC_DEAD:
 		/*
-		 * Read packet from raw data queue or pcap tracefile. There are a few
-		 * tricks with error code because of the source abstraction:
+		 * Error codes (although not used here):
 		 * -2: run from tracefile and reached end of input
 		 * -1: run from tracefile and read error
-		 * -1: read live and raw data buffer is empty
 		 */
 		err = get_packet(handle, userdata, &packet);
-
-		if (err == -2)
-			return (-1);
 		if (err < 0) {
-			if (attempt == 0) {
-				verbose(VERB_DEBUG, "Empty raw data buffer after all attempts "
-						"(%.3f [ms])", attempt_wait / 1000.0);
-				err = 1;
-				break;
-			} else {
-				usleep(attempt_wait);
-				attempt_wait += attempt_wait;
-				continue;
-			}
+			return (-1);
 		}
 
 		/* Counts pkts, regardless of content (initialised to 0 in main) */
 		stats->ref_count++;
 
-		/* Convert packet to stamp and push it to the stamp queue */
+		/*
+		 * Convert packet to stamp and push it to the stamp queue, errors are:
+		 * -1: Low level / input problem worth stopping, break with error code.
+		 *  0: there is at least one valid full fledged stamp in the queue,
+		 *     break with no error code -- do not want to fill the stamp queue
+		 *     with the entire trace file.
+		 *  1: inserted packet in queue, but did not pair it. Break with code to
+		 *     be called again.
+		 */
 		err = update_stamp_queue(peer->q, packet, stats);
-
-		/* Low level / input problem worth stopping */
-		if (err == -1)
+		switch (err) {
+		case -1:
+			verbose(LOG_ERR, "Stamp queue error");
 			break;
-
-		/*
-		 * If err == 0, there is at least one valid full fledged stamp in the
-		 * queue. If running dead trace, this could fill the stamp queue with
-		 * the entire trace file. Instead, break pcap_loog and process stamp.
-		 */
-		if (err == 0)
+		case  0:
+			verbose(VERB_DEBUG, "Inserted packet and found match");
 			break;
-		/*
-		 * If err == 1, inserted packet in queue, but did not pair it. Half
-		 * baked stamp not worth processing, we try to read from the device
-		 * again after a little while. The wait grows bigger on each attempt.
-		 * Number of attempts bounded since we cannot stay here for ever.
-		 */
-		if (err == 1) {
-			usleep(attempt_wait);
-			attempt_wait += attempt_wait;
+		case  1:
+			verbose(VERB_DEBUG, "Inserted packet but no match");
+			break;
 		}
+		break;
+
+	/* Read packet from raw data queue or pcap tracefile. */
+	case RADCLOCK_SYNC_LIVE:
+		for (attempt=12; attempt>=0; attempt--) {
+			/*
+			 * Error codes:
+			 * -2: run from tracefile and reached end of input
+			 * -1: run from tracefile and read error
+			 * -1: read live and raw data buffer is empty
+			 */
+			err = get_packet(handle, userdata, &packet);
+
+			if (err == -2)
+				return (-1);
+			if (err < 0) {
+				if (attempt == 0) {
+					verbose(VERB_DEBUG, "Empty raw data buffer after all attempts "
+							"(%.3f [ms])", attempt_wait / 1000.0);
+					err = 1;
+					break;
+				} else {
+					usleep(attempt_wait);
+					attempt_wait += attempt_wait;
+					continue;
+				}
+			}
+
+			/* Counts pkts, regardless of content (initialised to 0 in main) */
+			stats->ref_count++;
+
+			/* Convert packet to stamp and push it to the stamp queue */
+			err = update_stamp_queue(peer->q, packet, stats);
+
+			/* Low level / input problem worth stopping */
+			if (err == -1)
+				break;
+
+			/*
+			 * If err == 0, there is at least one valid full fledged stamp in the
+			 * queue. If running dead trace, this could fill the stamp queue with
+			 * the entire trace file. Instead, break pcap_loog and process stamp.
+			 */
+			if (err == 0)
+				break;
+			/*
+			 * If err == 1, inserted packet in queue, but did not pair it. Half
+			 * baked stamp not worth processing, we try to read from the device
+			 * again after a little while. The wait grows bigger on each attempt.
+			 * Number of attempts bounded since we cannot stay here for ever.
+			 */
+			if (err == 1) {
+				usleep(attempt_wait);
+				attempt_wait += attempt_wait;
+				printf("attemp_wait = %d\n", attempt_wait);
+			}
+		}
+		break;
+	
+	case RADCLOCK_SYNC_NOTSET:
+	default:
+		verbose(LOG_ERR, "Run mode not set!");
+		err = -1;
+		break;
 	}
+	
 	/* Make sure we don't leak memory */
 	destroy_radpcap_packet(packet);
 
