@@ -90,22 +90,22 @@ get_packet_tracefile(struct radclock_handle *handle, void *userdata,
 	switch (ret) {
 	case -2:
 		verbose(LOG_INFO, "End of PCAP trace input");
-		return (-2);
+		return (1);
 
 	case -1:
 		verbose(LOG_ERR, "Error reading packet, pcap_next_ex returned -1");
-		return (-1);
+		return (1);
 
 	case 0:
 		verbose(LOG_ERR, "Should read from trace file but we are live!");
-		return (-1);
+		return (1);
 
 	case 1:
 		/* No errors */
 		break;
 	default:
-		verbose(LOG_ERR, "pcap_next_ex returned unmanaged error code");
-		return (-1);
+		verbose(LOG_ERR, "pcap_next_ex returned unknown error code");
+		return (1);
 	}
 
 	packet->size = ((struct pcap_pkthdr*)packet->header)->caplen

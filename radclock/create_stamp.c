@@ -903,13 +903,13 @@ get_network_stamp(struct radclock_handle *handle, void *userdata,
 	case RADCLOCK_SYNC_DEAD:
 		/*
 		 * Error codes (although not used here):
-		 * -2: run from tracefile and reached end of input
-		 * -1: run from tracefile and read error
+		 * -2: reached end of input
+		 * -1: read error
+		 *  0: live capture error (should never happen)
 		 */
 		err = get_packet(handle, userdata, &packet);
-		if (err < 0) {
+		if (err)
 			return (-1);
-		}
 
 		/* Counts pkts, regardless of content (initialised to 0 in main) */
 		stats->ref_count++;
@@ -942,7 +942,6 @@ get_network_stamp(struct radclock_handle *handle, void *userdata,
 		for (attempt=12; attempt>=0; attempt--) {
 			/*
 			 * Error codes:
-			 * -2: run from tracefile and reached end of input
 			 * -1: run from tracefile and read error
 			 * -1: read live and raw data buffer is empty
 			 */
@@ -985,7 +984,6 @@ get_network_stamp(struct radclock_handle *handle, void *userdata,
 			if (err == 1) {
 				usleep(attempt_wait);
 				attempt_wait += attempt_wait;
-				printf("attemp_wait = %d\n", attempt_wait);
 			}
 		}
 		break;
