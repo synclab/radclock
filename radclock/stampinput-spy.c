@@ -68,9 +68,9 @@ spystamp_get_next(struct radclock_handle *handle, struct stampsource *source,
 	JDEBUG
 
 	err = deliver_rawdata_spy(handle, stamp);
-	if (err < 0) {
+	if (err) {
 		/* Signals empty buffer */
-		return (err);
+		return (-1);
 	}
 	stamp->type = STAMP_SPY;
 	stamp->qual_warning = 0;

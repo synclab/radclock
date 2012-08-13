@@ -384,11 +384,11 @@ deliver_rawdata_spy(struct radclock_handle *handle, struct stamp_t *stamp)
 
 	/* Check we have something to do */
 	if (rdb == NULL)
-		return (-1);
+		return (1);
 
 	if (rdb->type != RD_SPY_STAMP) {
 		verbose(LOG_ERR, "!! Asked to deliver SPY stamps from rawdata but parsing other type !!");
-		return (-1);
+		return (1);
 	}
 
 	BST(stamp)->Ta = RD_SPY(rdb)->Ta;
