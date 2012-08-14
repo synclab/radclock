@@ -44,12 +44,6 @@
 
 
 
-/*
- * These don't exist in the standard math library
- */
-#define MIN(a,b) (((a)<(b))?(a):(b))
-#define MAX(a,b) (((a)>(b))?(a):(b))
-
 
 #define OUTPUT(handle, x) ((struct bidir_output*)handle->algo_output)->x
 

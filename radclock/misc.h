@@ -31,6 +31,12 @@
 
 // TODO this file is really poorly named
 
+/*
+ * These don't exist in the standard math library
+ */
+#define MIN(a,b) (((a)<(b))?(a):(b))
+#define MAX(a,b) (((a)>(b))?(a):(b))
+
 
 static inline void
 timeld_to_timeval(long double *time, struct timeval *tv)

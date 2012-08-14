@@ -51,7 +51,8 @@
 #include "rawdata.h"
 #include "verbose.h"
 #include "config_mgr.h"
-#include "proto_ntp.h"
+#include "proto_ntp.h"	// XXX ??
+#include "misc.h"
 #include "jdebug.h"
 
 
