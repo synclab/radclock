@@ -883,13 +883,11 @@ get_network_stamp(struct radclock_handle *handle, void *userdata,
 
 	JDEBUG
 
+	err = 0;
+	attempt_wait = 500;					/* Loosely calibrated for LAN RTT */
 	// TODO manage peeers better
 	peer = handle->active_peer;
-
-	attempt_wait = 500;					/* Loosely calibrated for LAN RTT */
-	err = 0;
 	packet = create_radpcap_packet();
-
 
 	/*
 	 * Used to have both live and dead PCAP inputs dealt the same way. But extra
@@ -939,7 +937,7 @@ get_network_stamp(struct radclock_handle *handle, void *userdata,
 
 	/* Read packet from raw data queue or pcap tracefile. */
 	case RADCLOCK_SYNC_LIVE:
-		for (attempt=12; attempt>=0; attempt--) {
+		for (attempt=10; attempt>=0; attempt--) {
 			/*
 			 * Error codes:
 			 * -1: run from tracefile and read error
@@ -953,7 +951,7 @@ get_network_stamp(struct radclock_handle *handle, void *userdata,
 					break;
 				} else {
 					usleep(attempt_wait);
-					attempt_wait += attempt_wait;
+					//attempt_wait += attempt_wait;
 					continue;
 				}
 			}
@@ -978,12 +976,11 @@ get_network_stamp(struct radclock_handle *handle, void *userdata,
 			/*
 			 * If err == 1, inserted packet in queue, but did not pair it. Half
 			 * baked stamp not worth processing, we try to read from the device
-			 * again after a little while. The wait grows bigger on each attempt.
-			 * Number of attempts bounded since we cannot stay here for ever.
+			 * to get the pair. Have been woken up by trigger thread, so only
+			 * wait a little between 2 attempts.
 			 */
-			if (err == 1) {
+			if (err == 1 && attempt % 2) {
 				usleep(attempt_wait);
-				attempt_wait += attempt_wait;
 			}
 		}
 		break;
