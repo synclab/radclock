@@ -412,7 +412,7 @@ deliver_rawdata_spy(struct radclock_handle *handle, struct stamp_t *stamp)
 // multiple sources, the chain list management is not re-entrant with multiple
 // sources!!
 int
-deliver_rawdata_ntp(struct radclock_handle *handle, struct radpcap_packet_t *pkt,
+deliver_rawdata_pcap(struct radclock_handle *handle, struct radpcap_packet_t *pkt,
 		vcounter_t *vcount)
 {
 	struct raw_data_bundle *rdb;

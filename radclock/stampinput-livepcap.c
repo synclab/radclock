@@ -265,7 +265,7 @@ get_packet_livepcap(struct radclock_handle *handle, void *userdata,
 	packet = *packet_p;
 
 	/* Retrieve the next packet from the raw data buffer */
-	err = deliver_rawdata_ntp(handle, packet, &vcount);
+	err = deliver_rawdata_pcap(handle, packet, &vcount);
 	if (err) {
 		/* Raw data buffer is empty */
 		return (1);
