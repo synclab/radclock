@@ -2263,7 +2263,7 @@ output_results:
 
 	/* NTP server specific data */
 	// TODO this is a bit dodgy to have this here ... 
-	SERVER_DATA(handle)->serverdelay = peer->RTThat * peer->phat;
+	NTP_SERVER(handle)->serverdelay = peer->RTThat * peer->phat;
 
 	/* Unlock Global Data */
 	pthread_mutex_unlock(&handle->globaldata_mutex);

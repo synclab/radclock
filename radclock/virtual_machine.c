@@ -482,7 +482,7 @@ receive_loop_vm(struct radclock_handle *handle)
 					OUTPUT(handle, n_stamps) = 0;
 					((struct bidir_peer *)handle->active_peer)->stamp_i = 0;
 					//handle->server_data->burst = NTP_BURST;
-					handle->server_data->burst = 8;
+					NTP_SERVER(handle)->burst = 8;
 					strcpy(handle->clock->hw_counter, hw_counter);
 	// XXX TODO: Reinitialise the stats structure as well?
 					return (0);
@@ -526,8 +526,8 @@ receive_loop_vm(struct radclock_handle *handle)
 			tx.modes = TX_MODES | MOD_MAXERROR | MOD_ESTERROR | MOD_TIMECONST;
 			tx.offset = (int32_t) (offset * KERN_RES);
 			tx.status = STA_PLL;
-			tx.maxerror = (long) ((SERVER_DATA(handle)->rootdelay/2 +
-					SERVER_DATA(handle)->rootdispersion) * 1e6);
+			tx.maxerror = (long) ((NTP_SERVER(handle)->rootdelay/2 +
+					NTP_SERVER(handle)->rootdispersion) * 1e6);
 			/* TODO: not the right estimate !! */
 			tx.esterror = (long) (RAD_DATA(handle)->phat * 1e6);
 			

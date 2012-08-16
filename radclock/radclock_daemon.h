@@ -53,20 +53,20 @@ typedef enum {
 
 struct radclock_handle;
 
-/* (NTP) Protocol related stuff on the client side */
-struct radclock_client_data {
+
+
+// TODO: This network protocol code could be factored?
+
+/*
+ * NTP Protocol related stuff
+ */
+struct radclock_ntp_client {
 	int socket;
 	struct sockaddr_in s_to;
 	struct sockaddr_in s_from;
 };
 
-
-/**
- * NTP protocol specifics for being a server
- */
-// TODO this could be renamed in a more generic network layer data structure in
-// the future ...
-struct radclock_ntpserver_data {
+struct radclock_ntp_server {
 	int burst;
 	uint32_t refid;
 	unsigned int stratum;
@@ -128,10 +128,10 @@ struct radclock_handle {
 	struct radclock_vm rad_vm;
 
 	/* Protocol related stuff on the client side (NTP, 1588, ...) */
-	struct radclock_client_data *client_data;
+	struct radclock_ntp_client		*ntp_client;
 	
 	/* Protol related stuff (NTP, 1588, ...) */
-	struct radclock_ntpserver_data *server_data;
+	struct radclock_ntp_server		*ntp_server;
 	
 	/* Raw data capture buffer */
 	struct raw_data_bundle *rdb_start;
@@ -179,8 +179,8 @@ struct radclock_handle {
 };
 
 
-#define CLIENT_DATA(x) (x->client_data)
-#define SERVER_DATA(x) (x->server_data)
+#define NTP_CLIENT(x) (x->ntp_client)
+#define NTP_SERVER(x) (x->ntp_server)
 #define RAD_DATA(x) (&(x->rad_data))
 #define RAD_ERROR(x) (&(x->rad_error))
 #define RAD_VM(x) (&(x->rad_vm))

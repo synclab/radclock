@@ -507,22 +507,22 @@ create_handle(struct radclock_config *conf, int is_daemon)
 	RAD_ERROR(handle)->min_RTT 			= 0;
 
 	/* NTP client data */
-	handle->client_data = (struct radclock_client_data *)
-		malloc(sizeof(struct radclock_client_data));
-	JDEBUG_MEMORY(JDBG_MALLOC, handle->client_data);
-	memset(handle->client_data, 0, sizeof(struct radclock_client_data));
+	NTP_CLIENT(handle) = (struct radclock_ntp_client *)
+			malloc(sizeof(struct radclock_ntp_client));
+	JDEBUG_MEMORY(JDBG_MALLOC, NTP_CLIENT(handle));
+	memset(NTP_CLIENT(handle), 0, sizeof(struct radclock_ntp_client));
 
 	/* NTP server data */
-	handle->server_data = (struct radclock_ntpserver_data *)
-		malloc(sizeof(struct radclock_ntpserver_data));
-	JDEBUG_MEMORY(JDBG_MALLOC, handle->server_data);
-	memset(handle->server_data, 0, sizeof(struct radclock_ntpserver_data));
+	NTP_SERVER(handle) = (struct radclock_ntp_server *)
+			malloc(sizeof(struct radclock_ntp_server));
+	JDEBUG_MEMORY(JDBG_MALLOC, NTP_SERVER(handle));
+	memset(NTP_SERVER(handle), 0, sizeof(struct radclock_ntp_server));
 
 	/* Set 8 burst packets at startup for the NTP client (just like ntpd) */
-	SERVER_DATA(handle)->burst = NTP_BURST;
+	NTP_SERVER(handle)->burst = NTP_BURST;
 
 	/* Initialise with unspect stratum */
-	SERVER_DATA(handle)->stratum = STRATUM_UNSPEC;
+	NTP_SERVER(handle)->stratum = STRATUM_UNSPEC;
 
 
 	/* Sync algo output data */

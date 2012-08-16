@@ -1032,8 +1032,8 @@ get_network_stamp(struct radclock_handle *handle, void *userdata,
 
 	/* Store the server refid will pass on to our potential NTP clients */
 	// TODO do we have to keep this in both structures ?
-	// TODO: the SERVER_DATA one should not be the refid but the peer's IP
-	SERVER_DATA(handle)->refid = stamp->refid;
+	// TODO: the NTP_SERVER one should not be the refid but the peer's IP
+	NTP_SERVER(handle)->refid = stamp->refid;
 	peer->refid = stamp->refid;
 	peer->ttl = stamp->ttl;
 	peer->stratum = stamp->stratum;
@@ -1042,9 +1042,9 @@ get_network_stamp(struct radclock_handle *handle, void *userdata,
 	/* Record NTP protocol specific values but only if not crazy */
 	if ((stamp->stratum > STRATUM_REFCLOCK) && (stamp->stratum < STRATUM_UNSPEC) &&
 			(stamp->leapsec != LEAP_NOTINSYNC)) {
-		SERVER_DATA(handle)->stratum = stamp->stratum;
-		SERVER_DATA(handle)->rootdelay = stamp->rootdelay;
-		SERVER_DATA(handle)->rootdispersion = stamp->rootdispersion;
+		NTP_SERVER(handle)->stratum = stamp->stratum;
+		NTP_SERVER(handle)->rootdelay = stamp->rootdelay;
+		NTP_SERVER(handle)->rootdispersion = stamp->rootdispersion;
 		verbose(VERB_DEBUG, "Received pkt stratum= %u, rootdelay= %.9f, "
 				"roodispersion= %.9f", stamp->stratum, stamp->rootdelay,
 				stamp->rootdispersion);

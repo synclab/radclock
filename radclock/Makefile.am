@@ -27,43 +27,47 @@
 
 INCLUDES = -I$(top_srcdir)/libradclock/ -I$(ADD_INCLS)
 
-noinst_HEADERS = ntohll.h \
-		 create_stamp.h \
-		 proto_ntp.h \
-		 sync_algo.h \
-		 config_mgr.h \
-		 misc.h \
-		 pthread_mgr.h \
-		 verbose.h \
-		 rawdata.h \
-		 fixedpoint.h \
-		 sync_history.h \
-		 jdebug.h
+noinst_HEADERS = \
+		config_mgr.h \
+		create_stamp.h \
+		fixedpoint.h \
+		misc.h \
+		ntohll.h \
+		pthread_mgr.h \
+		proto_ntp.h \
+		rawdata.h \
+		stampinput.h \
+		sync_algo.h \
+		sync_history.h \
+		verbose.h \
+		jdebug.h
 
 bin_PROGRAMS = radclock
 
-radclock_SOURCES = sync_bidir.c \
-		   sync_history.c \
-		   fixedpoint.c \
-		   create_stamp.c \
-		   verbose.c \
-		   config_mgr.c \
-		   rawdata.c \
-		   pthread_mgr.c \
-		   pthread_ntpserver.c \
-		   pthread_rawdata.c \
-		   pthread_trigger.c \
-		   radclock_main.c \
-		   stampinput.c \
-		   stampinput.h \
-		   stampinput_int.h \
-		   stampinput-ascii.c \
-		   stampinput-livepcap.c \
-		   stampinput-tracefile.c \
-		   stampinput-spy.c \
-		   stampoutput.h \
-		   stampoutput.c \
-		   virtual_machine.c
+
+radclock_SOURCES = \
+		client_ntp.c \
+		create_stamp.c \
+		fixedpoint.c \
+		config_mgr.c \
+		rawdata.c \
+		pthread_mgr.c \
+		pthread_ntpserver.c \
+		pthread_rawdata.c \
+		pthread_trigger.c \
+		radclock_main.c \
+		stampinput.c \
+		stampinput_int.h \
+		stampinput-ascii.c \
+		stampinput-livepcap.c \
+		stampinput-tracefile.c \
+		stampinput-spy.c \
+		stampoutput.h \
+		stampoutput.c \
+		sync_bidir.c \
+		sync_history.c \
+		verbose.c \
+		virtual_machine.c
 
 
 # Make sure the radclock binary is linked statically

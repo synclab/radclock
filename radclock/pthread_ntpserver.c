@@ -246,11 +246,11 @@ thread_ntp_server(void *c_handle)
 		 * (should be some kind of longer term value anyway)
 		 */
 		clockerror = RAD_ERROR(handle)->error_bound_avg;
-		rootdispersion = SERVER_DATA(handle)->rootdispersion + clockerror +
+		rootdispersion = NTP_SERVER(handle)->rootdispersion + clockerror +
 			rdata.phat + (vcount - rdata.last_changed) * rdata.phat_local * 15e-6;
 
-		rootdelay = SERVER_DATA(handle)->rootdelay +
-			SERVER_DATA(handle)->serverdelay;
+		rootdelay = NTP_SERVER(handle)->rootdelay +
+			NTP_SERVER(handle)->serverdelay;
 
 		/* Fill the packet
 		 * Clearly there are some issues with network and host byte order (stupid refid)
@@ -264,7 +264,7 @@ thread_ntp_server(void *c_handle)
 		if (HAS_STATUS(handle, STARAD_UNSYNC))
 			pkt_out->stratum = STRATUM_UNSPEC;
 		else
-			pkt_out->stratum = SERVER_DATA(handle)->stratum + 1;
+			pkt_out->stratum = NTP_SERVER(handle)->stratum + 1;
 
 		pkt_out->ppoll			= ((struct ntp_pkt*)pkt_in)->ppoll;
 		pkt_out->precision		= -18;	/* TODO: should pass min(STA_NANO (or mus), phat) in power of 2 or so */
@@ -272,7 +272,7 @@ thread_ntp_server(void *c_handle)
 		pkt_out->rootdispersion = htonl( (uint32_t)(rootdispersion * 65536. + 0.5));
 		// TODO: this is not the correct info. Should pass peer IP address and
 		// not peer->refid
-		pkt_out->refid			= htonl(SERVER_DATA(handle)->refid);
+		pkt_out->refid			= htonl(NTP_SERVER(handle)->refid);
 
 		/* Reference time */
 		build_timestamp_tval(handle, &rdata, rdata.last_changed, &reftime);

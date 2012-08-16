@@ -83,4 +83,17 @@ void init_thread_signal_mgt();
 int trigger_init(struct radclock_handle *handle);
 
 
+/*
+ * Posix Timers and Alarm routines
+ */
+void catch_alarm(int sig);
+#ifdef HAVE_POSIX_TIMER 
+int set_ptimer(timer_t timer, float next, float period);
+int assess_ptimer(timer_t timer, float period);
+#else
+int set_itimer(float next, float period);
+int assess_itimer(float period);
+#endif
+
+
 #endif
