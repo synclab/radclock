@@ -429,11 +429,14 @@ destroy_peer_stamp_queue(struct bidir_peer *peer)
 	struct stq_elt *elt;
 
 	elt = peer->q->end;
-	while (elt != peer->q->start) {
+	while (peer->q->size) {
+		if (elt->prev == NULL)
+			break;
 		elt = elt->prev;
 		free(elt);
+		peer->q->size--;
 	}
-	free(peer->q->start);
+	free(peer->q->end);
 	free(peer->q);
 	peer->q = NULL;
 }
