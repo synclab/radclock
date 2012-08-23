@@ -428,13 +428,17 @@ destroy_peer_stamp_queue(struct bidir_peer *peer)
 {
 	struct stq_elt *elt, *prev;
 
+	prev = NULL;
 	elt = peer->q->end;
-	while (peer->q->size) {
-                prev = elt->prev;
-                free(elt);
-                elt = prev;
-                peer->q->size--;
+
+	while (peer->q->size > 1) {
+		prev = elt->prev;
+		free(elt);
+		elt = prev;
+		peer->q->size--;
 	}
+
+	free(prev);
 	free(peer->q);
 	peer->q = NULL;
 }
@@ -463,6 +467,9 @@ insert_stamp_queue(struct stamp_queue *q, struct stamp_t *new, int mode)
 		return (-1);
 	}
 
+	/* Locate a place in the queue to place the new stamp.
+	 * The queue is ordered from lesser id to greater.
+	 */
 	found = 0;
 	stq = q->start;
 	tmp = q->start;
@@ -503,18 +510,32 @@ insert_stamp_queue(struct stamp_queue *q, struct stamp_t *new, int mode)
 			q->size--;
 		}	
 
+		/* Now we insert based on if we have 'tmp' which should be the point
+		 * where we insert before.
+		 */
 		stq = (struct stq_elt *) calloc(1, sizeof(struct stq_elt));
 		stq->prev = NULL;
 		stq->next = NULL;
 		if (tmp != NULL) {
 			stq->next = tmp;
-			tmp->prev = stq;
 			stq->prev = tmp->prev;
-		}
-		if (q->start == tmp)
-			q->start = stq;
-		if (q->size == 0)
+			if (tmp->prev)	{
+				tmp->prev->next	= stq;
+				tmp->prev =	stq;
+			}
+		} else if (tmp == NULL && q->size > 0) { /* Else: insert as end */
+			stq->prev = q->end;
+			q->end->next = stq;
 			q->end = stq;
+		}
+		if (q->start == tmp && q->size > 0) { /* Insert as start */
+			q->start = stq;
+			tmp->prev =	stq;
+		}
+		if (q->size == 0) {
+			q->start = stq;
+			q->end = stq;
+		}
 		q->size++;
 	}
 
