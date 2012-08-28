@@ -504,6 +504,8 @@ insert_stamp_queue(struct stamp_queue *q, struct stamp_t *new, int mode)
 	if (!found) {
 		if (q->size == MAX_STQ_SIZE) {
 			verbose(LOG_WARNING, "Peer stamp queue has hit max size. Check the server?");
+			if (tmp == q->end)
+				tmp = NULL;
 			q->end = q->end->prev;
 			free(q->end->next);
 			q->end->next = NULL;
