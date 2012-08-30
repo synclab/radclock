@@ -155,22 +155,15 @@ open_output_matlab(struct radclock_handle *handle)
 		/* TODO turn off buffering ? */
 		setvbuf(handle->matout_fd, (char *)NULL, _IONBF, 0);
 
-	fprintf(handle->matout_fd, "%% NTP packet filtering run with:\n");
-	fprintf(handle->matout_fd, "%%\n");
-	fprintf(handle->matout_fd, "%% column 1 - Tb \n");
-	fprintf(handle->matout_fd, "%% column 2 - Tf \n");
-	fprintf(handle->matout_fd, "%% column 3 - RTT\n");
-	fprintf(handle->matout_fd, "%% column 4 - phat\n");
-	fprintf(handle->matout_fd, "%% column 5 - plocal\n");
-	fprintf(handle->matout_fd, "%% column 6 - C\n");
-	fprintf(handle->matout_fd, "%% column 7 - thetahat\n");
-	fprintf(handle->matout_fd, "%% columns 8--10 - RTThat, RTThat_new,"
-			"RTThat_sh\n");
-	fprintf(handle->matout_fd, "%% columns 11--17 - th_naive, minET, minET_last,"
-			" RADclockout, RADclockin, errTa, errTf\n");
-	fprintf(handle->matout_fd, "%% columns 18--22 - perr, plocalerr, wsum, "
-			"best_Tf, clock status\n");
-	fprintf(handle->matout_fd, "%%\n");
+	fprintf(handle->matout_fd, "%% BEGIN_HEADER\n");
+	fprintf(handle->matout_fd, "%% description: radclock internals\n");
+	fprintf(handle->matout_fd, "%% type: radclock\n");
+	fprintf(handle->matout_fd, "%% version: 3\n");
+	fprintf(handle->matout_fd, "%% fields: Tb Tf RTT phat plocal C thetahat "
+			"RTThat RTThat_new RTThat_sh th_naive minET minET_last RADclockout "
+			"RADclockin errTa errTf perr plocalerr wsum best_Tf "
+			"clock_status\n");
+	fprintf(handle->matout_fd, "%% END_HEADER\n");
 
 	return (0);
 }
@@ -225,8 +218,8 @@ print_out_files(struct radclock_handle *handle, struct stamp_t *stamp)
 
 	sprintf(buf,
 		"%.9Lf %"VC_FMT" %"VC_FMT" %.10lg %.10lg %.11Lf %.10lf "
-		"%"VC_FMT" %"VC_FMT" %"VC_FMT" %.9lg %.9lg %.9lg %.11Lf "
-		"%.11Lf %.10lf %.10lf %.6lg %.6lg %.6lg %"VC_FMT" %u\n",
+		"%"VC_FMT" %"VC_FMT" %"VC_FMT" %.9le %.9le %.9le %.11Lf "
+		"%.11Lf %.10lf %.10lf %.6le %.6le %.6le %"VC_FMT" %u\n",
 		BST(stamp)->Tb,
 		BST(stamp)->Tf,
 		OUTPUT(handle, RTT),
