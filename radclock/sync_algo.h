@@ -134,6 +134,7 @@ struct stamp_t {
 	stamp_type_t type;
 	int qual_warning;	/* warning: route or server changes, server problem */
 	uint64_t id;
+	uint64_t rank;
 	char server_ipaddr[INET6_ADDRSTRLEN];
 	int ttl;
 	int stratum;

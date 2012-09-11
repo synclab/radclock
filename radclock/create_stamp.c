@@ -444,6 +444,59 @@ destroy_peer_stamp_queue(struct bidir_peer *peer)
 }
 
 
+
+/*
+ * Swap two stamp queue elements in the same queue if rank ordering has been
+ * broken. Called recursively until order restored.  This assumes that only one
+ * element is at a wrong position.
+ */
+void
+fix_queue_order(struct stamp_queue *q, struct stq_elt *stq)
+{
+	struct stq_elt *tmp;
+
+	if (stq->next != NULL) {
+		tmp = stq->next;
+		/* Swap elements if stq->next is younger than stq. */
+		if (stq->stamp.rank < tmp->stamp.rank) {
+			if (stq->prev != NULL)
+				stq->prev->next = tmp;
+			if (tmp->next != NULL)
+				tmp->next->prev = stq;
+			tmp->prev = stq->prev;
+			stq->next = tmp->next;
+			tmp->next = stq;
+			stq->prev = tmp;
+			if (q->start == stq)
+				q->start = tmp;
+			if (q->end == tmp)
+				q->end = stq;
+			return (fix_queue_order(q, stq));
+		}
+	}
+
+	if (stq->prev != NULL) {
+		tmp = stq->prev;
+		/* Swap elements if stq->prev is older than stq. */
+		if (stq->stamp.rank > tmp->stamp.rank) {
+			if (stq->next != NULL)
+				stq->next->prev = tmp;
+			if (tmp->prev != NULL)
+				tmp->prev->next = stq;
+			tmp->next = stq->next;
+			stq->prev = tmp->prev;
+			stq->next = tmp;
+			tmp->prev = stq;
+			if (q->start == tmp)
+				q->start = stq;
+			if (q->end == stq)
+				q->end = tmp;
+			return (fix_queue_order(q, stq));
+		}
+	}
+}
+
+
 /*
  * Insert a client or server NTP packet into the stamp queue. This routine
  * effectively pairs matching requests and replies. The stamp queue has been
@@ -451,6 +504,12 @@ destroy_peer_stamp_queue(struct bidir_peer *peer)
  * If no matching stamp is found, the new packet is inserted with partial
  * information. If a matching partial stamp exists, missing information is added
  * to the stamp.
+ *
+ * Quick algo ideas:
+ * - use the full walk to find half-baked stamp.
+ * - if was half-baked stamp, update rank and re-order queue if needed
+ *   (note that rank defined as receiving stamp, outgoing packets in two-way
+ *   requests will see their rank change).
  */
 int
 insert_stamp_queue(struct stamp_queue *q, struct stamp_t *new, int mode)
@@ -496,13 +555,9 @@ insert_stamp_queue(struct stamp_queue *q, struct stamp_t *new, int mode)
 			halfstamp = stq;
 			break;
 		}
-		/*
-		 * If the new stamp->id is larger than current stamp, no match will be
-		 * found, drop the insert mark and break out
-		 */
-		if (new->id > stamp->id) {
+		/* Mark the first encounter with a stamp older than new. */
+		if (insert == NULL && (new->rank > stamp->rank)) {
 			insert = stq;
-			break;
 		}
 		stq = stq->next;
 	}
@@ -523,7 +578,13 @@ insert_stamp_queue(struct stamp_queue *q, struct stamp_t *new, int mode)
 			q->size--;
 		}
 
-		/* Create new stamp queue element and insert in the queue. */
+		/*
+		 * Create new stamp queue element and insert in the queue.  Packets may
+		 * have been received out of order (low probability) and bidir-stamp
+		 * replies change the rank of half-baked stamp.  Both cases handled by
+		 * reordering the queue once data is updated, but we can save time if we
+		 * put the packet at about the right place.
+		 */
 		stq = (struct stq_elt *) calloc(1, sizeof(struct stq_elt));
 		stq->prev = NULL;
 		stq->next = NULL;
@@ -562,6 +623,7 @@ insert_stamp_queue(struct stamp_queue *q, struct stamp_t *new, int mode)
 	/* Selectively copy content of new stamp over */
 	stamp = &stq->stamp;
 	stamp->type = STAMP_NTP;
+	stamp->rank = new->rank;
 	if (mode == MODE_CLIENT) {
 		stamp->id = new->id;
 		BST(stamp)->Ta = BST(new)->Ta;
@@ -579,6 +641,10 @@ insert_stamp_queue(struct stamp_queue *q, struct stamp_t *new, int mode)
 		BST(stamp)->Tf = BST(new)->Tf;
 	}
 
+	/* Rank of half baked-stamp may have changed, fix queue order */
+	fix_queue_order(q, stq);
+
+	/* Verbose queue print out */
 	stq = q->start;
 	while (stq != NULL) {
 		stamp = &stq->stamp;
@@ -713,6 +779,7 @@ push_stamp_client(struct stamp_queue *q, struct ntp_pkt *ntp, vcounter_t *vcount
 
 	stamp.id = ((uint64_t) ntohl(ntp->xmt.l_int)) << 32;
 	stamp.id |= (uint64_t) ntohl(ntp->xmt.l_fra);
+	stamp.rank = (uint64_t)*vcount;
 	stamp.type = STAMP_NTP;
 	BST(&stamp)->Ta = *vcount;
 
@@ -738,6 +805,7 @@ push_stamp_server(struct stamp_queue *q, struct ntp_pkt *ntp,
 	stamp.type = STAMP_NTP;
 	stamp.id = ((uint64_t) ntohl(ntp->org.l_int)) << 32;
 	stamp.id |= (uint64_t) ntohl(ntp->org.l_fra);
+	stamp.rank = (uint64_t)*vcount;
 
 	// TODO not protocol independent. Getaddrinfo instead?
 	if (ss_src->ss_family == AF_INET)
