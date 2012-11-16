@@ -53,9 +53,6 @@ cscope-clean:
 
 if MK_UPSTREAM
 dist-hook:
-	@echo "Copying the python module and wall clock into the tarball"
-	cp $(srcdir)/python-gui/tscclock_wallclock.py $(distdir)/python-module/
-	cp -R $(srcdir)/python-gui/img $(distdir)/python-module/
 	@echo "Copying kernel patches into the tarball"
 	mkdir $(distdir)/kernel-patches
 	mkdir $(distdir)/kernel-patches/freebsd
