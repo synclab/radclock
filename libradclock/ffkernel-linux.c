@@ -161,18 +161,17 @@ has_vm_vcounter(struct radclock *handle)
 # include <asm-x86/msr.h>
 #elif HAVE_RDTSCLL_ASM_X86_64
 # include <asm-x86_64/msr.h>
-#else
 /* rdtscll not defined ... turn to black magic */
-# ifdef __x86_64__
-#  define rdtscll(val) do { \
+#elif defined(__x86_64__)
+#define rdtscll(val) do { \
 		unsigned int __a,__d; \
 		asm volatile("rdtsc" : "=a" (__a), "=d" (__d)); \
 		(val) = ((unsigned long)__a) | (((unsigned long)__d)<<32); \
 	} while(0)
-# endif
-# ifdef __i386__
+#elif defined(__i386__)
 	#define rdtscll(val) __asm__ __volatile__("rdtsc" : "=A" (val))
-# endif
+#else
+	#define rdtscll(val) /* Ignore */
 #endif
 
 inline vcounter_t
