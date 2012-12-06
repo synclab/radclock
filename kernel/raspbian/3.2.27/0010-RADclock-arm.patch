@@ -1,0 +1,110 @@
+diff -uNr linux-radclock/arch/arm/configs/bcmrpi_cutdown_defconfig linux-radclock-arm//arch/arm/configs/bcmrpi_cutdown_defconfig
+--- linux-radclock/arch/arm/configs/bcmrpi_cutdown_defconfig	2012-12-06 12:36:53.575842117 +1100
++++ linux-radclock-arm//arch/arm/configs/bcmrpi_cutdown_defconfig	2012-12-06 12:39:30.235415850 +1100
+@@ -544,3 +544,4 @@
+ # CONFIG_CRYPTO_HW is not set
+ CONFIG_CRC_ITU_T=y
+ CONFIG_LIBCRC32C=y
++CONFIG_RADCLOCK=y
+diff -uNr linux-radclock/arch/arm/include/asm/unistd.h linux-radclock-arm//arch/arm/include/asm/unistd.h
+--- linux-radclock/arch/arm/include/asm/unistd.h	2012-12-06 12:36:52.625844698 +1100
++++ linux-radclock-arm//arch/arm/include/asm/unistd.h	2012-12-06 12:39:07.305478340 +1100
+@@ -405,6 +405,11 @@
+ #define __NR_process_vm_readv		(__NR_SYSCALL_BASE+376)
+ #define __NR_process_vm_writev		(__NR_SYSCALL_BASE+377)
+
++#ifdef CONFIG_RADCLOCK
++#define __NR_get_vcounter		(__NR_SYSCALL_BASE+378)
++#define __NR_get_vcounter_latency		(__NR_SYSCALL_BASE+379)
++#endif
++
+ /*
+  * The following SWIs are ARM private.
+  */
+diff -uNr linux-radclock/arch/arm/kernel/calls.S linux-radclock-arm//arch/arm/kernel/calls.S
+--- linux-radclock/arch/arm/kernel/calls.S	2012-12-06 12:36:53.775841575 +1100
++++ linux-radclock-arm//arch/arm/kernel/calls.S	2012-12-06 12:39:07.305478340 +1100
+@@ -387,6 +387,12 @@
+ /* 375 */	CALL(sys_setns)
+		CALL(sys_process_vm_readv)
+		CALL(sys_process_vm_writev)
++
++#ifdef CONFIG_RADCLOCK
++/* 378 */	CALL(sys_get_vcounter)
++/* 379 */	CALL(sys_get_vcounter_latency)
++#endif
++
+ #ifndef syscalls_counted
+ .equ syscalls_padding, ((NR_syscalls + 3) & ~3) - NR_syscalls
+ #define syscalls_counted
+diff -uNr linux-radclock/kernel/time.c linux-radclock-arm//kernel/time.c
+--- linux-radclock/kernel/time.c	2012-12-06 12:37:50.475687476 +1100
++++ linux-radclock-arm//kernel/time.c	2012-12-06 12:39:07.305478340 +1100
+@@ -132,6 +132,8 @@
+	cycle_t tsc1, tsc2, tsc3;
+
+	/* One for fun and warmup */
++	tsc1 = tsc2 = tsc3 = 0;
++#ifdef __asm__
+	rdtscll(tsc1);
+	__asm __volatile("lfence" ::: "memory");
+	rdtscll(tsc1);
+@@ -142,9 +144,9 @@
+	__asm __volatile("lfence" ::: "memory");
+	rdtscll(tsc3);
+	__asm __volatile("lfence" ::: "memory");
+-
+	tsc1 = tsc2 - tsc1;
+	tsc2 = tsc3 - tsc2;
++#endif /* __asm__ */
+
+	if (copy_to_user(vcounter, &vcount, sizeof(vcounter_t)))
+		return -EFAULT;
+@@ -154,7 +156,7 @@
+		return -EFAULT;
+	return 0;
+ }
+-#endif
++#endif /* CONFIG_RADCLOCK */
+
+
+ /*
+diff -uNr linux-radclock/net/core/dev.c linux-radclock-arm//net/core/dev.c
+--- linux-radclock/net/core/dev.c	2012-12-06 12:37:50.475687476 +1100
++++ linux-radclock-arm//net/core/dev.c	2012-12-06 12:39:07.305478340 +1100
+@@ -144,6 +144,11 @@
+
+ #include "net-sysfs.h"
+
++/* Ignore the rdtsc barrier if we have an ARM radclock */
++#if defined(CONFIG_RADCLOCK) && defined(__arm__)
++#define rdtsc_barrier(); /* Nothing */
++#endif
++
+ /* Instead of increasing this, you should create a hash table. */
+ #define MAX_GRO_SKBS 8
+
+diff -uNr linux-radclock/net/ipv4/af_inet.c linux-radclock-arm//net/ipv4/af_inet.c
+--- linux-radclock/net/ipv4/af_inet.c	2012-12-06 12:37:50.465687504 +1100
++++ linux-radclock-arm//net/ipv4/af_inet.c	2012-12-06 12:39:07.305478340 +1100
+@@ -117,6 +117,9 @@
+ #ifdef CONFIG_IP_MROUTE
+ #include <linux/mroute.h>
+ #endif
++#ifdef CONFIG_RADCLOCK
++#include <asm-generic/sockios.h>
++#endif
+
+
+ /* The inetsw table contains everything that inet_create needs to
+diff -uNr linux-radclock/net/packet/af_packet.c linux-radclock-arm//net/packet/af_packet.c
+--- linux-radclock/net/packet/af_packet.c	2012-12-06 12:37:50.475687476 +1100
++++ linux-radclock-arm//net/packet/af_packet.c	2012-12-06 12:39:07.315478312 +1100
+@@ -92,6 +92,7 @@
+
+ #ifdef CONFIG_RADCLOCK
+ #include <linux/radclock.h>
++#include <asm-generic/sockios.h>
+ #endif
+
+ #ifdef CONFIG_INET

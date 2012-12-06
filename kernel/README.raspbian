@@ -1,0 +1,14 @@
+These series of patches enable a Raspbian Linux Raspberry Pi to use RADclock.
+The 3.2.27 Raspbian Linux kernel can be obtained from:
+    git clone git://github.com/raspberrypi/linux.git
+
+Once the source has been downloaded, the RADclock kernel patches located in
+'raspbian/' should be used to patch the kernel.
+
+These patches also update the kernel config provided by Raspbian
+'bcmrpi_cutdown_defconfig':
+    arch/arm/configs/bcmrpi_cutdown_defconfig
+
+If you choose to use another kernel configuration instead,
+make sure to add the following option to the config:
+    CONFIG_RADCLOCK=y
